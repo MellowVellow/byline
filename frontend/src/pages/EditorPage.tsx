@@ -442,15 +442,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           {popupGroup.map((a, i) => {
             const active = i === popupIdx
             const chipColor = a.kind === 'grammar' ? 'var(--lt)' : a.kind === 'claim' ? 'var(--blue)' : a.kind === 'vocabulary' ? 'var(--yellow)' : 'var(--ai)'
-            const chipLabel = a.kind === 'grammar' ? 'LT · red' : a.kind === 'vocabulary' ? 'AI · yellow' : a.kind === 'claim' ? 'WEB · blue' : 'AI · purple'
+            const chipLabel = a.kind === 'grammar' ? 'Language · Grammar' : a.kind === 'vocabulary' ? 'Word choice' : a.kind === 'relevance' ? 'Cohesion' : a.kind === 'claim' ? 'Source' : `Reader · ${REACTION_STYLE[a.tone || '']?.label || a.tone || 'Reader'}`
             return (
               <div key={a.id} className={`stack-card ${active ? 'active' : ''}`} onMouseDown={e => e.preventDefault()} onClick={() => setActiveIdx(i)}>
                 <span className="chip" style={{ background: chipColor }}>{chipLabel}</span>
                 <span className="stack-order">{i + 1}/{popupGroup.length}</span>
                 <div className="quote-serif" style={{ marginTop: 6 }}>“{a.quote}”</div>
-                <div style={{ fontWeight: 600, marginTop: 2, fontSize: 12.5 }}>{a.title}</div>
                 {active && <>
-                  <div style={{ fontWeight: 600, marginTop: 4 }}>{a.title}</div><p style={{ margin: '6px 0' }}>{a.detail}</p>
+                  <p style={{ margin: '6px 0' }}>{a.detail}</p>
                   {a.url && <p style={{ margin: '6px 0' }}><a href={textFragmentUrl(a.url, a.excerpt || a.quote)} target="_blank" rel="noreferrer" style={{ color: 'var(--blue)', fontWeight: 600 }}>Open source ↗</a></p>}
                   {a.replacement
                     ? <button className="primary" onMouseDown={e => e.preventDefault()} onClick={e => { e.stopPropagation(); applySelected() }}>Apply “{a.replacement}” <span className="kbd">Tab</span></button>
