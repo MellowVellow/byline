@@ -161,8 +161,10 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     requestComplete(); requestAnnotate(); requestReactions(); refreshMainIdea()
   }
   function cycleTone(t: string) { setTones(prev => { const n = { ...prev }; if (!n[t]) n[t] = 'allow'; else if (n[t] === 'allow') n[t] = 'ban'; else delete n[t]; return n }) }
-  const [suggestions, setSuggestions] = useState<string[]>([])
-  const [ghostIdx, setGhostIdx] = useState(0)
+  const suggKey = demo ? 'byline.sugg.demo' : 'byline.sugg.app'
+  const savedSugg = (() => { try { return JSON.parse(localStorage.getItem(suggKey) || 'null') } catch { return null } })()
+  const [suggestions, setSuggestions] = useState<string[]>(savedSugg?.current || [])
+  const [ghostIdx, setGhostIdx] = useState(savedSugg?.idx || 0)
   const [issues, setIssues] = useState<Issue[]>([])
   const [reactions, setReactions] = useState<Reaction[]>([])
   const [grammar, setGrammar] = useState<GrammarMatch[]>([])
@@ -191,7 +193,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [synonyms, setSynonyms] = useState<string[]>([])
   const [synPos, setSynPos] = useState({ x: 200, y: 200, h: 400 })
   const [synRange, setSynRange] = useState<{ from: number; to: number } | null>(null)
-  const [suggHistory, setSuggHistory] = useState<string[]>([])
+  const [suggHistory, setSuggHistory] = useState<string[]>(savedSugg?.history || [])
+  useEffect(() => { localStorage.setItem(suggKey, JSON.stringify({ current: suggestions, history: suggHistory, idx: ghostIdx })) }, [suggestions, suggHistory, ghostIdx, suggKey])
   type Mode = 'drafting' | 'editing' | 'linting'
   const [mode, setMode] = useState<Mode>(() => { const v = localStorage.getItem('byline.mode'); return v === 'straight' || v === 'drafting' ? 'drafting' : v === 'linting' ? 'linting' : 'editing' })
   modeStore.mode = mode
@@ -203,8 +206,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     if (m !== 'linting') lintAbortRef.current?.abort()
     if (m === 'linting') {
       refs.current.abort?.abort(); clearTimeout(refs.current.timers.c); clearTimeout(refs.current.timers.g); clearTimeout(refs.current.timers.s)
-      anchorStore.anchors = []; anchorStore.ranges = new Map(); anchorStore.linkedId = null; anchorStore.ghost = ''
-      refs.current.sugg = []; setSuggestions([]); setPopupGroup([]); setSelected(null)
+      anchorStore.anchors = []; anchorStore.ranges = new Map(); anchorStore.linkedId = null
+      setPopupGroup([]); setSelected(null) // suggestions kept (hidden in Linting, restored on return)
       if (editor) { syncAnchors(editor); syncGhost(editor); redraw(editor) }
       setTimeout(() => runLint(), 400)
     } else if (m === 'drafting') {
@@ -217,6 +220,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       // editing: restore anchors + fresh checks
       setTimeout(() => { rebuildAnchors(); requestGrammar(); requestAnnotate(); requestReactions() }, 50)
     }
+    if (m !== 'linting') setTimeout(() => { if (refs.current.sugg.length) showGhost(refs.current.idx || 0) }, 80)
   }
   const [suggPos, setSuggPos] = useState({ x: 200, y: 300, h: 500 })
   const synRef = useRef<string[]>([]); synRef.current = synonyms
@@ -286,6 +290,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     for (const a of anchors) { const r = locateQuote(tm, a.quote, a.context); if (r) anchorStore.ranges.set(a.id, r) }
     syncAnchors(editor)
   }, [editor, grammar, issues, reactions, readings])
+  useEffect(() => { if (savedSugg?.current?.length && editor) { refs.current.sugg = savedSugg.current; setTimeout(() => showGhost(savedSugg.idx || 0), 300) } }, [editor]) // eslint-disable-line
   useEffect(() => { if (editing) rebuildAnchors(); else { anchorStore.anchors = []; anchorStore.ranges = new Map(); if (editor) syncAnchors(editor) } }, [rebuildAnchors, editing]) // eslint-disable-line
   useEffect(() => { if (mode !== 'linting') return; const t = setTimeout(() => lintRunRef.current(), 700); return () => clearTimeout(t) }, [enabledRules, customRules, mode]) // eslint-disable-line
   useEffect(() => { if (!showLibrary) return; const f = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowLibrary(false) }; addEventListener('keydown', f); return () => removeEventListener('keydown', f) }, [showLibrary])
@@ -694,7 +699,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           {transMenu.query && <div className="meta" style={{ padding: '6px 12px' }}>Backspace edits · Tab/Enter picks first · 1–9,0 pick row</div>}
         </div>
       )}
-      {suggestions.length > 0 && (
+      {suggestions.length > 0 && !linting && (
         <div className="sugg-popup fade" style={{ left: suggPos.x, top: suggPos.y, maxHeight: suggPos.h, overflowY: 'auto' }} role="listbox" aria-label="Suggestions">
           {suggestions.map((s, i) => <div key={i} className={`sugg-row ${i === ghostIdx ? 'sel' : ''}`} onMouseDown={e => { e.preventDefault(); acceptGhost(i) }} onMouseEnter={() => { setGhostIdx(i); refs.current.idx = i; showGhost(i) }}><span className="num">{i + 1}</span>{s}</div>)}
         </div>
