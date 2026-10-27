@@ -13,8 +13,21 @@ import { Logo, ThemeToggle } from '../components/Brand'
 import { textFragmentUrl } from '../lib/link'
 import { sentenceCase } from '../lib/case'
 
-const LEVELS = ['Slang', 'Simple', 'General', 'Technical', 'Academic', 'Expert', 'Buzzwords']
-const VOICES = ['', 'Poetic', 'GenZ']
+const DICTIONS = ['Formal', 'Casual', 'Slang', 'Simple', 'General', 'Academic', 'Technical', 'Buzzwords', 'Bullshitting']
+const DICTION_EXAMPLE: Record<string, string> = { Formal: 'are not angry', Casual: "aren't mad", Slang: "ain't ticked" }
+const TONES = ['Serious', 'Humorous', 'Sarcastic', 'Bleak and oppressive', 'Objective', 'Subjective', 'Logical', 'Emotional', 'Intimate', 'Distant', 'Journal', 'Formal conference speech']
+const VOICE_PRESETS = ["Ernest Hemingway — minimalist, direct prose, short declarative sentences, no adornment", "F. Scott Fitzgerald (The Great Gatsby) — lyrical, rich with symbolic imagery, long musical sentences", "Gen Z style — emotionally expressive, internet-native, casual, still readable", "Poem / Poetic — exaggerated, lyrical imagery, sometimes meta, rhythm over exposition"]
+const RHYTHMS = ['', 'Staccato — short independent clauses (urgency, may turn robotic)', 'Varied — forced mix of short (<8 words) and long (>20 words) sentences', 'Flowing (Legato) — long compound-complex sentences, rhythmic punctuation']
+const TRANSITIONS: Record<string, string[]> = {
+  '1 · Introductions / thesis': ['This essay argues that []', 'Recent studies suggest that []', 'In recent years, research has shown []', 'The purpose of this research is to []'],
+  '2 · Addition / similarity': ['Furthermore, []', 'Moreover, []', 'In addition, []', 'Similarly, []', 'Likewise, []'],
+  '3 · Example / clarify': ['For example, recent research shows []', 'Evidence suggests that []', 'Specifically, to illustrate, []', 'For instance, []', 'In other words, []'],
+  '4 · Emphasis': ['One key point is []', 'Indeed, []', 'In fact, []', 'It is important to note that []', 'Above all, []'],
+  '5 · Cause and effect': ['Consequently, []', 'Therefore, []', 'As a consequence, []', 'Due to [], ', 'As a result, []'],
+  '6 · Conclusion': ['In summary, []', 'To sum up, []', 'Overall, the evidence suggests []', 'In conclusion, []', 'Ultimately, []'],
+  '7 · Sequencing': ['First of all, []', 'Next, []', 'Finally, []', 'In the meantime, []', 'Subsequently, []'],
+  '8 · Contrast': ['However, []', 'Nevertheless, []', 'On the contrary, []', 'Despite this, []', 'In contrast, []', 'On the other hand, []', 'Conversely, []'],
+}
 const ASSISTS = ['Hint', 'Phrase', 'Sentence', 'Question']
 const PERSONAS = ['Skeptical reader', 'Ordinary reader', 'Expert reader', 'Supportive friend']
 export const REACTION_STYLE: Record<string, { color: string; label: string }> = {
@@ -30,6 +43,8 @@ export const LANG_STYLE: Record<string, { color: string; label: string }> = {
 }
 let uid = 0
 const nid = () => `a${++uid}`
+export function Spinner() { return <span className="spinner" aria-label="Loading" /> }
+export function LoadingDots() { return <span className="load-dots" aria-label="Loading"><span /><span /><span /></span> }
 // Tab / stack order, left-to-right as specified: red, yellow, blue, purple
 export const LAYER_ORDER: Record<string, number> = { grammar: 0, vocabulary: 1, claim: 2, relevance: 3, reaction: 3 }
 export function sortByLayer(anchors: Anchor[]): Anchor[] {
@@ -41,17 +56,39 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [context, setContext] = useState(demo ? SAMPLE_CONTEXT : (saved?.context || ''))
   const [level, setLevel] = useState(saved?.level || 'General')
   const [voice, setVoice] = useState('')
+  const [tones, setTones] = useState<Record<string, 'allow' | 'ban'>>({})
+  const [rhythm, setRhythm] = useState(2)
+  const [gramVoice, setGramVoice] = useState<'active' | 'passive'>('passive')
+  const [clause, setClause] = useState('Subordinated')
+  const [density, setDensity] = useState(2)
+  const [audLevel, setAudLevel] = useState(3)
+  const [audText, setAudText] = useState('')
+  const [transMenu, setTransMenu] = useState<{ x: number; y: number; h: number; cat: string | null } | null>(null)
   const [assist, setAssist] = useState('Phrase')
   const [persona, setPersona] = useState(PERSONAS[0])
   // left-dock edits are STAGED until Apply; AI calls always read appliedRef
-  const [applied, setApplied] = useState(() => ({ context: demo ? SAMPLE_CONTEXT : (saved?.context || ''), level: saved?.level || 'General', voice: '', assist: 'Phrase', persona: PERSONAS[0] }))
+  const [applied, setApplied] = useState(() => ({ context: demo ? SAMPLE_CONTEXT : (saved?.context || ''), level: saved?.level || 'General', voice: '', assist: 'Phrase', persona: PERSONAS[0], tones: {} as Record<string, 'allow' | 'ban'>, rhythm: 2, gramVoice: 'passive' as string, clause: 'Subordinated', density: 2, audLevel: 3, audText: '' }))
   const appliedRef = useRef(applied); appliedRef.current = applied
-  const dirty = applied.context !== context || applied.level !== level || applied.voice !== voice || applied.assist !== assist || applied.persona !== persona
+  const draftObj = () => ({ context, level, voice, assist, persona, tones, rhythm, gramVoice, clause, density, audLevel, audText })
+  const dirty = JSON.stringify(applied) !== JSON.stringify(draftObj())
+  function buildStyle(A: typeof applied): string {
+    const allow = Object.keys(A.tones).filter(k => A.tones[k] === 'allow'); const ban = Object.keys(A.tones).filter(k => A.tones[k] === 'ban')
+    return [
+      A.voice ? `Voice: ${A.voice}` : '',
+      allow.length ? `Tone ALLOWED: ${allow.join(', ')}` : '', ban.length ? `Tone NOT ALLOWED: ${ban.join(', ')}` : '',
+      `Sentence rhythm: ${RHYTHMS[A.rhythm]}`,
+      A.gramVoice === 'active' ? 'Grammatical voice: strictly ACTIVE (subject performs action)' : 'Grammatical voice: passive permitted',
+      `Clause complexity: ${A.clause}`,
+      `Information density: ${A.density === 1 ? 'Sparse — one concept per sentence, frequent breaks' : A.density === 3 ? 'Dense — appositives, modifiers, nested details' : 'Balanced'}`,
+      `Target audience: ${A.audText || '(unspecified)'}; knowledge level ${A.audLevel}/5. ${A.audLevel <= 2 ? 'Flag undefined jargon, acronyms, assumed technical context.' : A.audLevel >= 4 ? 'Do not explain basic industry concepts.' : 'Briefly ground specialized terms.'}`,
+    ].filter(Boolean).join('\n')
+  }
   function applySettings() {
-    const next = { context, level, voice, assist, persona }
+    const next = draftObj()
     appliedRef.current = next; setApplied(next)
     requestComplete(); requestAnnotate(); requestReactions(); refreshMainIdea()
   }
+  function cycleTone(t: string) { setTones(prev => { const n = { ...prev }; if (!n[t]) n[t] = 'allow'; else if (n[t] === 'allow') n[t] = 'ban'; else delete n[t]; return n }) }
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [ghostIdx, setGhostIdx] = useState(0)
   const [issues, setIssues] = useState<Issue[]>([])
@@ -104,6 +141,9 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const synRef = useRef<string[]>([]); synRef.current = synonyms
   const synRangeRef = useRef<{ from: number; to: number } | null>(null)
   const [busy, setBusy] = useState('')
+  const [loading, setLoading] = useState<Record<string, boolean>>({})
+  const setLoad = (k: string, v: boolean) => setLoading(prev => ({ ...prev, [k]: v }))
+  const anyLoading = Object.values(loading).some(Boolean)
   const [leftOpen, setLeftOpen] = useState(localStorage.getItem('byline.leftOpen') !== '0')
   const [rightOpen, setRightOpen] = useState(localStorage.getItem('byline.rightOpen') !== '0')
   const popupRef = useRef<HTMLDivElement>(null)
@@ -229,9 +269,9 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const pos = editor.state.selection.from
     const before = editor.state.doc.textBetween(0, pos, '\n\n'); const after = editor.state.doc.textBetween(pos, editor.state.doc.content.size, '\n\n')
     if (!before.trim()) return
-    const ctl = new AbortController(); refs.current.abort = ctl; const t0 = performance.now()
-    const A = appliedRef.current; const d = await api.complete({ context: A.context, level: A.level, voice: A.voice, assist_level: A.assist, before: before.slice(-1200), after: after.slice(0, 400), version: refs.current.version }, ctl.signal)
-    const sugg: string[] = (d?.suggestions?.length ? d.suggestions : (demo ? FALLBACK_SUGGESTIONS : [])).slice(0, 3).map((x: string) => sentenceCase(before, x))
+    const ctl = new AbortController(); refs.current.abort = ctl; const t0 = performance.now(); setLoad('complete', true)
+    const A = appliedRef.current; const d = await api.complete({ context: A.context, level: A.level, voice: A.voice, style: buildStyle(A), assist_level: A.assist, before: before.slice(-1200), after: after.slice(0, 400), version: refs.current.version }, ctl.signal)
+    const sugg: string[] = (d?.suggestions?.length ? d.suggestions : (demo ? FALLBACK_SUGGESTIONS : [])).slice(0, 3).map((x: string) => sentenceCase(before, x)); setLoad('complete', false)
     if (!sugg.length || ctl.signal.aborted) return
     archiveSuggestions(refs.current.sugg.filter(s => !sugg.includes(s)))
     refs.current.sugg = sugg; setSuggestions(sugg); setGhostIdx(0); refs.current.idx = 0
@@ -241,12 +281,12 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const c = editor.view.coordsAtPos(pos2); const y = c.bottom + 8; setSuggPos({ x: Math.max(8, Math.min(c.left, innerWidth - 380)), y, h: Math.max(170, innerHeight - y - 12) })
     redraw(editor)
   }
-  async function requestGrammar() { if (!editingRef.current || !editor) return; const tm = plain(); if (!tm.text.trim()) return; const d = await api.grammar({ text: tm.text }); if (d?.matches) { const seen = new Set<string>(); const fresh = d.matches.map((m: GrammarMatch) => ({ ...m, quote: tm.text.slice(m.from, m.to) })).filter((m: GrammarMatch) => { const k = `${m.from}-${m.to}`; if (seen.has(k)) return false; seen.add(k); return true }).filter((m: GrammarMatch) => { const w = (m.quote || '').trim().toLowerCase(); return !dictRef.current.ignore.some(x => x.toLowerCase() === w) && !dictRef.current.spelling.some(x => x.toLowerCase() === w) }); setGrammar(old => [...fresh, ...old.filter(o => !fresh.some((m: GrammarMatch) => m.from === o.from && m.to === o.to)).map(o => ({ ...o, stale: true }))].slice(0, 40)) } }
-  async function requestAnnotate() { if (!editingRef.current || !editor) return; const tm = plain(); if (tm.text.trim().length < 20) return; const d = await api.annotate({ context: appliedRef.current.context, level: appliedRef.current.level, text: tm.text }); const fresh: Issue[] = d?.issues ? d.issues.map((i: Issue) => ({ ...i, id: nid() })) : (demo ? FALLBACK_ISSUES.map(i => ({ ...i, id: nid() })) : []); setIssues(old => [...fresh, ...old.filter(o => !fresh.some(f => f.quote === o.quote && f.type === o.type)).map(o => ({ ...o, stale: true }))].slice(0, 40)); setStale(false) }
-  async function requestReactions() { if (!editingRef.current || !editor) return; const tm = plain(); if (tm.text.trim().length < 20) return; const d = await api.reactions({ context: appliedRef.current.context, level: appliedRef.current.level, text: tm.text, persona: appliedRef.current.persona }); const fresh: Reaction[] = d?.reactions ? d.reactions.map((r: Reaction) => ({ ...r, id: nid() })) : (demo ? FALLBACK_REACTIONS.map(r => ({ ...r, id: nid() })) : []); setReactions(old => [...fresh, ...old.filter(o => !fresh.some(f => f.quote === o.quote && f.kind === o.kind)).map(o => ({ ...o, stale: true }))].slice(0, 40)) }
-  async function refreshMainIdea() { if (!editingRef.current || !editor) return; setBusy('main'); const d = await api.mainIdea({ context: appliedRef.current.context, level: appliedRef.current.level, text: plain().text }); if (d?.main_idea) setMainIdea(d.main_idea); setBusy('') }
-  async function refreshReadings() { if (!editingRef.current || !editor) return; setBusy('read'); const d = await api.readings({ context: appliedRef.current.context, level: appliedRef.current.level, text: plain().text }); if (d?.readings) setReadings(old => [...d.readings, ...old.map(o => ({ ...o, stale: true }))].slice(0, 40)); setBusy('') }
-  async function refreshOutline() { if (!editingRef.current || !editor) return; const d = await api.outline({ text: plain().text }); if (d?.outline) setOutline(d.outline) }
+  async function requestGrammar() { if (!editingRef.current || !editor) return; const tm = plain(); if (!tm.text.trim()) return; setLoad('grammar', true); const d = await api.grammar({ text: tm.text }); setLoad('grammar', false); if (d?.matches) { const seen = new Set<string>(); const fresh = d.matches.map((m: GrammarMatch) => ({ ...m, quote: tm.text.slice(m.from, m.to) })).filter((m: GrammarMatch) => { const k = `${m.from}-${m.to}`; if (seen.has(k)) return false; seen.add(k); return true }).filter((m: GrammarMatch) => { const w = (m.quote || '').trim().toLowerCase(); return !dictRef.current.ignore.some(x => x.toLowerCase() === w) && !dictRef.current.spelling.some(x => x.toLowerCase() === w) }); setGrammar(old => [...fresh, ...old.filter(o => !fresh.some((m: GrammarMatch) => m.from === o.from && m.to === o.to)).map(o => ({ ...o, stale: true }))].slice(0, 40)) } }
+  async function requestAnnotate() { if (!editingRef.current || !editor) return; const tm = plain(); if (tm.text.trim().length < 20) return; setLoad('annotate', true); const d = await api.annotate({ context: appliedRef.current.context, level: appliedRef.current.level, text: tm.text, style: buildStyle(appliedRef.current) }); setLoad('annotate', false); const fresh: Issue[] = d?.issues ? d.issues.map((i: Issue) => ({ ...i, id: nid() })) : (demo ? FALLBACK_ISSUES.map(i => ({ ...i, id: nid() })) : []); setIssues(old => [...fresh, ...old.filter(o => !fresh.some(f => f.quote === o.quote && f.type === o.type)).map(o => ({ ...o, stale: true }))].slice(0, 40)); setStale(false) }
+  async function requestReactions() { if (!editingRef.current || !editor) return; const tm = plain(); if (tm.text.trim().length < 20) return; setLoad('reactions', true); const d = await api.reactions({ context: appliedRef.current.context, level: appliedRef.current.level, text: tm.text, persona: appliedRef.current.persona, style: buildStyle(appliedRef.current) }); setLoad('reactions', false); const fresh: Reaction[] = d?.reactions ? d.reactions.map((r: Reaction) => ({ ...r, id: nid() })) : (demo ? FALLBACK_REACTIONS.map(r => ({ ...r, id: nid() })) : []); setReactions(old => [...fresh, ...old.filter(o => !fresh.some(f => f.quote === o.quote && f.kind === o.kind)).map(o => ({ ...o, stale: true }))].slice(0, 40)) }
+  async function refreshMainIdea() { if (!editingRef.current || !editor) return; setLoad('main', true); const d = await api.mainIdea({ context: appliedRef.current.context, level: appliedRef.current.level, text: plain().text, style: buildStyle(appliedRef.current) }); if (d?.main_idea) setMainIdea(d.main_idea); setLoad('main', false) }
+  async function refreshReadings() { if (!editingRef.current || !editor) return; setLoad('readings', true); const d = await api.readings({ context: appliedRef.current.context, level: appliedRef.current.level, text: plain().text }); if (d?.readings) setReadings(old => [...d.readings, ...old.map(o => ({ ...o, stale: true }))].slice(0, 40)); setLoad('readings', false) }
+  async function refreshOutline() { if (!editingRef.current || !editor) return; setLoad('outline', true); const d = await api.outline({ text: plain().text }); if (d?.outline) setOutline(d.outline); setLoad('outline', false) }
   function rerunAll() { requestComplete(); requestGrammar(); requestAnnotate(); requestReactions(); refreshMainIdea(); refreshOutline() }
   refs.current.fns = { complete: requestComplete, grammar: requestGrammar, annotate: requestAnnotate, reactions: requestReactions, accept: acceptGhost, clearGhost, showGhost, closePopup }
 
@@ -257,6 +297,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey
       if (mod && e.code === 'Space') { e.preventDefault(); e.stopPropagation(); refs.current.fns.complete?.(); return }
+      if (mod && e.key === '/') { e.preventDefault(); e.stopPropagation(); const c = editor.view.coordsAtPos(editor.state.selection.from); const y = c.bottom + 8; setTransMenu({ x: Math.max(8, Math.min(c.left, innerWidth - 380)), y, h: Math.max(170, innerHeight - y - 12), cat: null }); return }
+      if (transMenu && e.key === 'Escape') { e.preventDefault(); setTransMenu(null); return }
       if (selectedRef.current || groupRef.current.length) {
         if (e.key === 'Escape') { e.preventDefault(); closePopup(); return }
         if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); tabPopup(); return }
@@ -327,9 +369,33 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const cc = editor.view.coordsAtPos(from); const yy = cc.bottom + 8; setSynPos({ x: Math.max(8, Math.min(cc.left, innerWidth - 380)), y: yy, h: Math.max(170, innerHeight - yy - 12) })
     setSynRange({ from, to }); synRangeRef.current = { from, to }
     if (!editingRef.current) return
-    const d = await api.synonyms({ context: appliedRef.current.context, level: appliedRef.current.level, word, sentence: sent }); if (d?.synonyms) setSynonyms(d.synonyms.slice(0, 3))
+    setLoad('synonyms', true); const d = await api.synonyms({ context: appliedRef.current.context, level: appliedRef.current.level, word, sentence: sent, style: buildStyle(appliedRef.current) }); setLoad('synonyms', false); if (d?.synonyms) setSynonyms(d.synonyms.slice(0, 3))
   }
   function replaceWord(w: string) { if (!editor || !w) return; const r = synRangeRef.current; if (r) editor.chain().focus().setTextSelection(r).deleteSelection().insertContent(w).run(); else editor.chain().focus().deleteSelection().insertContent(w).run(); setSynonyms([]); synRangeRef.current = null }
+  const [dragToc, setDragToc] = useState<number | null>(null)
+  function tocItems(): { level: number; text: string; child: number }[] {
+    if (!editor) return []
+    const out: { level: number; text: string; child: number }[] = []
+    editor.state.doc.forEach((node, _off, i) => { if (node.type.name === 'heading') out.push({ level: node.attrs.level || 1, text: node.textContent, child: i }) })
+    return out
+  }
+  function moveSection(srcSeg: number, dstSeg: number) {
+    if (!editor || srcSeg === dstSeg) return
+    const json: any = editor.getJSON(); const content: any[] = json.content || []
+    const heads = tocItems(); if (!heads[srcSeg] || !heads[dstSeg]) return
+    const starts = heads.map(h => h.child); const preface = content.slice(0, starts[0])
+    const segs = starts.map((st, i) => content.slice(st, starts[i + 1] ?? content.length))
+    const [moved] = segs.splice(srcSeg, 1); segs.splice(dstSeg, 0, moved)
+    editor.commands.setContent({ ...json, content: [...preface, ...segs.flat()] })
+  }
+  function insertTransition(tpl: string) {
+    if (!editor) return
+    const at = editor.state.selection.from; const blank = tpl.indexOf('[]')
+    const prev = editor.state.doc.textBetween(Math.max(0, at - 1), at); const prefix = prev && !/\s/.test(prev) ? ' ' : ''
+    editor.chain().focus().insertContent(prefix + tpl.replace('[]', '')).run()
+    if (blank >= 0) editor.chain().setTextSelection(at + prefix.length + blank).run()
+    setTransMenu(null)
+  }
   function toggleDock(side: 'left' | 'right') { if (side === 'left') { setLeftOpen(v => { localStorage.setItem('byline.leftOpen', v ? '0' : '1'); return !v }) } else { setRightOpen(v => { localStorage.setItem('byline.rightOpen', v ? '0' : '1'); return !v }) } }
 
   if (!editor) return null
@@ -344,6 +410,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           <button role="tab" aria-selected={mode === 'editing'} className={mode === 'editing' ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => switchMode('editing')}>Editing</button>
         </div>
         <div className="spacer" />
+        {anyLoading && <span className="ai-loading"><Spinner /> AI working</span>}
         <span className="metric">{acc}% accepted · {metrics.ms}ms · {status?.model || 'offline'}</span>
         <span className="dot" style={{ background: status?.meta_configured ? '#1E8E3E' : '#D93025' }} />
         <ThemeToggle />
@@ -355,19 +422,52 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         <aside className="rail">
           {!leftOpen ? <div className="rail-strip"><button onClick={() => toggleDock('left')} title="Expand">›</button><span className="strip-dot" style={{ background: 'var(--ai)' }} /><span className="strip-dot" style={{ background: 'var(--grey)' }} /></div> : <>
             <div className="rail-head"><strong style={{ fontSize: 13 }}>Write</strong><button onClick={() => toggleDock('left')} title="Collapse">‹</button></div>
-            <div className="dock"><h3>Intent</h3>
+            <div className="dock"><h3>North Star — intent</h3>
               <textarea className="context-box" value={context} onChange={e => { setContext(e.target.value); setStale(true) }} placeholder="What should the finished text be about?" />
               <div style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }}><button className="primary" disabled={!dirty} onClick={applySettings}>Apply{dirty ? ' ●' : ''}</button>{dirty && <span className="meta">unapplied changes</span>}</div>
             </div>
-            <div className="dock"><h3>Vocabulary</h3>
-              <label>Level</label><select style={{ width: '100%' }} value={level} onChange={e => setLevel(e.target.value)}>{LEVELS.map(l => <option key={l}>{l}</option>)}</select>
-              <label>Voice</label><select style={{ width: '100%' }} value={voice} onChange={e => setVoice(e.target.value)}><option value="">None</option>{VOICES.filter(Boolean).map(l => <option key={l}>{l}</option>)}</select>
+            <div className="dock"><h3>Diction</h3>
+              <div className="meta">Same denotation, different connotation.</div>
+              <select style={{ width: '100%' }} value={level} onChange={e => setLevel(e.target.value)}>{DICTIONS.map(l => <option key={l}>{l}</option>)}</select>
+              {DICTION_EXAMPLE[level] && <div className="meta" style={{ marginTop: 6 }}>“{DICTION_EXAMPLE[level]}”</div>}
               <label>Assist</label><select style={{ width: '100%' }} value={assist} onChange={e => setAssist(e.target.value)}>{ASSISTS.map(l => <option key={l}>{l}</option>)}</select>
-              <label>Reader</label><select style={{ width: '100%' }} value={persona} onChange={e => setPersona(e.target.value)}>{PERSONAS.map(l => <option key={l}>{l}</option>)}</select>
+              <label>Reader persona</label><select style={{ width: '100%' }} value={persona} onChange={e => setPersona(e.target.value)}>{PERSONAS.map(l => <option key={l}>{l}</option>)}</select>
             </div>
-            {editing && <div className="dock"><h3><span className="swatch" style={{ background: 'var(--ai)' }} />Perceived main idea</h3>
+            <div className="dock"><h3>Tone</h3>
+              <div className="meta">Click: allowed → not allowed → off.</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>{TONES.map(t => { const st = tones[t]; return <button key={t} className={`tone-tag ${st || ''}`} onClick={() => cycleTone(t)}>{st === 'ban' ? '✕ ' : st === 'allow' ? '✓ ' : ''}{t}</button> })}</div>
+            </div>
+            <div className="dock"><h3>Voice</h3>
+              <input style={{ width: '100%' }} list="voice-presets" value={voice} onChange={e => setVoice(e.target.value)} placeholder="Describe a voice, or pick an example…" />
+              <datalist id="voice-presets">{VOICE_PRESETS.map(v => <option key={v} value={v} />)}</datalist>
+            </div>
+            <div className="dock"><h3>Style</h3>
+              <label>Sentence rhythm · Short ↔ Long</label>
+              <input type="range" min={1} max={3} step={1} value={rhythm} onChange={e => setRhythm(Number(e.target.value))} style={{ width: '100%' }} />
+              <div className="meta">{RHYTHMS[rhythm]}</div>
+              <label>Grammatical voice</label>
+              <div className="mode-toggle" style={{ display: 'flex' }}><button className={gramVoice === 'active' ? 'active' : ''} onClick={() => setGramVoice('active')} style={{ flex: 1 }}>Strictly active</button><button className={gramVoice === 'passive' ? 'active' : ''} onClick={() => setGramVoice('passive')} style={{ flex: 1 }}>Passive permitted</button></div>
+              <label>Clause complexity</label>
+              <select style={{ width: '100%' }} value={clause} onChange={e => setClause(e.target.value)}><option>Simple</option><option>Coordinated</option><option>Subordinated</option></select>
+              <label>Information density · Sparse ↔ Dense</label>
+              <input type="range" min={1} max={3} step={1} value={density} onChange={e => setDensity(Number(e.target.value))} style={{ width: '100%' }} />
+              <div className="meta">{density === 1 ? 'Sparse' : density === 3 ? 'Dense' : 'Balanced'}</div>
+            </div>
+            <div className="dock"><h3>Audience</h3>
+              <label>Who is reading this?</label>
+              <input style={{ width: '100%' }} value={audText} onChange={e => setAudText(e.target.value)} placeholder="Stakeholders, undergraduates…" />
+              <label>Knowledge · 1 Beginner ↔ 5 Expert</label>
+              <input type="range" min={1} max={5} step={1} value={audLevel} onChange={e => setAudLevel(Number(e.target.value))} style={{ width: '100%' }} />
+              <div className="meta">Level {audLevel}/5{audLevel <= 2 ? ' — undefined jargon/acronyms flagged' : audLevel >= 4 ? ' — basics not explained' : ''}</div>
+            </div>
+            <div className="dock"><h3>Contents</h3>
+              {tocItems().length === 0 && <div className="meta">Add H1–H3 headings — drag to reorder sections.</div>}
+              {tocItems().map((h, i) => <div key={i} className="toc-item" draggable onDragStart={() => setDragToc(i)} onDragOver={e => e.preventDefault()} onDrop={() => { if (dragToc !== null) moveSection(dragToc, i); setDragToc(null) }} style={{ paddingLeft: 8 + (h.level - 1) * 14 }}><span className="meta">⠿ H{h.level}</span> {h.text || '(untitled)'}</div>)}
+            </div>
+            <button className="primary" disabled={!dirty} onClick={applySettings} style={{ width: '100%', marginBottom: 12 }}>Apply settings{dirty ? ' ●' : ''}</button>
+            {editing && <div className="dock"><h3><span className="swatch" style={{ background: 'var(--ai)' }} />Perceived main idea{(loading.main || loading.outline) && <Spinner />}</h3>
               <div className="quote-serif">{mainIdea || '—'}</div>
-              <button disabled={!editing} style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={refreshMainIdea}>{busy === 'main' ? 'Reading…' : 'Refresh'}</button>
+              <button disabled={!editing} style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={refreshMainIdea}>{loading.main ? 'Reading…' : 'Refresh'}</button>
               {outline.map((o, i) => <div key={i} className="dock-item" onClick={() => focusAnchor({ id: `o${i}`, kind: 'reaction', quote: o.quote, context: o.context, title: 'Outline', detail: o.label })}>{o.label}<div className="meta">“{o.quote}”</div></div>)}
               <button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={refreshOutline}>Outline</button>
             </div>}
@@ -408,30 +508,30 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         <aside className={`rail right-rail ${editing ? '' : 'ai-off'}`}>
           {!rightOpen ? <div className="rail-strip"><button onClick={() => toggleDock('right')} title="Expand">‹</button><span className="strip-dot" style={{ background: 'var(--lt)' }} /><span className="strip-dot" style={{ background: 'var(--yellow)' }} /><span className="strip-dot" style={{ background: 'var(--blue)' }} /><span className="strip-dot" style={{ background: 'var(--ai)' }} /></div> : <>
             <div className="rail-head"><strong style={{ fontSize: 13 }}>Read</strong><button onClick={() => toggleDock('right')} title="Collapse">›</button></div>
-            {editing && <><div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--lt)' }} />Language</h3>
+            {editing && <><div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--lt)' }} />Language{(loading.grammar || loading.annotate) && <Spinner />}</h3>
               <div className="dock-scroll">
               {grammar.map((g, i) => { const a = anchorStore.anchors.find(x => x.id === `g${i}-${g.from}`); const st = LANG_STYLE.grammar; return <div key={`g${i}`} className={`dock-item ${g.stale ? 'stale' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label} · LT</div><span className="quote-serif">{g.quote || ''}</span><div className="reason-text">{g.message}</div>{g.replacements[0] && <div className="replacement-text" style={{ color: st.color }}>→ {g.replacements[0]}</div>}</div> })}
               {issues.map(it => { const a = anchorStore.anchors.find(x => x.id === it.id); const st = LANG_STYLE[it.type]; return <div key={it.id} className={`dock-item ${it.stale ? 'stale' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label} · AI</div><span className="quote-serif">{it.quote}</span><div className="reason-text">{it.reason}</div>{it.replacement && <div className="replacement-text" style={{ color: st.color }}>→ {it.replacement}</div>}</div> })}
               {!grammar.length && !issues.length && <div className="meta">—</div>}
               </div><div className="dock-foot"><span className="meta">Dictionary: {dict.spelling.length} · Ignored: {dict.ignore.length}</span>{dict.spelling.length > 0 && <button style={{ marginLeft: 8 }} onMouseDown={e => e.preventDefault()} onClick={exportAdditions}>Export additions</button>}</div>
             </div>
-            <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--ai)' }} />Reader</h3>
+            <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--ai)' }} />Reader{loading.reactions && <Spinner />}</h3>
               <div className="dock-scroll">
               {reactions.map(r => { const a = anchorStore.anchors.find(x => x.id === r.id); const st = REACTION_STYLE[r.kind]; return <div key={r.id} className={`dock-item ${r.stale ? 'stale' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label}</div><span className="quote-serif">{r.quote}</span><div className={`kind-body ${r.kind === 'question' ? 'q' : r.kind === 'critique' ? 'crit' : r.kind === 'comment' ? 'comm' : ''}`} style={r.kind === 'compliment' ? { color: st.color, fontWeight: 600 } : undefined}>“{r.text}”</div></div> })}
               {!reactions.length && <div className="meta">—</div>}
               </div><div className="dock-foot"><button disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={requestReactions}>Refresh</button></div>
             </div>
-            <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--blue)' }} />Sources</h3>
+            <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--blue)' }} />Sources{loading.readings && <Spinner />}</h3>
               <div className="dock-scroll">
               {readings.map((r, i) => <div key={i} className={`dock-item ${r.stale ? 'stale' : ''}`}><div className="kind-label" style={{ color: 'var(--blue)' }}>{r.label}</div><a href={textFragmentUrl(r.url, r.excerpt || r.claim_quote)} target="_blank" rel="noreferrer" style={{ fontWeight: 600 }}>{r.title || r.url}</a><div className="reason-text">vs “{r.claim_quote}” — {r.why}</div><div className="meta" style={{ fontStyle: 'italic' }}>{r.excerpt}</div></div>)}
               {!readings.length && <div className="meta">—</div>}
-              </div><div className="dock-foot"><button disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshReadings}>{busy === 'read' ? 'Searching…' : 'Search'}</button></div>
+              </div><div className="dock-foot"><button disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshReadings}>{loading.readings ? 'Searching…' : 'Search'}</button></div>
             </div>
-            </>}<div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--grey)' }} />Suggestions</h3>
+            </>}<div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--grey)' }} />Suggestions{loading.complete && <Spinner />}</h3>
               <div className="dock-scroll">
               {suggestions.map((s, i) => <div key={`s${i}`} className={`ghost-row ${i === ghostIdx ? 'sel' : ''}`} onClick={() => acceptGhost(i)}><span className="quote-serif">{s}</span></div>)}
               {suggHistory.map((s, i) => <div key={`h${i}`} className="ghost-row" style={{ opacity: .45 }}>{s}</div>)}
-              {!suggestions.length && !suggHistory.length && <div className="meta">—</div>}
+              {loading.complete && !suggestions.length && <div className="meta"><LoadingDots /></div>}{!suggestions.length && !suggHistory.length && !loading.complete && <div className="meta">—</div>}
               </div>
               {suggestions.length > 0 && <div className="dock-foot"><button onClick={() => clearGhost()}>Dismiss <span className="kbd">Esc</span></button></div>}
             </div>
@@ -439,6 +539,13 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         </aside>
       </div>
 
+      {transMenu && (
+        <div className="sugg-popup fade" style={{ left: transMenu.x, top: transMenu.y, maxHeight: transMenu.h, overflowY: 'auto' }} role="menu" aria-label="Transitions">
+          {!transMenu.cat
+            ? Object.keys(TRANSITIONS).map(c => <div key={c} className="sugg-row" onMouseDown={e => { e.preventDefault(); setTransMenu({ ...transMenu, cat: c }) }}>{c}</div>)
+            : <><div className="sugg-row" onMouseDown={e => { e.preventDefault(); setTransMenu({ ...transMenu, cat: null }) }}>← Categories</div>{TRANSITIONS[transMenu.cat].map(t => <div key={t} className="sugg-row" onMouseDown={e => { e.preventDefault(); insertTransition(t) }}>{t.replace('[]', '…')}</div>)}</>}
+        </div>
+      )}
       {suggestions.length > 0 && (
         <div className="sugg-popup fade" style={{ left: suggPos.x, top: suggPos.y, maxHeight: suggPos.h, overflowY: 'auto' }} role="listbox" aria-label="Suggestions">
           {suggestions.map((s, i) => <div key={i} className={`sugg-row ${i === ghostIdx ? 'sel' : ''}`} onMouseDown={e => { e.preventDefault(); acceptGhost(i) }} onMouseEnter={() => { setGhostIdx(i); refs.current.idx = i; showGhost(i) }}><span className="num">{i + 1}</span>{s}</div>)}
@@ -469,6 +576,9 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           })}
           <button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={closePopup}>Close <span className="kbd">Esc</span></button>
         </div>
+      )}
+      {loading.synonyms && synonyms.length === 0 && (
+        <div className="sugg-popup fade" style={{ left: synPos.x, top: synPos.y }}><div className="sugg-row"><Spinner /> Finding synonyms</div></div>
       )}
       {synonyms.length > 0 && (
         <div className="sugg-popup fade" style={{ left: synPos.x, top: synPos.y, maxHeight: synPos.h, overflowY: 'auto' }} role="listbox" aria-label="Synonyms">

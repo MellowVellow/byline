@@ -93,3 +93,19 @@ button.primary .kbd,.popup .primary .kbd{background:transparent;color:inherit;bo
 .ai-off .dock-section{opacity:.45;filter:grayscale(.7)}
 .ai-off .dock-section .dock-scroll,.ai-off .dock-foot button{pointer-events:none}
 button:disabled{opacity:.4;cursor:default}
+.tone-tag{border-radius:99px;padding:4px 10px;font-size:12px}
+.tone-tag.allow{background:#14532D;color:#DCFCE7;border-color:#14532D}
+.tone-tag.ban{background:#7F1D1D;color:#FEE2E2;border-color:#7F1D1D;text-decoration:line-through}
+.toc-item{padding:6px 4px;border-top:1px solid var(--border);cursor:grab;font-size:13px;border-radius:4px}
+.toc-item:hover{background:rgba(127,127,127,.07)}
+input[type=range]{accent-color:var(--ink);padding:0;border:none;background:transparent}
+.spinner{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);border-top-color:var(--ai);display:inline-block;flex:none;animation:spin .7s linear infinite;vertical-align:-2px;margin-left:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ai-loading{display:inline-flex;align-items:center;gap:2px;font-size:12px;font-weight:600;color:var(--ai)}
+.ai-loading .spinner{margin-left:0}
+.load-dots{display:inline-flex;gap:4px;padding:6px 2px}
+.load-dots span{width:7px;height:7px;border-radius:50%;background:var(--grey);animation:pulse 1s ease-in-out infinite}
+.load-dots span:nth-child(2){animation-delay:.15s}
+.load-dots span:nth-child(3){animation-delay:.3s}
+@keyframes pulse{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+@media (prefers-reduced-motion: reduce){.spinner,.load-dots span{animation:none}}

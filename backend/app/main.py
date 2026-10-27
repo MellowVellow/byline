@@ -57,7 +57,7 @@ async def health():
 @app.post("/api/complete")
 async def complete(body: CompleteIn):
     try:
-        s, u = prompts.complete_prompt(body.context, body.level, body.before, body.after, body.assist_level, body.voice)
+        s, u = prompts.complete_prompt(body.context, body.level, body.before, body.after, body.assist_level, body.voice, body.style)
         raw, usage, model, dt = await llm.timed_text(s, u, max_tokens=650, temperature=0.8)
         sugg = [sentence_case(body.before, x) for x in parse_options(raw, body.assist_level)]
         return ok(suggestions=sugg, version=body.version, model=model, ms=round(dt * 1000), usage=usage) if sugg else fail(version=body.version)
@@ -66,7 +66,7 @@ async def complete(body: CompleteIn):
 @app.post("/api/annotate")
 async def annotate(body: TextIn):
     try:
-        s, u = prompts.annotate_prompt(body.context, body.level, body.text, body.before, body.after)
+        s, u = prompts.annotate_prompt(body.context, body.level, body.text, body.before, body.after, body.style)
         data, usage, model = await llm.json_call(s, u, max_tokens=1000, temperature=0.4)
         issues = filter_anchored(data.get("issues", []), body.text)
         cache: dict = {}
@@ -80,7 +80,7 @@ async def annotate(body: TextIn):
             fixed = ""
             if " " not in it["quote"].strip():
                 try:
-                    ss, uu = prompts.synonyms_prompt(body.context, body.level, it["quote"], body.text[:400])
+                    ss, uu = prompts.synonyms_prompt(body.context, body.level, it["quote"], body.text[:400], body.style)
                     d2, _, _ = await llm.json_call(ss, uu, max_tokens=500, temperature=0.4)
                     for cand in [w for w in d2.get("synonyms", []) if isinstance(w, str) and " " not in w][:8]:
                         if cand.lower() != it["quote"].lower() and await swap_ok(body.text, it["quote"], cand, cache):
@@ -94,7 +94,7 @@ async def annotate(body: TextIn):
 @app.post("/api/reactions")
 async def reactions(body: TextIn):
     try:
-        s, u = prompts.reactions_prompt(body.context, body.level, body.text, body.persona)
+        s, u = prompts.reactions_prompt(body.context, body.level, body.text, body.persona, body.style)
         data, usage, model = await llm.json_call(s, u, max_tokens=1100, temperature=0.6)
         return ok(reactions=filter_anchored(data.get("reactions", []), body.text), model=model, usage=usage)
     except Exception as e: return fail(error=str(e)[:200])
@@ -102,7 +102,7 @@ async def reactions(body: TextIn):
 @app.post("/api/main-idea")
 async def main_idea(body: TextIn):
     try:
-        s, u = prompts.main_idea_prompt(body.context, body.level, body.text)
+        s, u = prompts.main_idea_prompt(body.context, body.level, body.text, body.style)
         raw, usage, model, dt = await llm.timed_text(s, u, max_tokens=350, temperature=0.4)
         idea = raw.strip().splitlines()[0] if raw.strip() else ""
         return ok(main_idea=idea, model=model, ms=round(dt * 1000), usage=usage) if idea else fail()
@@ -119,7 +119,7 @@ async def outline(body: TextIn):
 @app.post("/api/synonyms")
 async def synonyms(body: SynonymIn):
     try:
-        s, u = prompts.synonyms_prompt(body.context, body.level, body.word, body.sentence)
+        s, u = prompts.synonyms_prompt(body.context, body.level, body.word, body.sentence, body.style)
         data, usage, model = await llm.json_call(s, u, max_tokens=600, temperature=0.5)
         words = [w for w in data.get("synonyms", []) if isinstance(w, str) and " " not in w][:8]
         if body.sentence and body.word:

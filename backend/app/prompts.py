@@ -6,7 +6,10 @@ containing quote. Client locates quote inside context inside doc (string search)
 from __future__ import annotations
 
 LEVELS = {
-    "Slang": "very casual, colloquial, short and punchy",
+    "Formal": "formal, uncontracted, precise (e.g. 'are not angry', never 'aren't mad')",
+    "Casual": "relaxed, contractions natural (e.g. 'aren't mad')",
+    "Bullshitting": "confident-sounding, buzzword-heavy, vague but fluent, low substance",
+    "Slang": "very casual, colloquial, short and punchy (e.g. 'ain't ticked')",
     "Simple": "plain common words, no jargon",
     "General": "neutral standard written English",
     "Technical": "precise domain terms for practitioners",
@@ -28,32 +31,35 @@ QUOTE_RULE = ("Anchor every item with \"quote\": an EXACT verbatim substring cop
 
 def _lvl(level: str) -> str: return f"LEVEL: {level} - {LEVELS.get(level, LEVELS['General'])}"
 
-def complete_prompt(context, level, before, after, assist, voice=""):
+def _style(style: str) -> str: return f"\nSTYLE (diction/tone/voice/rhythm/audience rules):\n{style}" if style else ""
+
+def complete_prompt(context, level, before, after, assist, voice="", style=""):
     system = ("Help writer continue their own writing, in their own voice. Follow ASSIST exactly. "
               "Never repeat existing text. Return exactly 3 distinct options, one per line, no numbering, no quotes.")
-    user = (f"CONTEXT (what finished text should be about): {context or '(infer from text)'}\n{_lvl(voice or level)}\n"
+    voice_line = f"VOICE: {voice}" if voice else _lvl(level)
+    user = (f"CONTEXT (what finished text should be about): {context or '(infer from text)'}\n{_lvl(level)}\n{voice_line}{_style(style)}\n"
             f"ASSIST: {assist} - {ASSIST.get(assist, ASSIST['Phrase'])}\n"
             f"TEXT BEFORE CURSOR:\n{before or '(empty)'}\nTEXT AFTER CURSOR:\n{after or '(empty)'}\n"
             "TASK: 3 continuations from cursor fitting context+level. One per line.")
     return system, user
 
-def annotate_prompt(context, level, text, before="", after=""):
+def annotate_prompt(context, level, text, before="", after="", style=""):
     system = f"Careful editor. JSON only. {QUOTE_RULE} Grammar/spelling handled elsewhere - never flag those."
     user = (f"CONTEXT: {context or '(none)'}\n{_lvl(level)}\nPREV (context only): {before or '(none)'}\nNEXT (context only): {after or '(none)'}\n"
-            f"TEXT:\n{text}\nTASK: Flag vocabulary (single word/phrase wrong for level) and relevance/cohesion (off-topic vs context, abrupt jump). Max 6. "
+            f"TEXT:\n{text}{_style(style)}\nTASK: Flag vocabulary (single word/phrase wrong for level), relevance/cohesion (off-topic vs context, abrupt jump), tone that violates STYLE banned tags or misses allowed tags, and jargon/acronyms undefined for target audience. Max 6. "
             'JSON: {"issues":[{"quote":"...","context":"...","type":"vocabulary|relevance","reason":"...","replacement":"..."}]} Replacement = full replacement for quote only, swapped into sentence it MUST stay grammatical: same part of speech as quote (noun->noun, verb->verb), respect preceding a/an/the. Never replace a noun with many/much/few.')
     return system, user
 
-def reactions_prompt(context, level, text, persona="Skeptical reader"):
+def reactions_prompt(context, level, text, persona="Skeptical reader", style=""):
     system = f"Reader persona: {persona}. JSON only. {QUOTE_RULE}"
     user = (f"CONTEXT (author intent): {context or '(none)'}\n{_lvl(level)}\nTEXT:\n{text}\n"
             "TASK: Up to 4 reactions: questions, comments, compliments, critiques. Flag repetition ('already mentioned'), contradictions, unclear jumps. "
             'JSON: {"reactions":[{"quote":"...","context":"...","kind":"question|comment|compliment|critique","text":"..."}]}')
     return system, user
 
-def main_idea_prompt(context, level, text):
+def main_idea_prompt(context, level, text, style=""):
     system = "Ordinary reader, no background. One plain sentence: single main idea you take away. Honest if unclear. No JSON."
-    user = f"CONTEXT: {context or '(none)'}\n{_lvl(level)}\nTEXT:\n{text}\nTASK: One sentence only."
+    user = f"CONTEXT: {context or '(none)'}\n{_lvl(level)}{_style(style)}\nTEXT:\n{text}\nTASK: One sentence only."
     return system, user
 
 def outline_prompt(text):
@@ -62,9 +68,9 @@ def outline_prompt(text):
             'JSON: {"outline":[{"quote":"...","context":"...","label":"..."}]}')
     return system, user
 
-def synonyms_prompt(context, level, word, sentence):
+def synonyms_prompt(context, level, word, sentence, style=""):
     system = "Thesaurus. JSON only. Single-word synonyms fitting exact sentence meaning, simpler to advanced. No phrases, no original word."
-    user = (f"CONTEXT: {context or '(none)'}\n{_lvl(level)}\nSENTENCE: {sentence}\nWORD: {word}\n"
+    user = (f"CONTEXT: {context or '(none)'}\n{_lvl(level)}{_style(style)}\nSENTENCE: {sentence}\nWORD: {word}\n"
             'TASK: Up to 8. JSON: {"synonyms":["..."]}')
     return system, user
 
