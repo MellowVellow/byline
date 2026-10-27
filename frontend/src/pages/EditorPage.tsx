@@ -83,16 +83,22 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [synPos, setSynPos] = useState({ x: 200, y: 200, h: 400 })
   const [synRange, setSynRange] = useState<{ from: number; to: number } | null>(null)
   const [suggHistory, setSuggHistory] = useState<string[]>([])
-  const [aiEnabled, setAiEnabled] = useState(() => { const v = localStorage.getItem('byline.aiEnabled') ?? localStorage.getItem('byline.suggEnabled'); return v !== '0' })
-  const aiEnabledRef = useRef(true); aiEnabledRef.current = aiEnabled
-  function toggleAI() {
-    setAiEnabled(v => { const n = !v; localStorage.setItem('byline.aiEnabled', n ? '1' : '0'); if (!n) {
-      // stop everything + strip all AI visuals now
-      refs.current.abort?.abort(); clearTimeout(refs.current.timers.c); clearTimeout(refs.current.timers.g); clearTimeout(refs.current.timers.s)
-      anchorStore.ghost = ''; anchorStore.anchors = []; anchorStore.ranges = new Map(); anchorStore.linkedId = null
-      refs.current.sugg = []; setSuggestions([]); setPopupGroup([]); setSelected(null)
-      if (editor) { syncGhost(editor); syncAnchors(editor); redraw(editor) }
-    } return n })
+  type Mode = 'straight' | 'editing'
+  const [mode, setMode] = useState<Mode>(() => localStorage.getItem('byline.mode') === 'straight' ? 'straight' : 'editing')
+  const editing = mode === 'editing'
+  const editingRef = useRef(true); editingRef.current = editing
+  function switchMode(m: Mode) {
+    setMode(m); localStorage.setItem('byline.mode', m)
+    if (m === 'straight') {
+      // ghost only: kill editing-AI timers/popups/underlines, keep suggestions alive
+      refs.current.abort?.abort(); clearTimeout(refs.current.timers.g); clearTimeout(refs.current.timers.s)
+      anchorStore.anchors = []; anchorStore.ranges = new Map(); anchorStore.linkedId = null
+      setPopupGroup([]); setSelected(null)
+      if (editor) { syncAnchors(editor); redraw(editor) }
+    } else {
+      // editing: restore anchors + fresh checks
+      setTimeout(() => { rebuildAnchors(); requestGrammar(); requestAnnotate(); requestReactions() }, 50)
+    }
   }
   const [suggPos, setSuggPos] = useState({ x: 200, y: 300, h: 500 })
   const synRef = useRef<string[]>([]); synRef.current = synonyms
@@ -159,7 +165,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     for (const a of anchors) { const r = locateQuote(tm, a.quote, a.context); if (r) anchorStore.ranges.set(a.id, r) }
     syncAnchors(editor)
   }, [editor, grammar, issues, reactions, readings])
-  useEffect(() => { if (aiEnabled) rebuildAnchors(); else { anchorStore.anchors = []; anchorStore.ranges = new Map(); if (editor) syncAnchors(editor) } }, [rebuildAnchors, aiEnabled]) // eslint-disable-line
+  useEffect(() => { if (editing) rebuildAnchors(); else { anchorStore.anchors = []; anchorStore.ranges = new Map(); if (editor) syncAnchors(editor) } }, [rebuildAnchors, editing]) // eslint-disable-line
 
   function showGhost(idx: number) {
     if (!editor) return
@@ -216,7 +222,6 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     return !editor.state.doc.textBetween(editor.state.selection.from, end).trim()
   }
   async function requestComplete(auto = false) {
-    if (!aiEnabledRef.current) return // AI off: zero suggestion calls / tokens
     if (!editor || refs.current.version === refs.current.acceptedVersion) return
     if (auto && (refs.current as any).suppressAuto) return // went back to revise: no auto popup until Suggest pressed
     if (!auto) (refs.current as any).suppressAuto = false
@@ -236,12 +241,12 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const c = editor.view.coordsAtPos(pos2); const y = c.bottom + 8; setSuggPos({ x: Math.max(8, Math.min(c.left, innerWidth - 380)), y, h: Math.max(170, innerHeight - y - 12) })
     redraw(editor)
   }
-  async function requestGrammar() { if (!aiEnabledRef.current || !editor) return; const tm = plain(); if (!tm.text.trim()) return; const d = await api.grammar({ text: tm.text }); if (d?.matches) { const seen = new Set<string>(); const fresh = d.matches.map((m: GrammarMatch) => ({ ...m, quote: tm.text.slice(m.from, m.to) })).filter((m: GrammarMatch) => { const k = `${m.from}-${m.to}`; if (seen.has(k)) return false; seen.add(k); return true }).filter((m: GrammarMatch) => { const w = (m.quote || '').trim().toLowerCase(); return !dictRef.current.ignore.some(x => x.toLowerCase() === w) && !dictRef.current.spelling.some(x => x.toLowerCase() === w) }); setGrammar(old => [...fresh, ...old.filter(o => !fresh.some((m: GrammarMatch) => m.from === o.from && m.to === o.to)).map(o => ({ ...o, stale: true }))].slice(0, 40)) } }
-  async function requestAnnotate() { if (!aiEnabledRef.current || !editor) return; const tm = plain(); if (tm.text.trim().length < 20) return; const d = await api.annotate({ context: appliedRef.current.context, level: appliedRef.current.level, text: tm.text }); const fresh: Issue[] = d?.issues ? d.issues.map((i: Issue) => ({ ...i, id: nid() })) : (demo ? FALLBACK_ISSUES.map(i => ({ ...i, id: nid() })) : []); setIssues(old => [...fresh, ...old.filter(o => !fresh.some(f => f.quote === o.quote && f.type === o.type)).map(o => ({ ...o, stale: true }))].slice(0, 40)); setStale(false) }
-  async function requestReactions() { if (!aiEnabledRef.current || !editor) return; const tm = plain(); if (tm.text.trim().length < 20) return; const d = await api.reactions({ context: appliedRef.current.context, level: appliedRef.current.level, text: tm.text, persona: appliedRef.current.persona }); const fresh: Reaction[] = d?.reactions ? d.reactions.map((r: Reaction) => ({ ...r, id: nid() })) : (demo ? FALLBACK_REACTIONS.map(r => ({ ...r, id: nid() })) : []); setReactions(old => [...fresh, ...old.filter(o => !fresh.some(f => f.quote === o.quote && f.kind === o.kind)).map(o => ({ ...o, stale: true }))].slice(0, 40)) }
-  async function refreshMainIdea() { if (!aiEnabledRef.current || !editor) return; setBusy('main'); const d = await api.mainIdea({ context: appliedRef.current.context, level: appliedRef.current.level, text: plain().text }); if (d?.main_idea) setMainIdea(d.main_idea); setBusy('') }
-  async function refreshReadings() { if (!aiEnabledRef.current || !editor) return; setBusy('read'); const d = await api.readings({ context: appliedRef.current.context, level: appliedRef.current.level, text: plain().text }); if (d?.readings) setReadings(old => [...d.readings, ...old.map(o => ({ ...o, stale: true }))].slice(0, 40)); setBusy('') }
-  async function refreshOutline() { if (!aiEnabledRef.current || !editor) return; const d = await api.outline({ text: plain().text }); if (d?.outline) setOutline(d.outline) }
+  async function requestGrammar() { if (!editingRef.current || !editor) return; const tm = plain(); if (!tm.text.trim()) return; const d = await api.grammar({ text: tm.text }); if (d?.matches) { const seen = new Set<string>(); const fresh = d.matches.map((m: GrammarMatch) => ({ ...m, quote: tm.text.slice(m.from, m.to) })).filter((m: GrammarMatch) => { const k = `${m.from}-${m.to}`; if (seen.has(k)) return false; seen.add(k); return true }).filter((m: GrammarMatch) => { const w = (m.quote || '').trim().toLowerCase(); return !dictRef.current.ignore.some(x => x.toLowerCase() === w) && !dictRef.current.spelling.some(x => x.toLowerCase() === w) }); setGrammar(old => [...fresh, ...old.filter(o => !fresh.some((m: GrammarMatch) => m.from === o.from && m.to === o.to)).map(o => ({ ...o, stale: true }))].slice(0, 40)) } }
+  async function requestAnnotate() { if (!editingRef.current || !editor) return; const tm = plain(); if (tm.text.trim().length < 20) return; const d = await api.annotate({ context: appliedRef.current.context, level: appliedRef.current.level, text: tm.text }); const fresh: Issue[] = d?.issues ? d.issues.map((i: Issue) => ({ ...i, id: nid() })) : (demo ? FALLBACK_ISSUES.map(i => ({ ...i, id: nid() })) : []); setIssues(old => [...fresh, ...old.filter(o => !fresh.some(f => f.quote === o.quote && f.type === o.type)).map(o => ({ ...o, stale: true }))].slice(0, 40)); setStale(false) }
+  async function requestReactions() { if (!editingRef.current || !editor) return; const tm = plain(); if (tm.text.trim().length < 20) return; const d = await api.reactions({ context: appliedRef.current.context, level: appliedRef.current.level, text: tm.text, persona: appliedRef.current.persona }); const fresh: Reaction[] = d?.reactions ? d.reactions.map((r: Reaction) => ({ ...r, id: nid() })) : (demo ? FALLBACK_REACTIONS.map(r => ({ ...r, id: nid() })) : []); setReactions(old => [...fresh, ...old.filter(o => !fresh.some(f => f.quote === o.quote && f.kind === o.kind)).map(o => ({ ...o, stale: true }))].slice(0, 40)) }
+  async function refreshMainIdea() { if (!editingRef.current || !editor) return; setBusy('main'); const d = await api.mainIdea({ context: appliedRef.current.context, level: appliedRef.current.level, text: plain().text }); if (d?.main_idea) setMainIdea(d.main_idea); setBusy('') }
+  async function refreshReadings() { if (!editingRef.current || !editor) return; setBusy('read'); const d = await api.readings({ context: appliedRef.current.context, level: appliedRef.current.level, text: plain().text }); if (d?.readings) setReadings(old => [...d.readings, ...old.map(o => ({ ...o, stale: true }))].slice(0, 40)); setBusy('') }
+  async function refreshOutline() { if (!editingRef.current || !editor) return; const d = await api.outline({ text: plain().text }); if (d?.outline) setOutline(d.outline) }
   function rerunAll() { requestComplete(); requestGrammar(); requestAnnotate(); requestReactions(); refreshMainIdea(); refreshOutline() }
   refs.current.fns = { complete: requestComplete, grammar: requestGrammar, annotate: requestAnnotate, reactions: requestReactions, accept: acceptGhost, clearGhost, showGhost, closePopup }
 
@@ -321,7 +326,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const tm = plain(); const sent = tm.text.split(/(?<=[.!?])\s/).find(s => s.includes(word)) || tm.text.slice(0, 200)
     const cc = editor.view.coordsAtPos(from); const yy = cc.bottom + 8; setSynPos({ x: Math.max(8, Math.min(cc.left, innerWidth - 380)), y: yy, h: Math.max(170, innerHeight - yy - 12) })
     setSynRange({ from, to }); synRangeRef.current = { from, to }
-    if (!aiEnabledRef.current) return
+    if (!editingRef.current) return
     const d = await api.synonyms({ context: appliedRef.current.context, level: appliedRef.current.level, word, sentence: sent }); if (d?.synonyms) setSynonyms(d.synonyms.slice(0, 3))
   }
   function replaceWord(w: string) { if (!editor || !w) return; const r = synRangeRef.current; if (r) editor.chain().focus().setTextSelection(r).deleteSelection().insertContent(w).run(); else editor.chain().focus().deleteSelection().insertContent(w).run(); setSynonyms([]); synRangeRef.current = null }
@@ -334,6 +339,10 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     <div>
       <header className="topbar">
         <Logo />{demo && <span className="chip" style={{ background: 'var(--ai)' }}>DEMO</span>}
+        <div className="mode-toggle" role="tablist" aria-label="Mode">
+          <button role="tab" aria-selected={mode === 'straight'} className={mode === 'straight' ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => switchMode('straight')}>Straight drafting</button>
+          <button role="tab" aria-selected={mode === 'editing'} className={mode === 'editing' ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => switchMode('editing')}>Editing</button>
+        </div>
         <div className="spacer" />
         <span className="metric">{acc}% accepted · {metrics.ms}ms · {status?.model || 'offline'}</span>
         <span className="dot" style={{ background: status?.meta_configured ? '#1E8E3E' : '#D93025' }} />
@@ -348,7 +357,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             <div className="rail-head"><strong style={{ fontSize: 13 }}>Write</strong><button onClick={() => toggleDock('left')} title="Collapse">‹</button></div>
             <div className="dock"><h3>Intent</h3>
               <textarea className="context-box" value={context} onChange={e => { setContext(e.target.value); setStale(true) }} placeholder="What should the finished text be about?" />
-              <div style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }}><button className="primary" disabled={!dirty || !aiEnabled} onClick={applySettings}>Apply{dirty ? ' ●' : ''}</button>{dirty && <span className="meta">unapplied changes</span>}</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }}><button className="primary" disabled={!dirty} onClick={applySettings}>Apply{dirty ? ' ●' : ''}</button>{dirty && <span className="meta">unapplied changes</span>}</div>
             </div>
             <div className="dock"><h3>Vocabulary</h3>
               <label>Level</label><select style={{ width: '100%' }} value={level} onChange={e => setLevel(e.target.value)}>{LEVELS.map(l => <option key={l}>{l}</option>)}</select>
@@ -356,12 +365,12 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               <label>Assist</label><select style={{ width: '100%' }} value={assist} onChange={e => setAssist(e.target.value)}>{ASSISTS.map(l => <option key={l}>{l}</option>)}</select>
               <label>Reader</label><select style={{ width: '100%' }} value={persona} onChange={e => setPersona(e.target.value)}>{PERSONAS.map(l => <option key={l}>{l}</option>)}</select>
             </div>
-            <div className="dock" style={aiEnabled ? undefined : { opacity: .45, filter: 'grayscale(.7)' }}><h3><span className="swatch" style={{ background: 'var(--ai)' }} />Perceived main idea</h3>
+            {editing && <div className="dock"><h3><span className="swatch" style={{ background: 'var(--ai)' }} />Perceived main idea</h3>
               <div className="quote-serif">{mainIdea || '—'}</div>
-              <button disabled={!aiEnabled} style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={refreshMainIdea}>{busy === 'main' ? 'Reading…' : 'Refresh'}</button>
+              <button disabled={!editing} style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={refreshMainIdea}>{busy === 'main' ? 'Reading…' : 'Refresh'}</button>
               {outline.map((o, i) => <div key={i} className="dock-item" onClick={() => focusAnchor({ id: `o${i}`, kind: 'reaction', quote: o.quote, context: o.context, title: 'Outline', detail: o.label })}>{o.label}<div className="meta">“{o.quote}”</div></div>)}
               <button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={refreshOutline}>Outline</button>
-            </div>
+            </div>}
           </>}
         </aside>
 
@@ -390,17 +399,16 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             <button title="Link" className={editor.isActive('link') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => { const url = prompt('Link URL'); if (url) (editor.chain() as any).focus().setLink({ href: url }).run(); else (editor.chain() as any).focus().unsetLink().run() }}>Link</button>
             <button title="Clear formatting" onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()}>Clear</button>
             <span className="tool-sep" />
-            <span className="sugg-toggle"><button role="switch" aria-checked={aiEnabled} aria-label="Toggle AI" className={`switch ${aiEnabled ? 'on' : ''}`} onMouseDown={e => e.preventDefault()} onClick={toggleAI}><span className="knob" /></button><span>AI</span></span>
-            <button disabled={!aiEnabled} onMouseDown={e => e.preventDefault()} onClick={() => requestComplete()}>Suggest <span className="kbd">Ctrl Space</span></button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => requestComplete()}>Suggest <span className="kbd">Ctrl Space</span></button>
             <span className="metric">{counts.words} words · {counts.chars} chars</span>
           </div>
           <div className="paper" onDoubleClick={onDblClick}><EditorContent editor={editor} /></div>
         </main>
 
-        <aside className={`rail right-rail ${aiEnabled ? '' : 'ai-off'}`}>
+        <aside className={`rail right-rail ${editing ? '' : 'ai-off'}`}>
           {!rightOpen ? <div className="rail-strip"><button onClick={() => toggleDock('right')} title="Expand">‹</button><span className="strip-dot" style={{ background: 'var(--lt)' }} /><span className="strip-dot" style={{ background: 'var(--yellow)' }} /><span className="strip-dot" style={{ background: 'var(--blue)' }} /><span className="strip-dot" style={{ background: 'var(--ai)' }} /></div> : <>
             <div className="rail-head"><strong style={{ fontSize: 13 }}>Read</strong><button onClick={() => toggleDock('right')} title="Collapse">›</button></div>
-            <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--lt)' }} />Language</h3>
+            {editing && <><div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--lt)' }} />Language</h3>
               <div className="dock-scroll">
               {grammar.map((g, i) => { const a = anchorStore.anchors.find(x => x.id === `g${i}-${g.from}`); const st = LANG_STYLE.grammar; return <div key={`g${i}`} className={`dock-item ${g.stale ? 'stale' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label} · LT</div><span className="quote-serif">{g.quote || ''}</span><div className="reason-text">{g.message}</div>{g.replacements[0] && <div className="replacement-text" style={{ color: st.color }}>→ {g.replacements[0]}</div>}</div> })}
               {issues.map(it => { const a = anchorStore.anchors.find(x => x.id === it.id); const st = LANG_STYLE[it.type]; return <div key={it.id} className={`dock-item ${it.stale ? 'stale' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label} · AI</div><span className="quote-serif">{it.quote}</span><div className="reason-text">{it.reason}</div>{it.replacement && <div className="replacement-text" style={{ color: st.color }}>→ {it.replacement}</div>}</div> })}
@@ -411,15 +419,15 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               <div className="dock-scroll">
               {reactions.map(r => { const a = anchorStore.anchors.find(x => x.id === r.id); const st = REACTION_STYLE[r.kind]; return <div key={r.id} className={`dock-item ${r.stale ? 'stale' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label}</div><span className="quote-serif">{r.quote}</span><div className={`kind-body ${r.kind === 'question' ? 'q' : r.kind === 'critique' ? 'crit' : r.kind === 'comment' ? 'comm' : ''}`} style={r.kind === 'compliment' ? { color: st.color, fontWeight: 600 } : undefined}>“{r.text}”</div></div> })}
               {!reactions.length && <div className="meta">—</div>}
-              </div><div className="dock-foot"><button disabled={!aiEnabled} onMouseDown={e => e.preventDefault()} onClick={requestReactions}>Refresh</button></div>
+              </div><div className="dock-foot"><button disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={requestReactions}>Refresh</button></div>
             </div>
             <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--blue)' }} />Sources</h3>
               <div className="dock-scroll">
               {readings.map((r, i) => <div key={i} className={`dock-item ${r.stale ? 'stale' : ''}`}><div className="kind-label" style={{ color: 'var(--blue)' }}>{r.label}</div><a href={textFragmentUrl(r.url, r.excerpt || r.claim_quote)} target="_blank" rel="noreferrer" style={{ fontWeight: 600 }}>{r.title || r.url}</a><div className="reason-text">vs “{r.claim_quote}” — {r.why}</div><div className="meta" style={{ fontStyle: 'italic' }}>{r.excerpt}</div></div>)}
               {!readings.length && <div className="meta">—</div>}
-              </div><div className="dock-foot"><button disabled={!aiEnabled} onMouseDown={e => e.preventDefault()} onClick={refreshReadings}>{busy === 'read' ? 'Searching…' : 'Search'}</button></div>
+              </div><div className="dock-foot"><button disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshReadings}>{busy === 'read' ? 'Searching…' : 'Search'}</button></div>
             </div>
-            <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--grey)' }} />Suggestions<span className="spacer" /><button role="switch" aria-checked={aiEnabled} aria-label="Toggle AI" className={`switch ${aiEnabled ? 'on' : ''}`} onMouseDown={e => e.preventDefault()} onClick={toggleAI}><span className="knob" /></button></h3>
+            </>}<div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--grey)' }} />Suggestions</h3>
               <div className="dock-scroll">
               {suggestions.map((s, i) => <div key={`s${i}`} className={`ghost-row ${i === ghostIdx ? 'sel' : ''}`} onClick={() => acceptGhost(i)}><span className="quote-serif">{s}</span></div>)}
               {suggHistory.map((s, i) => <div key={`h${i}`} className="ghost-row" style={{ opacity: .45 }}>{s}</div>)}
