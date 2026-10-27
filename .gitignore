@@ -34,3 +34,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+data/
+results/*.log
+node_modules/
+dist/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+# local reference copy + secrets-adjacent artifacts (never commit)
+/EXAMPLE/
+shot*.mjs
+frontend/shot*.mjs

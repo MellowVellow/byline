@@ -1,0 +1,13 @@
+services:
+  languagetool:
+    build:
+      context: ./languagetool
+    image: byline-languagetool
+    container_name: byline-languagetool
+    ports:
+      - "8010:8010"
+    environment:
+      Java_Xms: 256m
+      Java_Xmx: 1g
+      langtool_pipelinePrewarming: "true"
+    restart: unless-stopped
