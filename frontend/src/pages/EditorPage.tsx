@@ -191,7 +191,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       `Target audience: ${A.audText || '(unspecified)'}; knowledge level ${A.audLevel}/5. ${A.audLevel <= 2 ? 'Flag undefined jargon, acronyms, assumed technical context.' : A.audLevel >= 4 ? 'Do not explain basic industry concepts.' : 'Briefly ground specialized terms.'}`,
     ].filter(Boolean).join('\n')
   }
-  function applySettings() {
+  function applySettings() { blip('accept')
     const next = draftObj()
     appliedRef.current = next; setApplied(next)
     requestComplete(); requestAnnotate(); requestReactions(); refreshMainIdea()
@@ -265,6 +265,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [loading, setLoading] = useState<Record<string, boolean>>({})
   const setLoad = (k: string, v: boolean) => setLoading(prev => ({ ...prev, [k]: v }))
   const anyLoading = Object.values(loading).some(Boolean)
+  const prevLoadingRef = useRef(false)
+  useEffect(() => { if (prevLoadingRef.current && !anyLoading) blip('done'); prevLoadingRef.current = anyLoading }, [anyLoading])
   const [leftOpen, setLeftOpen] = useState(localStorage.getItem('byline.leftOpen') === '1')
   const [rightOpen, setRightOpen] = useState(localStorage.getItem('byline.rightOpen') === '1')
   type LeftTab = 'write' | 'style' | 'outline'
@@ -410,7 +412,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const sugg: string[] = (d?.suggestions?.length ? d.suggestions : (demo ? FALLBACK_SUGGESTIONS : [])).slice(0, 3).map((x: string) => sentenceCase(before, x)); setLoad('complete', false)
     if (!sugg.length || ctl.signal.aborted) return
     archiveSuggestions(refs.current.sugg.filter(s => !sugg.includes(s)))
-    refs.current.sugg = sugg; setSuggestions(sugg); setGhostIdx(0); refs.current.idx = 0
+    refs.current.sugg = sugg; setSuggestions(sugg); setGhostIdx(0); refs.current.idx = 0; blip('done')
     record({ offered: (v: number) => v + 1, msTotal: (v: number) => v + Math.round(performance.now() - t0), msCount: (v: number) => v + 1 })
     const pos2 = editor.state.selection.from; const b2 = editor.state.doc.textBetween(Math.max(0, pos2 - 1), pos2)
     anchorStore.ghost = (b2 && !/\s/.test(b2) ? ' ' : '') + sugg[0]; anchorStore.ghostPos = pos2; syncGhost(editor)
@@ -444,7 +446,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         const m = transRef.current
         const cats = Object.keys(TRANSITIONS).filter(c => matchText(m.query, c) || TRANSITIONS[c].some(t => matchText(m.query, t)))
         const tpls = m.cat ? TRANSITIONS[m.cat].filter(t => matchText(m.query, t)) : []
-        const pickCat = (c: string) => { const n = { ...m, cat: c, query: '' }; transRef.current = n; setTransMenu(n) }
+        const pickCat = (c: string) => { blip('select'); const n = { ...m, cat: c, query: '' }; transRef.current = n; setTransMenu(n) }
         const pickTpl = (t: string) => { transRef.current = null; setTransMenu(null); insertTransition(t) }
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); transRef.current = null; setTransMenu(null); return }
         if (e.key === 'Backspace') { e.preventDefault(); e.stopPropagation(); const n = { ...m, query: m.query.slice(0, -1) }; transRef.current = n; setTransMenu(n); return }
@@ -537,7 +539,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const cc = editor.view.coordsAtPos(from); const yy = cc.bottom + 8; setSynPos({ x: Math.max(8, Math.min(cc.left, innerWidth - 380)), y: yy, h: Math.max(170, innerHeight - yy - 12) })
     setSynRange({ from, to }); synRangeRef.current = { from, to }
     if (!editingRef.current) return
-    setLoad('synonyms', true); const d = await api.synonyms({ context: appliedRef.current.context, level: appliedRef.current.level, word, sentence: sent, style: buildStyle(appliedRef.current) }); setLoad('synonyms', false); if (d?.synonyms) setSynonyms(d.synonyms.slice(0, 3))
+    setLoad('synonyms', true); const d = await api.synonyms({ context: appliedRef.current.context, level: appliedRef.current.level, word, sentence: sent, style: buildStyle(appliedRef.current) }); setLoad('synonyms', false); if (d?.synonyms) { setSynonyms(d.synonyms.slice(0, 3)); blip('done') }
   }
   function replaceWord(w: string) { if (!editor || !w) return; const r = synRangeRef.current; if (r) editor.chain().focus().setTextSelection(r).deleteSelection().insertContent(w).run(); else editor.chain().focus().deleteSelection().insertContent(w).run(); setSynonyms([]); synRangeRef.current = null }
   function tocItems(): { level: number; text: string; child: number }[] {
@@ -574,7 +576,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const m = { x: Math.max(8, Math.min(c.left, innerWidth - 380)), y, h: Math.max(170, innerHeight - y - 12), cat: null as string | null, query: '' }
     transRef.current = m; setTransMenu(m)
   }
-  function insertTransition(tpl: string) {
+  function insertTransition(tpl: string) { blip('accept')
     if (!editor) return
     const at = editor.state.selection.from; const blank = tpl.indexOf('[]')
     const prev = editor.state.doc.textBetween(Math.max(0, at - 1), at); const prefix = prev && !/\s/.test(prev) ? ' ' : ''
@@ -650,12 +652,12 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         <span className="dot" style={{ background: status?.meta_configured ? '#1E8E3E' : '#D93025' }} title={status?.meta_configured ? 'Backend connected' : 'Backend offline'} />
         <a className={`nav-btn ${location.pathname.startsWith('/app') ? 'active' : ''}`} href="/app">App</a>
         <a className={`nav-btn ${location.pathname.startsWith('/demo') ? 'active' : ''}`} href="/demo">Demo</a>
-        <button className="icon-btn settings-icon" onClick={() => setShowSettings(true)} title="Settings (Ctrl+,)" aria-label="Settings"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1"/></svg></button>
+        <button className="icon-btn settings-icon" onClick={() => { blip('open'); setShowSettings(true) }} title="Settings (Ctrl+,)" aria-label="Settings"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1"/></svg></button>
         </div>
       </header>
 
       <div className="layout" style={{ gridTemplateColumns: cols }}>
-        <aside className="rail">
+        <aside className="rail" onClickCapture={e => { if ((e.target as HTMLElement).closest('button')) blip('select') }}>
           {!leftOpen ? <div className="rail-strip"><button onClick={() => toggleDock('left')} title="Expand">›</button><span className="strip-dot" style={{ background: 'var(--ai)' }} /><span className="strip-dot" style={{ background: 'var(--grey)' }} /></div> : <>
             <div className="rail-head"><strong style={{ fontSize: 13 }}>Write</strong><button onClick={() => toggleDock('left')} title="Collapse">‹</button></div>
             <div className="dock-tabs" role="tablist" aria-label="Write settings">
@@ -718,7 +720,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           </div>
         </main>
 
-        <aside className={`rail right-rail ${mode === 'drafting' ? 'ai-off' : ''}`}>
+        <aside className={`rail right-rail ${mode === 'drafting' ? 'ai-off' : ''}`} onClickCapture={e => { if ((e.target as HTMLElement).closest('button')) blip('select') }}>
           {!rightOpen ? <div className="rail-strip"><button onClick={() => toggleDock('right')} title="Expand">‹</button><span className="strip-dot" style={{ background: 'var(--lt)' }} /><span className="strip-dot" style={{ background: 'var(--yellow)' }} /><span className="strip-dot" style={{ background: 'var(--blue)' }} /><span className="strip-dot" style={{ background: 'var(--ai)' }} /></div> : <>
             <div className="rail-head"><strong style={{ fontSize: 13 }}>Read</strong><button onClick={() => toggleDock('right')} title="Collapse">›</button></div>
             <div className="dock-tabs" role="tablist" aria-label="Read panels">
@@ -817,7 +819,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         <div className="sugg-popup fade" style={{ left: transMenu.x, top: transMenu.y, maxHeight: transMenu.h, overflowY: 'auto' }} role="menu" aria-label="Transitions">
           <div className="trans-query">{transMenu.cat ? `${transMenu.cat} — ` : ''}Type to filter{transMenu.query ? `: ${transMenu.query}` : ''}<span className="trans-caret">▌</span></div>
           {!transMenu.cat
-            ? Object.keys(TRANSITIONS).filter(c => matchText(transMenu.query, c) || TRANSITIONS[c].some(t => matchText(transMenu.query, t))).map((c, i) => <div key={c} className="sugg-row" onMouseDown={e => { e.preventDefault(); const n = { ...transMenu, cat: c, query: '' }; transRef.current = n; setTransMenu(n) }}><span className="num">{digitFor(i)}</span>{c}</div>)
+            ? Object.keys(TRANSITIONS).filter(c => matchText(transMenu.query, c) || TRANSITIONS[c].some(t => matchText(transMenu.query, t))).map((c, i) => <div key={c} className="sugg-row" onMouseDown={e => { e.preventDefault(); blip('select'); const n = { ...transMenu, cat: c, query: '' }; transRef.current = n; setTransMenu(n) }}><span className="num">{digitFor(i)}</span>{c}</div>)
             : <><div className="sugg-row" onMouseDown={e => { e.preventDefault(); const n = { ...transMenu, cat: null, query: '' }; transRef.current = n; setTransMenu(n) }}>← Categories</div>{TRANSITIONS[transMenu.cat].filter(t => matchText(transMenu.query, t)).map((t, i) => <div key={t} className="sugg-row" onMouseDown={e => { e.preventDefault(); transRef.current = null; setTransMenu(null); insertTransition(t) }}><span className="num">{digitFor(i)}</span>{t.replace('[]', '…')}</div>)}</>}
         </div>
       )}

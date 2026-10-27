@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { COLOR_PRESETS, DEFAULT_SETTINGS, SHORTCUTS, type AppSettings } from '../lib/settings'
-import { sfxMuted, sfxToggle, sfxPick } from '../lib/sfx'
+import { sfxMuted, sfxToggle, sfxPick, blip } from '../lib/sfx'
 
 type Tab = 'colors' | 'ui' | 'shortcuts'
 const COLOR_FIELDS: { key: 'ai' | 'grammar' | 'sources' | 'wordChoice' | 'selection'; label: string; hint: string }[] = [
@@ -13,8 +13,8 @@ const COLOR_FIELDS: { key: 'ai' | 'grammar' | 'sources' | 'wordChoice' | 'select
 export default function SettingsMenu({ settings, onChange, onClose }: { settings: AppSettings; onChange: (s: AppSettings) => void; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('colors')
   const [muted, setMuted] = useState(sfxMuted())
-  const set = (p: Partial<AppSettings>) => onChange({ ...settings, ...p })
-  useEffect(() => { const f = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }; addEventListener('keydown', f); return () => removeEventListener('keydown', f) }, [onClose])
+  const set = (p: Partial<AppSettings>) => { blip('select'); onChange({ ...settings, ...p }) }
+  useEffect(() => { blip('open'); const f = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }; addEventListener('keydown', f); return () => removeEventListener('keydown', f) }, [onClose])
   return (
     <div className="library-backdrop" onMouseDown={onClose}>
       <div className="library-modal fade settings-modal" role="dialog" aria-label="Settings" onMouseDown={e => e.stopPropagation()}>
@@ -23,7 +23,7 @@ export default function SettingsMenu({ settings, onChange, onClose }: { settings
           <button onClick={onClose}>Close <span className="kbd">Esc</span></button></div>
         <div className="dock-tabs" style={{ padding: '12px 16px 0' }} role="tablist" aria-label="Settings sections">
           {([['colors', 'Colors'], ['ui', 'UI / UX'], ['shortcuts', 'Shortcuts']] as [Tab, string][]).map(([t, l]) =>
-            <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{l}</button>)}
+            <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'active' : ''} onClick={() => { blip('select'); setTab(t) }}>{l}</button>)}
         </div>
         <div className="library-scroll">
           {tab === 'colors' && <>
