@@ -109,3 +109,5 @@ input[type=range]{accent-color:var(--ink);padding:0;border:none;background:trans
 .load-dots span:nth-child(3){animation-delay:.3s}
 @keyframes pulse{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
 @media (prefers-reduced-motion: reduce){.spinner,.load-dots span{animation:none}}
+.trans-query{padding:8px 12px;font-size:12px;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border)}
+.trans-caret{animation:pulse 1s steps(1) infinite;color:var(--ink)}

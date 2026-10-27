@@ -19,15 +19,25 @@ const TONES = ['Serious', 'Humorous', 'Sarcastic', 'Bleak and oppressive', 'Obje
 const VOICE_PRESETS = ["Ernest Hemingway — minimalist, direct prose, short declarative sentences, no adornment", "F. Scott Fitzgerald (The Great Gatsby) — lyrical, rich with symbolic imagery, long musical sentences", "Gen Z style — emotionally expressive, internet-native, casual, still readable", "Poem / Poetic — exaggerated, lyrical imagery, sometimes meta, rhythm over exposition"]
 const RHYTHMS = ['', 'Staccato — short independent clauses (urgency, may turn robotic)', 'Varied — forced mix of short (<8 words) and long (>20 words) sentences', 'Flowing (Legato) — long compound-complex sentences, rhythmic punctuation']
 const TRANSITIONS: Record<string, string[]> = {
-  '1 · Introductions / thesis': ['This essay argues that []', 'Recent studies suggest that []', 'In recent years, research has shown []', 'The purpose of this research is to []'],
-  '2 · Addition / similarity': ['Furthermore, []', 'Moreover, []', 'In addition, []', 'Similarly, []', 'Likewise, []'],
-  '3 · Example / clarify': ['For example, recent research shows []', 'Evidence suggests that []', 'Specifically, to illustrate, []', 'For instance, []', 'In other words, []'],
-  '4 · Emphasis': ['One key point is []', 'Indeed, []', 'In fact, []', 'It is important to note that []', 'Above all, []'],
-  '5 · Cause and effect': ['Consequently, []', 'Therefore, []', 'As a consequence, []', 'Due to [], ', 'As a result, []'],
-  '6 · Conclusion': ['In summary, []', 'To sum up, []', 'Overall, the evidence suggests []', 'In conclusion, []', 'Ultimately, []'],
-  '7 · Sequencing': ['First of all, []', 'Next, []', 'Finally, []', 'In the meantime, []', 'Subsequently, []'],
-  '8 · Contrast': ['However, []', 'Nevertheless, []', 'On the contrary, []', 'Despite this, []', 'In contrast, []', 'On the other hand, []', 'Conversely, []'],
+  'Introduction / framing': ['To begin with, []', 'Regarding [], ', 'In this context, []', 'This essay argues that []', 'Recent studies suggest that []'],
+  'Addition / similarity': ['Furthermore, []', 'Moreover, []', 'Similarly, []', 'Likewise, []', 'In addition, []'],
+  'Example / clarification': ['For example, []', 'Specifically, []', 'In other words, []', 'For instance, []', 'Evidence suggests that []'],
+  'Emphasis': ['Indeed, []', 'Notably, []', 'Above all, []', 'One key point is []', 'In fact, []'],
+  'Cause / effect': ['Therefore, []', 'Consequently, []', 'As a result, []', 'As a consequence, []', 'Due to [], '],
+  'Conclusion / summary': ['In conclusion, []', 'Overall, []', 'In summary, []', 'To sum up, []', 'Ultimately, []'],
+  'Sequencing / progression': ['First, []', 'Next, []', 'Subsequently, []', 'Finally, []', 'First of all, []', 'In the meantime, []'],
+  'Contrast / concession': ['However, []', 'Whereas []', 'Nevertheless, []', 'Although [], ', 'On the contrary, []', 'Despite this, []', 'Conversely, []'],
+  'Condition / qualification': ['If [], ', 'Unless [], ', 'Provided that [], ', 'To some extent, []'],
+  'Purpose / means': ['To achieve this, []', 'For this purpose, []', 'By doing so, []', 'In order to [], '],
 }
+export function matchText(query: string, text: string): boolean {
+  const q = query.trim().toLowerCase(); if (!q) return true
+  const t = text.toLowerCase()
+  if (t.includes(q)) return true
+  // word-prefix match: every query word prefixes some word in text
+  return q.split(/\s+/).every(qw => t.split(/[^a-z]+/).some(tw => tw.startsWith(qw)))
+}
+export const digitFor = (i: number) => String((i + 1) % 10) // 1..9,0 for 10th
 const ASSISTS = ['Hint', 'Phrase', 'Sentence', 'Question']
 const PERSONAS = ['Skeptical reader', 'Ordinary reader', 'Expert reader', 'Supportive friend']
 export const REACTION_STYLE: Record<string, { color: string; label: string }> = {
@@ -63,7 +73,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [density, setDensity] = useState(2)
   const [audLevel, setAudLevel] = useState(3)
   const [audText, setAudText] = useState('')
-  const [transMenu, setTransMenu] = useState<{ x: number; y: number; h: number; cat: string | null } | null>(null)
+  const [transMenu, setTransMenu] = useState<{ x: number; y: number; h: number; cat: string | null; query: string } | null>(null)
+  const transRef = useRef<typeof transMenu>(null); transRef.current = transMenu
   const [assist, setAssist] = useState('Phrase')
   const [persona, setPersona] = useState(PERSONAS[0])
   // left-dock edits are STAGED until Apply; AI calls always read appliedRef
@@ -262,6 +273,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     return !editor.state.doc.textBetween(editor.state.selection.from, end).trim()
   }
   async function requestComplete(auto = false) {
+    if (transRef.current) return // cascading menu overrides ghost suggestions
     if (!editor || refs.current.version === refs.current.acceptedVersion) return
     if (auto && (refs.current as any).suppressAuto) return // went back to revise: no auto popup until Suggest pressed
     if (!auto) (refs.current as any).suppressAuto = false
@@ -297,8 +309,21 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey
       if (mod && e.code === 'Space') { e.preventDefault(); e.stopPropagation(); refs.current.fns.complete?.(); return }
-      if (mod && e.key === '/') { e.preventDefault(); e.stopPropagation(); const c = editor.view.coordsAtPos(editor.state.selection.from); const y = c.bottom + 8; setTransMenu({ x: Math.max(8, Math.min(c.left, innerWidth - 380)), y, h: Math.max(170, innerHeight - y - 12), cat: null }); return }
-      if (transMenu && e.key === 'Escape') { e.preventDefault(); setTransMenu(null); return }
+      if (mod && e.key === '/') { e.preventDefault(); e.stopPropagation(); if (transRef.current) { setTransMenu(null); transRef.current = null; return } clearGhost(false); const c = editor.view.coordsAtPos(editor.state.selection.from); const y = c.bottom + 8; const m = { x: Math.max(8, Math.min(c.left, innerWidth - 380)), y, h: Math.max(170, innerHeight - y - 12), cat: null as string | null, query: '' }; transRef.current = m; setTransMenu(m); return }
+      if (transRef.current) {
+        const m = transRef.current
+        const cats = Object.keys(TRANSITIONS).filter(c => matchText(m.query, c) || TRANSITIONS[c].some(t => matchText(m.query, t)))
+        const tpls = m.cat ? TRANSITIONS[m.cat].filter(t => matchText(m.query, t)) : []
+        const pickCat = (c: string) => { const n = { ...m, cat: c, query: '' }; transRef.current = n; setTransMenu(n) }
+        const pickTpl = (t: string) => { transRef.current = null; setTransMenu(null); insertTransition(t) }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); transRef.current = null; setTransMenu(null); return }
+        if (e.key === 'Backspace') { e.preventDefault(); e.stopPropagation(); const n = { ...m, query: m.query.slice(0, -1) }; transRef.current = n; setTransMenu(n); return }
+        if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); if (m.cat) { if (tpls[0]) pickTpl(tpls[0]) } else if (cats[0]) pickCat(cats[0]); return }
+        if (/^[0-9]$/.test(e.key) && !mod) { e.preventDefault(); e.stopPropagation(); const idx = e.key === '0' ? 9 : Number(e.key) - 1; if (m.cat) { if (tpls[idx]) pickTpl(tpls[idx]) } else if (cats[idx]) pickCat(cats[idx]); return }
+        if (e.key.length === 1 && !mod) { e.preventDefault(); e.stopPropagation(); const n = { ...m, query: m.query + e.key }; transRef.current = n; setTransMenu(n); return }
+        if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) { e.preventDefault(); e.stopPropagation(); return }
+        return
+      }
       if (selectedRef.current || groupRef.current.length) {
         if (e.key === 'Escape') { e.preventDefault(); closePopup(); return }
         if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); tabPopup(); return }
@@ -541,9 +566,11 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
 
       {transMenu && (
         <div className="sugg-popup fade" style={{ left: transMenu.x, top: transMenu.y, maxHeight: transMenu.h, overflowY: 'auto' }} role="menu" aria-label="Transitions">
+          <div className="trans-query">{transMenu.cat ? `${transMenu.cat} — ` : ''}Type to filter{transMenu.query ? `: ${transMenu.query}` : ''}<span className="trans-caret">▌</span></div>
           {!transMenu.cat
-            ? Object.keys(TRANSITIONS).map(c => <div key={c} className="sugg-row" onMouseDown={e => { e.preventDefault(); setTransMenu({ ...transMenu, cat: c }) }}>{c}</div>)
-            : <><div className="sugg-row" onMouseDown={e => { e.preventDefault(); setTransMenu({ ...transMenu, cat: null }) }}>← Categories</div>{TRANSITIONS[transMenu.cat].map(t => <div key={t} className="sugg-row" onMouseDown={e => { e.preventDefault(); insertTransition(t) }}>{t.replace('[]', '…')}</div>)}</>}
+            ? Object.keys(TRANSITIONS).filter(c => matchText(transMenu.query, c) || TRANSITIONS[c].some(t => matchText(transMenu.query, t))).map((c, i) => <div key={c} className="sugg-row" onMouseDown={e => { e.preventDefault(); const n = { ...transMenu, cat: c, query: '' }; transRef.current = n; setTransMenu(n) }}><span className="num">{digitFor(i)}</span>{c}</div>)
+            : <><div className="sugg-row" onMouseDown={e => { e.preventDefault(); const n = { ...transMenu, cat: null, query: '' }; transRef.current = n; setTransMenu(n) }}>← Categories</div>{TRANSITIONS[transMenu.cat].filter(t => matchText(transMenu.query, t)).map((t, i) => <div key={t} className="sugg-row" onMouseDown={e => { e.preventDefault(); transRef.current = null; setTransMenu(null); insertTransition(t) }}><span className="num">{digitFor(i)}</span>{t.replace('[]', '…')}</div>)}</>}
+          {transMenu.query && <div className="meta" style={{ padding: '6px 12px' }}>Backspace edits · Tab/Enter picks first · 1–9,0 pick row</div>}
         </div>
       )}
       {suggestions.length > 0 && (
