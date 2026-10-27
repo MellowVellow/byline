@@ -63,7 +63,8 @@ export function sortByLayer(anchors: Anchor[]): Anchor[] {
 }
 
 export default function EditorPage({ demo = false }: { demo?: boolean }) {
-  const saved = (() => { try { return JSON.parse(localStorage.getItem('byline.doc.v2') || 'null') } catch { return null } })()
+  const docKey = demo ? 'byline.doc.demo' : 'byline.doc.app'
+  const saved = demo ? null : (() => { try { return JSON.parse(localStorage.getItem(docKey) || 'null') } catch { return null } })()
   const [context, setContext] = useState(demo ? SAMPLE_CONTEXT : (saved?.context || ''))
   const [level, setLevel] = useState(saved?.level || 'General')
   const [voice, setVoice] = useState('')
@@ -82,6 +83,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [lintIdx, setLintIdx] = useState(0)
   const lintGroupRef = useRef<LintResult[]>([]); lintGroupRef.current = lintGroup
   const [showLibrary, setShowLibrary] = useState(false)
+  const [lintEnabled, setLintEnabled] = useState(localStorage.getItem('byline.lintEnabled') === '1')
+  const lintEnabledRef = useRef(false); lintEnabledRef.current = lintEnabled
+  function toggleLint() {
+    setLintEnabled(v => { const n = !v; localStorage.setItem('byline.lintEnabled', n ? '1' : '0'); lintEnabledRef.current = n
+      if (!n) { lintAbortRef.current?.abort(); lintStore.results = []; lintStore.ranges = new Map(); lintStore.activeUid = null; setLintGroup([]); if (editor) syncLint(editor) }
+      else setTimeout(() => runLint(), 300)
+      return n })
+  }
   const [lintStatus, setLintStatus] = useState('')
   const lintRunRef = useRef<() => void>(() => {})
   const lintAbortRef = useRef<AbortController | null>(null)
@@ -89,6 +98,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const lintBusyRef = useRef(false)
   const lintIdxRef = useRef(0); lintIdxRef.current = lintIdx
   async function runLint() {
+    if (!lintEnabledRef.current) return // lint off by default until toggled on
     if (lintBusyRef.current) { lintPendingRef.current = true; return } // single-flight: queue one rerun, never parallel lint calls
     if (!editor || modeStore.mode !== 'editing') return
     const tm = plain(); if (tm.text.trim().length < 20) { setLintStatus('Write at least a sentence, then Run lint.'); return }
@@ -222,8 +232,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [loading, setLoading] = useState<Record<string, boolean>>({})
   const setLoad = (k: string, v: boolean) => setLoading(prev => ({ ...prev, [k]: v }))
   const anyLoading = Object.values(loading).some(Boolean)
-  const [leftOpen, setLeftOpen] = useState(localStorage.getItem('byline.leftOpen') !== '0')
-  const [rightOpen, setRightOpen] = useState(localStorage.getItem('byline.rightOpen') !== '0')
+  const [leftOpen, setLeftOpen] = useState(localStorage.getItem('byline.leftOpen') === '1')
+  const [rightOpen, setRightOpen] = useState(localStorage.getItem('byline.rightOpen') === '1')
   const popupRef = useRef<HTMLDivElement>(null)
   const writerPosRef = useRef(0)
   const [counts, setCounts] = useState({ words: 0, chars: 0 })
@@ -261,7 +271,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       if (groupRef.current.length) refs.current.fns.closePopup?.()
       try { setCounts({ words: (editor.storage as any).characterCount.words(), chars: (editor.storage as any).characterCount.characters() }) } catch { /* noop */ }
       refs.current.version++; refs.current.abort?.abort(); setStale(true)
-      localStorage.setItem('byline.doc.v2', JSON.stringify({ html: editor.getHTML(), context, level }))
+      localStorage.setItem(docKey, JSON.stringify({ html: editor.getHTML(), context, level }))
       const t = refs.current.timers
       clearTimeout(t.c); clearTimeout(t.g); clearTimeout(t.s)
       t.c = setTimeout(() => refs.current.fns.complete?.(true), 500)
@@ -525,7 +535,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         <aside className="rail">
           {!leftOpen ? <div className="rail-strip"><button onClick={() => toggleDock('left')} title="Expand">›</button><span className="strip-dot" style={{ background: 'var(--ai)' }} /><span className="strip-dot" style={{ background: 'var(--grey)' }} /></div> : <>
             <div className="rail-head"><strong style={{ fontSize: 13 }}>Write</strong><button onClick={() => toggleDock('left')} title="Collapse">‹</button></div>
-            <div className="dock"><h3>North Star — intent</h3>
+            <div className="dock"><h3>Context</h3>
               <textarea className="context-box" value={context} onChange={e => { setContext(e.target.value); setStale(true) }} placeholder="What should the finished text be about?" />
               <div style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }}><button className="primary" disabled={!dirty} onClick={applySettings}>Apply{dirty ? ' ●' : ''}</button>{dirty && <span className="meta">unapplied changes</span>}</div>
             </div>
@@ -638,12 +648,12 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               </div>
               {suggestions.length > 0 && <div className="dock-foot"><button onClick={() => clearGhost()}>Dismiss <span className="kbd">Esc</span></button></div>}
             </div>
-            {editing && <div className="dock dock-section"><h3>Lint results {loading.lint && <Spinner />}</h3>
+            {editing && <div className="dock dock-section" style={lintEnabled ? undefined : { opacity: .55 }}><h3>Lint results {loading.lint && <Spinner />}<span className="spacer" /><button role="switch" aria-checked={lintEnabled} aria-label="Toggle lint" className={`switch ${lintEnabled ? 'on' : ''}`} onMouseDown={e => e.preventDefault()} onClick={toggleLint}><span className="knob" /></button></h3>
               <div className="dock-scroll">
               {[...lintResults].sort((a, b) => (LINT_PRIORITY[a.color_category] ?? 9) - (LINT_PRIORITY[b.color_category] ?? 9)).map(r => { const rule = LINTER_RULE_LIBRARY.find(x => x.id === r.rule_id); return <div key={r.uid} className="dock-item" onMouseDown={e => e.preventDefault()} onClick={() => openLintGroup(r)}><div className="kind-label" style={{ color: `var(--lint-${r.color_category})` }}>{LINT_COLORS[r.color_category]?.label || r.color_category} · {rule?.name || r.rule_id}</div><span className="quote-serif">{r.target}</span><div className="reason-text">{r.message}</div>{r.suggestion && <div className="replacement-text">→ {r.suggestion}</div>}</div> })}
               {!lintResults.length && !loading.lint && <div className="meta">—</div>}
               {loading.lint && !lintResults.length && <div className="meta"><LoadingDots /></div>}
-              </div><div className="dock-foot"><div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}><button className="primary" onMouseDown={e => e.preventDefault()} onClick={runLint}>{loading.lint ? 'Linting…' : 'Run lint'}</button><button onMouseDown={e => e.preventDefault()} onClick={() => setShowLibrary(true)}>Rule library</button></div>{lintStatus && <div className="meta" style={{ marginTop: 6 }}>{lintStatus}</div>}</div>
+              </div><div className="dock-foot"><div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}><button className="primary" disabled={!lintEnabled} onMouseDown={e => e.preventDefault()} onClick={runLint}>{loading.lint ? 'Linting…' : 'Run lint'}</button><button onMouseDown={e => e.preventDefault()} onClick={() => setShowLibrary(true)}>Rule library</button></div>{lintStatus && <div className="meta" style={{ marginTop: 6 }}>{lintStatus}</div>}</div>
             </div>}
           </>}
         </aside>
