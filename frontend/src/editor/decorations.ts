@@ -5,14 +5,14 @@ import type { Anchor } from '../lib/types'
 
 export const anchorStore: { anchors: Anchor[]; ranges: Map<string, { from: number; to: number }>; ghost: string; ghostPos: number; linkedId: string | null } =
   { anchors: [], ranges: new Map(), ghost: '', ghostPos: 0, linkedId: null }
-export type EditorMode = 'drafting' | 'editing' | 'linting'
+export type EditorMode = 'drafting' | 'editing'
 export const modeStore: { mode: EditorMode } = { mode: 'editing' }
 export const lintStore: { results: any[]; ranges: Map<string, { from: number; to: number }>; activeUid: string | null } =
   { results: [], ranges: new Map(), activeUid: null }
 const lintKey = new PluginKey('byline-lint')
 const LINT_PRIO: Record<string, number> = { violet: 0, amber: 1, rose: 2, green: 3, cyan: 4 }
 function buildLint(doc: any): Decoration[] {
-  if (modeStore.mode !== 'linting') return []
+  if (modeStore.mode !== 'editing') return []
   const ordered = [...lintStore.results].sort((a, b) => (LINT_PRIO[a.color_category] ?? 9) - (LINT_PRIO[b.color_category] ?? 9))
   const decos: Decoration[] = []; const taken: { from: number; to: number }[] = []
   for (const r of ordered) {
@@ -69,7 +69,7 @@ function buildAnchors(doc: any): Decoration[] {
   return decos
 }
 function buildGhost(doc: any): Decoration[] {
-  if (modeStore.mode === 'linting' || !anchorStore.ghost || anchorStore.ghostPos > doc.content.size) return []
+  if (!anchorStore.ghost || anchorStore.ghostPos > doc.content.size) return []
   const el = document.createElement('span')
   el.className = 'ghost-text'; el.textContent = anchorStore.ghost; el.setAttribute('aria-hidden', 'true')
   return [Decoration.widget(anchorStore.ghostPos, el, { side: 1 })]

@@ -1,0 +1,590 @@
+[
+  {
+    "text": "short(~35w)",
+    "mode": "drafting",
+    "sample": 0,
+    "calls": 1,
+    "in": 176,
+    "out": 323,
+    "reasoning": 293,
+    "ms": 7991,
+    "detail": [
+      {
+        "path": "/api/complete",
+        "ms": 7991,
+        "ok": true,
+        "in": 176,
+        "out": 323,
+        "reasoning": 293,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  },
+  {
+    "text": "short(~35w)",
+    "mode": "drafting",
+    "sample": 1,
+    "calls": 1,
+    "in": 176,
+    "out": 197,
+    "reasoning": 168,
+    "ms": 2177,
+    "detail": [
+      {
+        "path": "/api/complete",
+        "ms": 2177,
+        "ok": true,
+        "in": 176,
+        "out": 197,
+        "reasoning": 168,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  },
+  {
+    "text": "short(~35w)",
+    "mode": "editing",
+    "sample": 0,
+    "calls": 4,
+    "in": 672,
+    "out": 1345,
+    "reasoning": 1020,
+    "ms": 7303,
+    "detail": [
+      {
+        "path": "/api/grammar",
+        "ms": 39,
+        "ok": true,
+        "in": 0,
+        "out": 0,
+        "reasoning": 0,
+        "model": ""
+      },
+      {
+        "path": "/api/annotate",
+        "ms": 2967,
+        "ok": true,
+        "in": 294,
+        "out": 607,
+        "reasoning": 544,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/reactions",
+        "ms": 2361,
+        "ok": true,
+        "in": 202,
+        "out": 566,
+        "reasoning": 337,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/complete",
+        "ms": 1936,
+        "ok": true,
+        "in": 176,
+        "out": 172,
+        "reasoning": 139,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  },
+  {
+    "text": "short(~35w)",
+    "mode": "editing",
+    "sample": 1,
+    "calls": 4,
+    "in": 672,
+    "out": 1793,
+    "reasoning": 1379,
+    "ms": 9166,
+    "detail": [
+      {
+        "path": "/api/grammar",
+        "ms": 36,
+        "ok": true,
+        "in": 0,
+        "out": 0,
+        "reasoning": 0,
+        "model": ""
+      },
+      {
+        "path": "/api/annotate",
+        "ms": 3645,
+        "ok": true,
+        "in": 294,
+        "out": 793,
+        "reasoning": 662,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/reactions",
+        "ms": 3419,
+        "ok": true,
+        "in": 202,
+        "out": 673,
+        "reasoning": 420,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/complete",
+        "ms": 2066,
+        "ok": true,
+        "in": 176,
+        "out": 327,
+        "reasoning": 297,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  },
+  {
+    "text": "short(~35w)",
+    "mode": "linting",
+    "sample": 0,
+    "calls": 1,
+    "in": 845,
+    "out": 788,
+    "reasoning": 688,
+    "ms": 3477,
+    "detail": [
+      {
+        "path": "/api/lint",
+        "ms": 3477,
+        "ok": true,
+        "in": 845,
+        "out": 788,
+        "reasoning": 688,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  },
+  {
+    "text": "short(~35w)",
+    "mode": "linting",
+    "sample": 1,
+    "calls": 1,
+    "in": 845,
+    "out": 1020,
+    "reasoning": 775,
+    "ms": 3826,
+    "detail": [
+      {
+        "path": "/api/lint",
+        "ms": 3826,
+        "ok": true,
+        "in": 845,
+        "out": 1020,
+        "reasoning": 775,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  },
+  {
+    "text": "short(~35w)",
+    "mode": "editing+lint",
+    "sample": 0,
+    "calls": 5,
+    "in": 1517,
+    "out": 2484,
+    "reasoning": 1856,
+    "ms": 11442,
+    "detail": [
+      {
+        "path": "/api/grammar",
+        "ms": 34,
+        "ok": true,
+        "in": 0,
+        "out": 0,
+        "reasoning": 0,
+        "model": ""
+      },
+      {
+        "path": "/api/annotate",
+        "ms": 2476,
+        "ok": true,
+        "in": 294,
+        "out": 546,
+        "reasoning": 427,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/reactions",
+        "ms": 3097,
+        "ok": true,
+        "in": 202,
+        "out": 680,
+        "reasoning": 420,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/complete",
+        "ms": 2008,
+        "ok": true,
+        "in": 176,
+        "out": 335,
+        "reasoning": 303,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/lint",
+        "ms": 3827,
+        "ok": true,
+        "in": 845,
+        "out": 923,
+        "reasoning": 706,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  },
+  {
+    "text": "short(~35w)",
+    "mode": "editing+lint",
+    "sample": 1,
+    "calls": 5,
+    "in": 1517,
+    "out": 2680,
+    "reasoning": 2060,
+    "ms": 11608,
+    "detail": [
+      {
+        "path": "/api/grammar",
+        "ms": 36,
+        "ok": true,
+        "in": 0,
+        "out": 0,
+        "reasoning": 0,
+        "model": ""
+      },
+      {
+        "path": "/api/annotate",
+        "ms": 2662,
+        "ok": true,
+        "in": 294,
+        "out": 680,
+        "reasoning": 570,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/reactions",
+        "ms": 2900,
+        "ok": true,
+        "in": 202,
+        "out": 701,
+        "reasoning": 437,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/complete",
+        "ms": 1928,
+        "ok": true,
+        "in": 176,
+        "out": 292,
+        "reasoning": 259,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/lint",
+        "ms": 4082,
+        "ok": true,
+        "in": 845,
+        "out": 1007,
+        "reasoning": 794,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  },
+  {
+    "text": "medium(~190w)",
+    "mode": "drafting",
+    "sample": 0,
+    "calls": 1,
+    "in": 360,
+    "out": 393,
+    "reasoning": 361,
+    "ms": 3250,
+    "detail": [
+      {
+        "path": "/api/complete",
+        "ms": 3250,
+        "ok": true,
+        "in": 360,
+        "out": 393,
+        "reasoning": 361,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  },
+  {
+    "text": "medium(~190w)",
+    "mode": "drafting",
+    "sample": 1,
+    "calls": 1,
+    "in": 360,
+    "out": 310,
+    "reasoning": 277,
+    "ms": 1710,
+    "detail": [
+      {
+        "path": "/api/complete",
+        "ms": 1710,
+        "ok": true,
+        "in": 360,
+        "out": 310,
+        "reasoning": 277,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  },
+  {
+    "text": "medium(~190w)",
+    "mode": "editing",
+    "sample": 0,
+    "calls": 4,
+    "in": 746,
+    "out": 910,
+    "reasoning": 606,
+    "ms": 8097,
+    "detail": [
+      {
+        "path": "/api/grammar",
+        "ms": 81,
+        "ok": true,
+        "in": 0,
+        "out": 0,
+        "reasoning": 0,
+        "model": ""
+      },
+      {
+        "path": "/api/annotate",
+        "ms": 3738,
+        "ok": false,
+        "in": 0,
+        "out": 0,
+        "reasoning": 0,
+        "model": ""
+      },
+      {
+        "path": "/api/reactions",
+        "ms": 2377,
+        "ok": true,
+        "in": 386,
+        "out": 552,
+        "reasoning": 280,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/complete",
+        "ms": 1901,
+        "ok": true,
+        "in": 360,
+        "out": 358,
+        "reasoning": 326,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  },
+  {
+    "text": "medium(~190w)",
+    "mode": "editing",
+    "sample": 1,
+    "calls": 4,
+    "in": 746,
+    "out": 1169,
+    "reasoning": 838,
+    "ms": 9283,
+    "detail": [
+      {
+        "path": "/api/grammar",
+        "ms": 70,
+        "ok": true,
+        "in": 0,
+        "out": 0,
+        "reasoning": 0,
+        "model": ""
+      },
+      {
+        "path": "/api/annotate",
+        "ms": 4333,
+        "ok": false,
+        "in": 0,
+        "out": 0,
+        "reasoning": 0,
+        "model": ""
+      },
+      {
+        "path": "/api/reactions",
+        "ms": 2940,
+        "ok": true,
+        "in": 386,
+        "out": 854,
+        "reasoning": 555,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/complete",
+        "ms": 1940,
+        "ok": true,
+        "in": 360,
+        "out": 315,
+        "reasoning": 283,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  },
+  {
+    "text": "medium(~190w)",
+    "mode": "linting",
+    "sample": 0,
+    "calls": 1,
+    "in": 1029,
+    "out": 1513,
+    "reasoning": 689,
+    "ms": 4401,
+    "detail": [
+      {
+        "path": "/api/lint",
+        "ms": 4401,
+        "ok": true,
+        "in": 1029,
+        "out": 1513,
+        "reasoning": 689,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  },
+  {
+    "text": "medium(~190w)",
+    "mode": "linting",
+    "sample": 1,
+    "calls": 1,
+    "in": 1029,
+    "out": 1587,
+    "reasoning": 689,
+    "ms": 4372,
+    "detail": [
+      {
+        "path": "/api/lint",
+        "ms": 4372,
+        "ok": true,
+        "in": 1029,
+        "out": 1587,
+        "reasoning": 689,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  },
+  {
+    "text": "medium(~190w)",
+    "mode": "editing+lint",
+    "sample": 0,
+    "calls": 5,
+    "in": 1775,
+    "out": 2852,
+    "reasoning": 1690,
+    "ms": 13572,
+    "detail": [
+      {
+        "path": "/api/grammar",
+        "ms": 69,
+        "ok": true,
+        "in": 0,
+        "out": 0,
+        "reasoning": 0,
+        "model": ""
+      },
+      {
+        "path": "/api/annotate",
+        "ms": 3548,
+        "ok": false,
+        "in": 0,
+        "out": 0,
+        "reasoning": 0,
+        "model": ""
+      },
+      {
+        "path": "/api/reactions",
+        "ms": 3423,
+        "ok": true,
+        "in": 386,
+        "out": 898,
+        "reasoning": 612,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/complete",
+        "ms": 2086,
+        "ok": true,
+        "in": 360,
+        "out": 322,
+        "reasoning": 292,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/lint",
+        "ms": 4446,
+        "ok": true,
+        "in": 1029,
+        "out": 1632,
+        "reasoning": 786,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  },
+  {
+    "text": "medium(~190w)",
+    "mode": "editing+lint",
+    "sample": 1,
+    "calls": 5,
+    "in": 2253,
+    "out": 3343,
+    "reasoning": 1684,
+    "ms": 13047,
+    "detail": [
+      {
+        "path": "/api/grammar",
+        "ms": 66,
+        "ok": true,
+        "in": 0,
+        "out": 0,
+        "reasoning": 0,
+        "model": ""
+      },
+      {
+        "path": "/api/annotate",
+        "ms": 4278,
+        "ok": true,
+        "in": 478,
+        "out": 984,
+        "reasoning": 535,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/reactions",
+        "ms": 2695,
+        "ok": true,
+        "in": 386,
+        "out": 623,
+        "reasoning": 319,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/complete",
+        "ms": 1683,
+        "ok": true,
+        "in": 360,
+        "out": 323,
+        "reasoning": 291,
+        "model": "muse-spark-1.3"
+      },
+      {
+        "path": "/api/lint",
+        "ms": 4325,
+        "ok": true,
+        "in": 1029,
+        "out": 1413,
+        "reasoning": 539,
+        "model": "muse-spark-1.3"
+      }
+    ]
+  }
+]

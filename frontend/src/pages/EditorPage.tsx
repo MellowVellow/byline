@@ -90,7 +90,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const lintIdxRef = useRef(0); lintIdxRef.current = lintIdx
   async function runLint() {
     if (lintBusyRef.current) { lintPendingRef.current = true; return } // single-flight: queue one rerun, never parallel lint calls
-    if (!editor || modeStore.mode !== 'linting') return
+    if (!editor || modeStore.mode !== 'editing') return
     const tm = plain(); if (tm.text.trim().length < 20) { setLintStatus('Write at least a sentence, then Run lint.'); return }
     const active = [
       ...LINTER_RULE_LIBRARY.filter(r => enabledRules.has(r.id)).map(r => ({ id: r.id, category: r.color, rule: `${r.name}: ${r.instruction}` })),
@@ -195,22 +195,15 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [synRange, setSynRange] = useState<{ from: number; to: number } | null>(null)
   const [suggHistory, setSuggHistory] = useState<string[]>(savedSugg?.history || [])
   useEffect(() => { localStorage.setItem(suggKey, JSON.stringify({ current: suggestions, history: suggHistory, idx: ghostIdx })) }, [suggestions, suggHistory, ghostIdx, suggKey])
-  type Mode = 'drafting' | 'editing' | 'linting'
-  const [mode, setMode] = useState<Mode>(() => { const v = localStorage.getItem('byline.mode'); return v === 'straight' || v === 'drafting' ? 'drafting' : v === 'linting' ? 'linting' : 'editing' })
+  type Mode = 'drafting' | 'editing'
+  const [mode, setMode] = useState<Mode>(() => { const v = localStorage.getItem('byline.mode'); return v === 'straight' || v === 'drafting' ? 'drafting' : 'editing' })
   modeStore.mode = mode
   const editing = mode === 'editing'
-  const linting = mode === 'linting'
   const editingRef = useRef(true); editingRef.current = editing
   function switchMode(m: Mode) {
     setMode(m); modeStore.mode = m; localStorage.setItem('byline.mode', m)
-    if (m !== 'linting') lintAbortRef.current?.abort()
-    if (m === 'linting') {
-      refs.current.abort?.abort(); clearTimeout(refs.current.timers.c); clearTimeout(refs.current.timers.g); clearTimeout(refs.current.timers.s)
-      anchorStore.anchors = []; anchorStore.ranges = new Map(); anchorStore.linkedId = null
-      setPopupGroup([]); setSelected(null) // suggestions kept (hidden in Linting, restored on return)
-      if (editor) { syncAnchors(editor); syncGhost(editor); redraw(editor) }
-      setTimeout(() => runLint(), 400)
-    } else if (m === 'drafting') {
+    if (m !== 'editing') lintAbortRef.current?.abort()
+    if (m === 'drafting') {
       // ghost only: kill editing-AI timers/popups/underlines, keep suggestions alive
       refs.current.abort?.abort(); clearTimeout(refs.current.timers.g); clearTimeout(refs.current.timers.s)
       anchorStore.anchors = []; anchorStore.ranges = new Map(); anchorStore.linkedId = null
@@ -218,9 +211,9 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       if (editor) { syncAnchors(editor); redraw(editor) }
     } else {
       // editing: restore anchors + fresh checks
-      setTimeout(() => { rebuildAnchors(); requestGrammar(); requestAnnotate(); requestReactions() }, 50)
+      setTimeout(() => { rebuildAnchors(); requestGrammar(); requestAnnotate(); requestReactions(); runLint() }, 50)
     }
-    if (m !== 'linting') setTimeout(() => { if (refs.current.sugg.length) showGhost(refs.current.idx || 0) }, 80)
+    setTimeout(() => { if (refs.current.sugg.length) showGhost(refs.current.idx || 0) }, 80)
   }
   const [suggPos, setSuggPos] = useState({ x: 200, y: 300, h: 500 })
   const synRef = useRef<string[]>([]); synRef.current = synonyms
@@ -273,7 +266,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       clearTimeout(t.c); clearTimeout(t.g); clearTimeout(t.s)
       t.c = setTimeout(() => refs.current.fns.complete?.(true), 500)
       t.g = setTimeout(() => refs.current.fns.grammar?.(), 900)
-      t.s = setTimeout(() => { if (modeStore.mode === 'linting') runLint(); else { refs.current.fns.annotate?.(); refs.current.fns.reactions?.() } }, 1400)
+      t.s = setTimeout(() => { refs.current.fns.annotate?.(); refs.current.fns.reactions?.(); if (modeStore.mode === 'editing') runLint() }, 1400)
     },
   })
 
@@ -292,7 +285,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   }, [editor, grammar, issues, reactions, readings])
   useEffect(() => { if (savedSugg?.current?.length && editor) { refs.current.sugg = savedSugg.current; setTimeout(() => showGhost(savedSugg.idx || 0), 300) } }, [editor]) // eslint-disable-line
   useEffect(() => { if (editing) rebuildAnchors(); else { anchorStore.anchors = []; anchorStore.ranges = new Map(); if (editor) syncAnchors(editor) } }, [rebuildAnchors, editing]) // eslint-disable-line
-  useEffect(() => { if (mode !== 'linting') return; const t = setTimeout(() => lintRunRef.current(), 700); return () => clearTimeout(t) }, [enabledRules, customRules, mode]) // eslint-disable-line
+  useEffect(() => { if (mode !== 'editing') return; const t = setTimeout(() => lintRunRef.current(), 700); return () => clearTimeout(t) }, [enabledRules, customRules, mode]) // eslint-disable-line
   useEffect(() => { if (!showLibrary) return; const f = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowLibrary(false) }; addEventListener('keydown', f); return () => removeEventListener('keydown', f) }, [showLibrary])
 
   function showGhost(idx: number) {
@@ -350,7 +343,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     return !editor.state.doc.textBetween(editor.state.selection.from, end).trim()
   }
   async function requestComplete(auto = false) {
-    if (transRef.current || modeStore.mode === 'linting') return // menu / linting overrides ghost
+    if (transRef.current) return // menu overrides ghost
     if (!editor || refs.current.version === refs.current.acceptedVersion) return
     if (auto && (refs.current as any).suppressAuto) return // went back to revise: no auto popup until Suggest pressed
     if (!auto) (refs.current as any).suppressAuto = false
@@ -516,7 +509,6 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         <div className="mode-toggle" role="tablist" aria-label="Mode">
           <button role="tab" aria-selected={mode === 'drafting'} className={mode === 'drafting' ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => switchMode('drafting')}>Drafting</button>
           <button role="tab" aria-selected={mode === 'editing'} className={mode === 'editing' ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => switchMode('editing')}>Editing</button>
-          <button role="tab" aria-selected={mode === 'linting'} className={mode === 'linting' ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => switchMode('linting')}>Linting</button>
         </div>
         <div className="top-right">
         {anyLoading && <span className="ai-loading"><Spinner /> AI working</span>}
@@ -610,7 +602,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             <button title="Link" className={editor.isActive('link') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => { const url = prompt('Link URL'); if (url) (editor.chain() as any).focus().setLink({ href: url }).run(); else (editor.chain() as any).focus().unsetLink().run() }}>Link</button>
             <button title="Clear formatting" onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()}>Clear</button>
             <span className="tool-sep" />
-            <button disabled={linting} onMouseDown={e => e.preventDefault()} onClick={() => requestComplete()}>Suggest <span className="kbd">Ctrl Space</span></button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => requestComplete()}>Suggest <span className="kbd">Ctrl Space</span></button>
             <span className="metric">{counts.words} words · {counts.chars} chars</span>
           </div>
           <div className="paper" onDoubleClick={onDblClick}><EditorContent editor={editor} /></div>
@@ -618,8 +610,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
 
         <aside className={`rail right-rail ${mode === 'drafting' ? 'ai-off' : ''}`}>
           {!rightOpen ? <div className="rail-strip"><button onClick={() => toggleDock('right')} title="Expand">‹</button><span className="strip-dot" style={{ background: 'var(--lt)' }} /><span className="strip-dot" style={{ background: 'var(--yellow)' }} /><span className="strip-dot" style={{ background: 'var(--blue)' }} /><span className="strip-dot" style={{ background: 'var(--ai)' }} /></div> : <>
-            <div className="rail-head"><strong style={{ fontSize: 13 }}>{linting ? 'Lint' : 'Read'}</strong><button onClick={() => toggleDock('right')} title="Collapse">›</button></div>
-            {linting && <>
+            <div className="rail-head"><strong style={{ fontSize: 13 }}>Read</strong><button onClick={() => toggleDock('right')} title="Collapse">›</button></div>
+            {editing && <>
             <div className="dock dock-section"><h3>Lint results {loading.lint && <Spinner />}</h3>
               <div className="dock-scroll">
               {[...lintResults].sort((a, b) => (LINT_PRIORITY[a.color_category] ?? 9) - (LINT_PRIORITY[b.color_category] ?? 9)).map(r => { const rule = LINTER_RULE_LIBRARY.find(x => x.id === r.rule_id); return <div key={r.uid} className="dock-item" onMouseDown={e => e.preventDefault()} onClick={() => openLintGroup(r)}><div className="kind-label" style={{ color: `var(--lint-${r.color_category})` }}>{LINT_COLORS[r.color_category]?.label || r.color_category} · {rule?.name || r.rule_id}</div><span className="quote-serif">{r.target}</span><div className="reason-text">{r.message}</div>{r.suggestion && <div className="replacement-text">→ {r.suggestion}</div>}</div> })}
@@ -657,14 +649,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               {!readings.length && <div className="meta">—</div>}
               </div><div className="dock-foot"><button disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshReadings}>{loading.readings ? 'Searching…' : 'Search'}</button></div>
             </div>
-            </>}{!linting && <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--grey)' }} />Suggestions{loading.complete && <Spinner />}</h3>
+            </>}<div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--grey)' }} />Suggestions{loading.complete && <Spinner />}</h3>
               <div className="dock-scroll">
               {suggestions.map((s, i) => <div key={`s${i}`} className={`ghost-row ${i === ghostIdx ? 'sel' : ''}`} onClick={() => acceptGhost(i)}><span className="quote-serif">{s}</span></div>)}
               {suggHistory.map((s, i) => <div key={`h${i}`} className="ghost-row" style={{ opacity: .45 }}>{s}</div>)}
               {loading.complete && !suggestions.length && <div className="meta"><LoadingDots /></div>}{!suggestions.length && !suggHistory.length && !loading.complete && <div className="meta">—</div>}
               </div>
               {suggestions.length > 0 && <div className="dock-foot"><button onClick={() => clearGhost()}>Dismiss <span className="kbd">Esc</span></button></div>}
-            </div>}
+            </div>
           </>}
         </aside>
       </div>
@@ -699,7 +691,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           {transMenu.query && <div className="meta" style={{ padding: '6px 12px' }}>Backspace edits · Tab/Enter picks first · 1–9,0 pick row</div>}
         </div>
       )}
-      {suggestions.length > 0 && !linting && (
+      {suggestions.length > 0 && (
         <div className="sugg-popup fade" style={{ left: suggPos.x, top: suggPos.y, maxHeight: suggPos.h, overflowY: 'auto' }} role="listbox" aria-label="Suggestions">
           {suggestions.map((s, i) => <div key={i} className={`sugg-row ${i === ghostIdx ? 'sel' : ''}`} onMouseDown={e => { e.preventDefault(); acceptGhost(i) }} onMouseEnter={() => { setGhostIdx(i); refs.current.idx = i; showGhost(i) }}><span className="num">{i + 1}</span>{s}</div>)}
         </div>
