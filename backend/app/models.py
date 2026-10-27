@@ -20,3 +20,11 @@ class WaitlistIn(BaseModel):
 
 class ClaimIn(BaseModel):
     quote: str = ""; context: str = ""
+
+
+class LintRuleIn(BaseModel):
+    id: str = ""; category: str = "violet"; rule: str = ""
+
+class LintIn(BaseModel):
+    context: str = ""; style: str = ""; text: str = ""
+    active_rules: list[LintRuleIn] = []

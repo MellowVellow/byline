@@ -85,3 +85,13 @@ def relevance_prompt(claim, results):
     user = (f"CLAIM: {claim}\nRESULTS:\n{results}\nTASK: Per result label supports|contradicts|defines|prerequisite|irrelevant + one-line why + exact important excerpt copied from result snippet. "
             'JSON: {"readings":[{"title":"...","url":"...","label":"supports","why":"...","excerpt":"..."}]}')
     return system, user
+
+
+def lint_prompt(context, style, text, rules_json):
+    system = ("Strict linter. JSON only. Evaluate TEXT strictly against ACTIVE RULES only - never flag anything not covered by a rule. "
+              + QUOTE_RULE.replace('"quote"', '"target"').replace('quote', 'target'))
+    user = (f"CONTEXT (North Star): {context or '(none)'}{_style(style)}\nACTIVE_RULES (JSON):\n{rules_json}\nTEXT:\n{text}\n"
+            "TASK: For each violation return target (exact verbatim), context (verbatim snippet containing target), rule_id (must match an active rule id), "
+            "color_category (copy that rule's color), message (one line, name the rule), suggestion (replacement text for target only, grammatical in place). Max 12. "
+            'JSON: {"lint_results":[{"rule_id":"...","color_category":"amber|green|cyan|rose|violet","target":"...","context":"...","message":"...","suggestion":"..."}]}')
+    return system, user

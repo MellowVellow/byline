@@ -17,5 +17,6 @@ export const api = {
   synonyms: (b: unknown) => post('/api/synonyms', b),
   grammar: (b: unknown, s?: AbortSignal) => post('/api/grammar', b, s),
   readings: (b: unknown) => post('/api/readings', b),
+  lint: (b: unknown, s?: AbortSignal) => post('/api/lint', b, s),
   waitlist: (email: string, note = '') => post('/api/waitlist', { email, note }),
 }

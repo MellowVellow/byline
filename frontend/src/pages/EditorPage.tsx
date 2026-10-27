@@ -4,7 +4,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Highlight from '@tiptap/extension-highlight'
 import TextAlign from '@tiptap/extension-text-align'
 import CharacterCount from '@tiptap/extension-character-count'
-import { AnchorDecorations, anchorStore, redraw, syncAnchors, syncGhost } from '../editor/decorations'
+import { AnchorDecorations, anchorStore, redraw, syncAnchors, syncGhost, modeStore, lintStore, syncLint } from '../editor/decorations'
 import { api } from '../lib/api'
 import { docToText, locateQuote, locateOffset } from '../lib/locate'
 import type { Anchor, Issue, Reaction, GrammarMatch, Reading, OutlineItem } from '../lib/types'
@@ -12,6 +12,7 @@ import { SAMPLE_DOC, SAMPLE_CONTEXT, FALLBACK_ISSUES, FALLBACK_REACTIONS, FALLBA
 import { Logo, ThemeToggle } from '../components/Brand'
 import { textFragmentUrl } from '../lib/link'
 import { sentenceCase } from '../lib/case'
+import { LINTER_RULE_LIBRARY, LINT_COLORS, LINT_PRIORITY, type LintResult } from '../lib/rules'
 
 const DICTIONS = ['Formal', 'Casual', 'Slang', 'Simple', 'General', 'Academic', 'Technical', 'Buzzwords', 'Bullshitting']
 const DICTION_EXAMPLE: Record<string, string> = { Formal: 'are not angry', Casual: "aren't mad", Slang: "ain't ticked" }
@@ -73,6 +74,52 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [density, setDensity] = useState(2)
   const [audLevel, setAudLevel] = useState(3)
   const [audText, setAudText] = useState('')
+  const [enabledRules, setEnabledRules] = useState<Set<string>>(() => new Set(LINTER_RULE_LIBRARY.map(r => r.id)))
+  const [customRules, setCustomRules] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('byline.customRules') || '[]') } catch { return [] } })
+  const [customInput, setCustomInput] = useState('')
+  const [lintResults, setLintResults] = useState<LintResult[]>([])
+  const [lintGroup, setLintGroup] = useState<LintResult[]>([])
+  const [lintIdx, setLintIdx] = useState(0)
+  const lintGroupRef = useRef<LintResult[]>([]); lintGroupRef.current = lintGroup
+  const lintIdxRef = useRef(0); lintIdxRef.current = lintIdx
+  async function runLint() {
+    if (!editor || modeStore.mode !== 'linting') return
+    const tm = plain(); if (tm.text.trim().length < 20) return
+    const active = [
+      ...LINTER_RULE_LIBRARY.filter(r => enabledRules.has(r.id)).map(r => ({ id: r.id, category: r.color, rule: `${r.name}: ${r.instruction}` })),
+      ...customRules.map((t, i) => ({ id: `CUSTOM_${String(i + 1).padStart(2, '0')}`, category: 'violet', rule: t })),
+    ]
+    setLoad('lint', true)
+    const d = await api.lint({ context: appliedRef.current.context, style: buildStyle(appliedRef.current), text: tm.text, active_rules: active })
+    setLoad('lint', false)
+    const results: LintResult[] = (d?.lint_results || []).map((r: LintResult) => ({ ...r, uid: `${r.rule_id}:${r.target}:${Math.random().toString(36).slice(2, 7)}` }))
+    setLintResults(results)
+    lintStore.results = results; lintStore.ranges = new Map()
+    for (const r of results) { const loc = locateQuote(tm, r.target, r.context); if (loc) lintStore.ranges.set(r.uid!, loc) }
+    syncLint(editor)
+  }
+  function openLintGroup(clicked: LintResult) {
+    if (!editor) return
+    const cr = lintStore.ranges.get(clicked.uid!)
+    const group = cr ? lintStore.results.filter((x: LintResult) => { const q = lintStore.ranges.get(x.uid!); return q && q.from < cr.to && cr.from < q.to }) : [clicked]
+    const sorted = [...group].sort((a, b) => (LINT_PRIORITY[a.color_category] ?? 9) - (LINT_PRIORITY[b.color_category] ?? 9))
+    setLintGroup(sorted); lintGroupRef.current = sorted; setLintIdx(0); lintIdxRef.current = 0
+    lintStore.activeUid = sorted[0]?.uid || null; syncLint(editor)
+    const c = editor.view.coordsAtPos(editor.state.selection.from); const y = c.bottom + 8
+    setPopupPos({ x: Math.max(8, Math.min(c.left, innerWidth - 380)), y, h: Math.max(170, innerHeight - y - 12) })
+  }
+  function applyLint(r: LintResult) {
+    if (!editor) return
+    const tm = plain(); const loc = locateQuote(tm, r.target, r.context); if (!loc) return
+    editor.chain().setTextSelection(loc).deleteSelection().insertContent(r.suggestion).run()
+    const rest = lintStore.results.filter((x: LintResult) => x.uid !== r.uid)
+    setLintResults(rest); lintStore.results = rest; syncLint(editor)
+    const g = lintGroupRef.current.filter(x => x.uid !== r.uid)
+    setLintGroup(g); lintGroupRef.current = g
+    if (!g.length) { lintStore.activeUid = null; syncLint(editor) } else { const i = Math.min(lintIdxRef.current, g.length - 1); setLintIdx(i); lintIdxRef.current = i; lintStore.activeUid = g[i].uid!; syncLint(editor) }
+    const back = Math.min(writerPosRef.current || editor.state.selection.from, editor.state.doc.content.size); editor.chain().focus().setTextSelection(back).run()
+    setTimeout(() => runLint(), 900)
+  }
   const [transMenu, setTransMenu] = useState<{ x: number; y: number; h: number; cat: string | null; query: string } | null>(null)
   const transRef = useRef<typeof transMenu>(null); transRef.current = transMenu
   const [assist, setAssist] = useState('Phrase')
@@ -131,13 +178,21 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [synPos, setSynPos] = useState({ x: 200, y: 200, h: 400 })
   const [synRange, setSynRange] = useState<{ from: number; to: number } | null>(null)
   const [suggHistory, setSuggHistory] = useState<string[]>([])
-  type Mode = 'straight' | 'editing'
-  const [mode, setMode] = useState<Mode>(() => localStorage.getItem('byline.mode') === 'straight' ? 'straight' : 'editing')
+  type Mode = 'drafting' | 'editing' | 'linting'
+  const [mode, setMode] = useState<Mode>(() => { const v = localStorage.getItem('byline.mode'); return v === 'straight' || v === 'drafting' ? 'drafting' : v === 'linting' ? 'linting' : 'editing' })
+  modeStore.mode = mode
   const editing = mode === 'editing'
+  const linting = mode === 'linting'
   const editingRef = useRef(true); editingRef.current = editing
   function switchMode(m: Mode) {
-    setMode(m); localStorage.setItem('byline.mode', m)
-    if (m === 'straight') {
+    setMode(m); modeStore.mode = m; localStorage.setItem('byline.mode', m)
+    if (m === 'linting') {
+      refs.current.abort?.abort(); clearTimeout(refs.current.timers.c); clearTimeout(refs.current.timers.g); clearTimeout(refs.current.timers.s)
+      anchorStore.anchors = []; anchorStore.ranges = new Map(); anchorStore.linkedId = null; anchorStore.ghost = ''
+      refs.current.sugg = []; setSuggestions([]); setPopupGroup([]); setSelected(null)
+      if (editor) { syncAnchors(editor); syncGhost(editor); redraw(editor) }
+      setTimeout(() => runLint(), 400)
+    } else if (m === 'drafting') {
       // ghost only: kill editing-AI timers/popups/underlines, keep suggestions alive
       refs.current.abort?.abort(); clearTimeout(refs.current.timers.g); clearTimeout(refs.current.timers.s)
       anchorStore.anchors = []; anchorStore.ranges = new Map(); anchorStore.linkedId = null
@@ -199,7 +254,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       clearTimeout(t.c); clearTimeout(t.g); clearTimeout(t.s)
       t.c = setTimeout(() => refs.current.fns.complete?.(true), 500)
       t.g = setTimeout(() => refs.current.fns.grammar?.(), 900)
-      t.s = setTimeout(() => { refs.current.fns.annotate?.(); refs.current.fns.reactions?.() }, 1400)
+      t.s = setTimeout(() => { if (modeStore.mode === 'linting') runLint(); else { refs.current.fns.annotate?.(); refs.current.fns.reactions?.() } }, 1400)
     },
   })
 
@@ -273,7 +328,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     return !editor.state.doc.textBetween(editor.state.selection.from, end).trim()
   }
   async function requestComplete(auto = false) {
-    if (transRef.current) return // cascading menu overrides ghost suggestions
+    if (transRef.current || modeStore.mode === 'linting') return // menu / linting overrides ghost
     if (!editor || refs.current.version === refs.current.acceptedVersion) return
     if (auto && (refs.current as any).suppressAuto) return // went back to revise: no auto popup until Suggest pressed
     if (!auto) (refs.current as any).suppressAuto = false
@@ -324,6 +379,10 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) { e.preventDefault(); e.stopPropagation(); return }
         return
       }
+      if (lintGroupRef.current.length) {
+        if (e.key === 'Escape') { e.preventDefault(); setLintGroup([]); lintStore.activeUid = null; syncLint(editor); return }
+        if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); const g = lintGroupRef.current; const a = g[lintIdxRef.current]; if (a?.suggestion) applyLint(a); else if (lintIdxRef.current + 1 < g.length) { const n = lintIdxRef.current + 1; setLintIdx(n); lintIdxRef.current = n; lintStore.activeUid = g[n].uid!; syncLint(editor) } return }
+      }
       if (selectedRef.current || groupRef.current.length) {
         if (e.key === 'Escape') { e.preventDefault(); closePopup(); return }
         if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); tabPopup(); return }
@@ -343,6 +402,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       } else if (e.key === 'Escape' && selectedRef.current) { closePopup() }
     }
     const onClick = (e: MouseEvent) => {
+      const lt = (e.target as HTMLElement).closest?.('[data-lint-uid]') as HTMLElement | null
+      if (lt) { const r = lintStore.results.find((x: LintResult) => x.uid === lt.dataset.lintUid); if (r) { if (editor) writerPosRef.current = editor.state.selection.from; openLintGroup(r) } return }
       const t = (e.target as HTMLElement).closest?.('[data-anchor-id]') as HTMLElement | null
       if (!t) return
       const a = anchorStore.anchors.find(x => x.id === t.dataset.anchorId)
@@ -428,19 +489,21 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const cols = `${leftOpen ? '264px' : '52px'} minmax(0,1fr) ${rightOpen ? '348px' : '52px'}`
   return (
     <div>
-      <header className="topbar">
+      <header className="topbar" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center' }}>
         <Logo />{demo && <span className="chip" style={{ background: 'var(--ai)' }}>DEMO</span>}
-        <div className="mode-toggle" role="tablist" aria-label="Mode">
-          <button role="tab" aria-selected={mode === 'straight'} className={mode === 'straight' ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => switchMode('straight')}>Straight drafting</button>
+        <div className="mode-toggle" role="tablist" aria-label="Mode" style={{ justifySelf: 'center' }}>
+          <button role="tab" aria-selected={mode === 'drafting'} className={mode === 'drafting' ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => switchMode('drafting')}>Drafting</button>
           <button role="tab" aria-selected={mode === 'editing'} className={mode === 'editing' ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => switchMode('editing')}>Editing</button>
+          <button role="tab" aria-selected={mode === 'linting'} className={mode === 'linting' ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => switchMode('linting')}>Linting</button>
         </div>
-        <div className="spacer" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifySelf: 'end' }}>
         {anyLoading && <span className="ai-loading"><Spinner /> AI working</span>}
         <span className="metric">{acc}% accepted · {metrics.ms}ms · {status?.model || 'offline'}</span>
         <span className="dot" style={{ background: status?.meta_configured ? '#1E8E3E' : '#D93025' }} />
         <ThemeToggle />
         <a href="/app"><button>App</button></a><a href="/demo"><button>Demo</button></a>
         <button onClick={() => { const b = new Blob([editor.getHTML()], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'byline.html'; a.click() }}>Export</button>
+        </div>
       </header>
 
       <div className="layout" style={{ gridTemplateColumns: cols }}>
@@ -524,15 +587,34 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             <button title="Link" className={editor.isActive('link') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => { const url = prompt('Link URL'); if (url) (editor.chain() as any).focus().setLink({ href: url }).run(); else (editor.chain() as any).focus().unsetLink().run() }}>Link</button>
             <button title="Clear formatting" onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()}>Clear</button>
             <span className="tool-sep" />
-            <button onMouseDown={e => e.preventDefault()} onClick={() => requestComplete()}>Suggest <span className="kbd">Ctrl Space</span></button>
+            <button disabled={linting} onMouseDown={e => e.preventDefault()} onClick={() => requestComplete()}>Suggest <span className="kbd">Ctrl Space</span></button>
             <span className="metric">{counts.words} words · {counts.chars} chars</span>
           </div>
           <div className="paper" onDoubleClick={onDblClick}><EditorContent editor={editor} /></div>
         </main>
 
-        <aside className={`rail right-rail ${editing ? '' : 'ai-off'}`}>
+        <aside className={`rail right-rail ${mode === 'drafting' ? 'ai-off' : ''}`}>
           {!rightOpen ? <div className="rail-strip"><button onClick={() => toggleDock('right')} title="Expand">‹</button><span className="strip-dot" style={{ background: 'var(--lt)' }} /><span className="strip-dot" style={{ background: 'var(--yellow)' }} /><span className="strip-dot" style={{ background: 'var(--blue)' }} /><span className="strip-dot" style={{ background: 'var(--ai)' }} /></div> : <>
-            <div className="rail-head"><strong style={{ fontSize: 13 }}>Read</strong><button onClick={() => toggleDock('right')} title="Collapse">›</button></div>
+            <div className="rail-head"><strong style={{ fontSize: 13 }}>{linting ? 'Lint' : 'Read'}</strong><button onClick={() => toggleDock('right')} title="Collapse">›</button></div>
+            {linting && <>
+            <div className="dock dock-section"><h3>Lint results {loading.lint && <Spinner />}</h3>
+              <div className="dock-scroll">
+              {[...lintResults].sort((a, b) => (LINT_PRIORITY[a.color_category] ?? 9) - (LINT_PRIORITY[b.color_category] ?? 9)).map(r => { const rule = LINTER_RULE_LIBRARY.find(x => x.id === r.rule_id); return <div key={r.uid} className="dock-item" onMouseDown={e => e.preventDefault()} onClick={() => openLintGroup(r)}><div className="kind-label" style={{ color: `var(--lint-${r.color_category})` }}>{LINT_COLORS[r.color_category]?.label || r.color_category} · {rule?.name || r.rule_id}</div><span className="quote-serif">{r.target}</span><div className="reason-text">{r.message}</div>{r.suggestion && <div className="replacement-text">→ {r.suggestion}</div>}</div> })}
+              {!lintResults.length && !loading.lint && <div className="meta">No violations. Run lint after writing.</div>}
+              {loading.lint && !lintResults.length && <div className="meta"><LoadingDots /></div>}
+              </div><div className="dock-foot"><button className="primary" onMouseDown={e => e.preventDefault()} onClick={runLint}>{loading.lint ? 'Linting…' : 'Run lint'}</button></div>
+            </div>
+            <div className="dock dock-section"><h3>Rules</h3>
+              <div className="dock-scroll">
+              {Object.entries(LINT_COLORS).map(([color, meta]) => <div key={color} style={{ marginBottom: 10 }}><div className="kind-label" style={{ color: `var(--lint-${color})` }}>{meta.label}</div><div className="meta">{meta.intent}</div>
+                {LINTER_RULE_LIBRARY.filter(r => r.color === color).map(r => <label key={r.id} className="rule-row"><input type="checkbox" checked={enabledRules.has(r.id)} onChange={() => setEnabledRules(prev => { const n = new Set(prev); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n })} /> <span>{r.name}</span></label>)}
+              </div>)}
+              <div className="kind-label" style={{ color: 'var(--lint-violet)' }}>Custom rules · violet</div>
+              {customRules.map((t, i) => <div key={i} className="dock-item"><span>{t}</span><button style={{ float: 'right' }} onClick={() => { const n = customRules.filter((_, j) => j !== i); setCustomRules(n); localStorage.setItem('byline.customRules', JSON.stringify(n)) }}>✕</button></div>)}
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}><input style={{ flex: 1 }} value={customInput} onChange={e => setCustomInput(e.target.value)} placeholder='e.g. no passive voice in headers' onKeyDown={e => { if (e.key === 'Enter' && customInput.trim()) { const n = [...customRules, customInput.trim()]; setCustomRules(n); localStorage.setItem('byline.customRules', JSON.stringify(n)); setCustomInput('') } }} /><button className="primary" onClick={() => { if (!customInput.trim()) return; const n = [...customRules, customInput.trim()]; setCustomRules(n); localStorage.setItem('byline.customRules', JSON.stringify(n)); setCustomInput(''); setTimeout(runLint, 100) }}>Add</button></div>
+              </div><div className="dock-foot"><span className="meta">Toggle/add rules, then Run lint (or Apply settings).</span></div>
+            </div>
+            </>}
             {editing && <><div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--lt)' }} />Language{(loading.grammar || loading.annotate) && <Spinner />}</h3>
               <div className="dock-scroll">
               {grammar.map((g, i) => { const a = anchorStore.anchors.find(x => x.id === `g${i}-${g.from}`); const st = LANG_STYLE.grammar; return <div key={`g${i}`} className={`dock-item ${g.stale ? 'stale' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label} · LT</div><span className="quote-serif">{g.quote || ''}</span><div className="reason-text">{g.message}</div>{g.replacements[0] && <div className="replacement-text" style={{ color: st.color }}>→ {g.replacements[0]}</div>}</div> })}
@@ -552,14 +634,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               {!readings.length && <div className="meta">—</div>}
               </div><div className="dock-foot"><button disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshReadings}>{loading.readings ? 'Searching…' : 'Search'}</button></div>
             </div>
-            </>}<div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--grey)' }} />Suggestions{loading.complete && <Spinner />}</h3>
+            </>}{!linting && <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--grey)' }} />Suggestions{loading.complete && <Spinner />}</h3>
               <div className="dock-scroll">
               {suggestions.map((s, i) => <div key={`s${i}`} className={`ghost-row ${i === ghostIdx ? 'sel' : ''}`} onClick={() => acceptGhost(i)}><span className="quote-serif">{s}</span></div>)}
               {suggHistory.map((s, i) => <div key={`h${i}`} className="ghost-row" style={{ opacity: .45 }}>{s}</div>)}
               {loading.complete && !suggestions.length && <div className="meta"><LoadingDots /></div>}{!suggestions.length && !suggHistory.length && !loading.complete && <div className="meta">—</div>}
               </div>
               {suggestions.length > 0 && <div className="dock-foot"><button onClick={() => clearGhost()}>Dismiss <span className="kbd">Esc</span></button></div>}
-            </div>
+            </div>}
           </>}
         </aside>
       </div>
@@ -576,6 +658,18 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       {suggestions.length > 0 && (
         <div className="sugg-popup fade" style={{ left: suggPos.x, top: suggPos.y, maxHeight: suggPos.h, overflowY: 'auto' }} role="listbox" aria-label="Suggestions">
           {suggestions.map((s, i) => <div key={i} className={`sugg-row ${i === ghostIdx ? 'sel' : ''}`} onMouseDown={e => { e.preventDefault(); acceptGhost(i) }} onMouseEnter={() => { setGhostIdx(i); refs.current.idx = i; showGhost(i) }}><span className="num">{i + 1}</span>{s}</div>)}
+        </div>
+      )}
+      {lintGroup.length > 0 && (
+        <div className="popup popup-stack fade" role="dialog" style={{ left: popupPos.x, top: popupPos.y, maxHeight: popupPos.h }}>
+          {lintGroup.map((r, i) => { const rule = LINTER_RULE_LIBRARY.find(x => x.id === r.rule_id); const active = i === lintIdx; return (
+            <div key={r.uid} className={`stack-card ${active ? 'active' : ''}`} onMouseDown={e => e.preventDefault()} onClick={() => { setLintIdx(i); lintIdxRef.current = i; lintStore.activeUid = r.uid!; syncLint(editor) }}>
+              <span className="chip" style={{ background: `var(--lint-${r.color_category})` }}>{LINT_COLORS[r.color_category]?.label || r.color_category}</span><span className="stack-order">{i + 1}/{lintGroup.length}</span>
+              <div className="quote-serif" style={{ marginTop: 6 }}>“{r.target}”</div>
+              <div style={{ fontWeight: 600, marginTop: 2, fontSize: 12.5 }}>{rule?.name || r.rule_id}</div>
+              {active && <><p style={{ margin: '6px 0' }}>{r.message}</p>{r.suggestion && <button className="primary" onMouseDown={e => e.preventDefault()} onClick={e => { e.stopPropagation(); applyLint(r) }}>Apply “{r.suggestion}” <span className="kbd">Tab</span></button>}</>}
+            </div>) })}
+          <button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={() => { setLintGroup([]); lintStore.activeUid = null; syncLint(editor) }}>Close <span className="kbd">Esc</span></button>
         </div>
       )}
       {selected && popupGroup.length > 0 && (

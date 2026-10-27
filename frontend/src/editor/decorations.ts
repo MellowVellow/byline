@@ -5,6 +5,32 @@ import type { Anchor } from '../lib/types'
 
 export const anchorStore: { anchors: Anchor[]; ranges: Map<string, { from: number; to: number }>; ghost: string; ghostPos: number; linkedId: string | null } =
   { anchors: [], ranges: new Map(), ghost: '', ghostPos: 0, linkedId: null }
+export type EditorMode = 'drafting' | 'editing' | 'linting'
+export const modeStore: { mode: EditorMode } = { mode: 'editing' }
+export const lintStore: { results: any[]; ranges: Map<string, { from: number; to: number }>; activeUid: string | null } =
+  { results: [], ranges: new Map(), activeUid: null }
+const lintKey = new PluginKey('byline-lint')
+const LINT_PRIO: Record<string, number> = { violet: 0, amber: 1, rose: 2, green: 3, cyan: 4 }
+function buildLint(doc: any): Decoration[] {
+  if (modeStore.mode !== 'linting') return []
+  const ordered = [...lintStore.results].sort((a, b) => (LINT_PRIO[a.color_category] ?? 9) - (LINT_PRIO[b.color_category] ?? 9))
+  const decos: Decoration[] = []; const taken: { from: number; to: number }[] = []
+  for (const r of ordered) {
+    const range = lintStore.ranges.get(r.uid)
+    if (!range || range.to > doc.content.size) continue
+    const overlaps = lintStore.results.filter(x => { const q = lintStore.ranges.get(x.uid); return q && q.from < range.to && range.from < q.to }).length
+    for (const seg of subtractRange(range, taken)) {
+      decos.push(Decoration.inline(seg.from, seg.to, { class: `linter-highlight linter-${r.color_category}${lintStore.activeUid === r.uid ? ' linter-active' : ''}`, 'data-lint-uid': r.uid }))
+      if (overlaps > 1) {
+        const badge = document.createElement('span'); badge.className = 'lint-badge'; badge.textContent = String(overlaps)
+        decos.push(Decoration.widget(seg.to, badge, { side: 1 }))
+      }
+    }
+    taken.push(range)
+  }
+  return decos
+}
+export function syncLint(editor: any) { if (editor?.view) editor.view.dispatch(editor.state.tr.setMeta(lintKey, { rebuild: true })) }
 
 const anchorKey = new PluginKey('byline-anchors')
 const ghostKey = new PluginKey('byline-ghost')
@@ -27,6 +53,7 @@ export function subtractRange(r: { from: number; to: number }, taken: { from: nu
 }
 
 function buildAnchors(doc: any): Decoration[] {
+  if (modeStore.mode !== 'editing') return [] // drafting: ghost only; linting: highlights only, no squiggles
   // stacked layers delete each other: red cuts yellow/blue/purple, yellow cuts blue/purple, etc.
   const ordered = [...anchorStore.anchors].sort((x, y) => (prio[x.kind] ?? 9) - (prio[y.kind] ?? 9) || (anchorStore.ranges.get(x.id)?.from ?? 0) - (anchorStore.ranges.get(y.id)?.from ?? 0))
   const decos: Decoration[] = []
@@ -42,7 +69,7 @@ function buildAnchors(doc: any): Decoration[] {
   return decos
 }
 function buildGhost(doc: any): Decoration[] {
-  if (!anchorStore.ghost || anchorStore.ghostPos > doc.content.size) return []
+  if (modeStore.mode === 'linting' || !anchorStore.ghost || anchorStore.ghostPos > doc.content.size) return []
   const el = document.createElement('span')
   el.className = 'ghost-text'; el.textContent = anchorStore.ghost; el.setAttribute('aria-hidden', 'true')
   return [Decoration.widget(anchorStore.ghostPos, el, { side: 1 })]
@@ -74,6 +101,14 @@ export const AnchorDecorations = Extension.create({
           },
         },
         props: { decorations: (state) => anchorKey.getState(state) },
+      }),
+      new Plugin({
+        key: lintKey,
+        state: {
+          init: (_cfg, state) => DecorationSet.create(state.doc, buildLint(state.doc)),
+          apply: (tr, set) => { const mapped = set.map(tr.mapping, tr.doc); return tr.getMeta(lintKey)?.rebuild ? DecorationSet.create(tr.doc, buildLint(tr.doc)) : mapped },
+        },
+        props: { decorations: (state) => lintKey.getState(state) },
       }),
       new Plugin({
         key: ghostKey,

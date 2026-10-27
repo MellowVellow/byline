@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from . import llm, prompts
 from .config import settings, cors_list, ROOT
-from .models import CompleteIn, TextIn, SynonymIn, GrammarIn, WaitlistIn, ClaimIn
+from .models import CompleteIn, TextIn, SynonymIn, GrammarIn, WaitlistIn, ClaimIn, LintIn
 from .quote import filter_anchored
 from .grammar_filter import filter_matches
 from .swapcheck import swap_ok
@@ -169,6 +169,32 @@ async def readings(body: TextIn):
                 out.extend(labelled or [{"title": x.get("title", ""), "url": x.get("url", ""), "label": "related", "why": "", "excerpt": (x.get("content") or "")[:200], "claim_quote": c["quote"], "claim_context": c["context"]} for x in res])
         return ok(readings=out, claims=claims, model=model)
     except Exception as e: return fail(error=str(e)[:200])
+
+@app.post("/api/lint")
+async def lint(body: LintIn):
+    if not body.active_rules:
+        return ok(lint_results=[])
+    try:
+        import json as _json
+        rules = [{"id": r.id, "color": r.category, "rule": r.rule} for r in body.active_rules if r.id and r.rule]
+        rule_map = {r["id"]: r["color"] for r in rules}
+        s, u = prompts.lint_prompt(body.context, body.style, body.text, _json.dumps(rules))
+        data, usage, model = await llm.json_call(s, u, max_tokens=1400, temperature=0.3)
+        out = []
+        for it in data.get("lint_results", []):
+            if not isinstance(it, dict):
+                continue
+            tgt, ctx = it.get("target", ""), it.get("context", "")
+            if not tgt or tgt not in body.text or not ctx or ctx not in body.text or tgt not in ctx:
+                continue
+            rid = it.get("rule_id", "")
+            if rid not in rule_map:
+                continue
+            out.append({"rule_id": rid, "color_category": rule_map[rid], "target": tgt, "context": ctx,
+                        "message": it.get("message", ""), "suggestion": it.get("suggestion", "")})
+        return ok(lint_results=out[:12], model=model, usage=usage)
+    except Exception as e:
+        return fail(error=str(e)[:200])
 
 @app.post("/api/waitlist")
 async def waitlist(body: WaitlistIn):
