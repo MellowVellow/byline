@@ -5,7 +5,28 @@
 .layout{display:grid;gap:14px;max-width:1560px;margin:0 auto;padding:14px;transition:grid-template-columns .18s ease}
 @media(max-width:1100px){.layout{grid-template-columns:1fr!important}.rail{order:2}}
 .paper{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);min-height:70vh;padding:30px 38px}
-.ProseMirror{outline:none;font-family:"Source Serif 4",Georgia,serif;font-size:19px;line-height:1.65;letter-spacing:0;max-width:70ch;margin:0 auto;min-height:60vh}
+.ProseMirror{outline:none;font-family:var(--editor-font,"Source Serif 4",Georgia,serif);font-size:var(--editor-size,19px);line-height:var(--editor-lh,1.65);letter-spacing:0;max-width:var(--paper-w,70ch);margin:0 auto;min-height:60vh}
+/* settings-driven UI/UX */
+:root[data-density="compact"] .dock{padding:9px;margin-bottom:8px}
+:root[data-density="compact"] .layout{gap:9px;padding:9px}
+:root[data-motion="reduce"] *, :root[data-motion="reduce"] *::before, :root[data-motion="reduce"] *::after{animation:none!important;transition:none!important}
+.settings-modal{width:min(760px,96vw)}
+.settings-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);font-size:13px;font-weight:500;color:var(--ink);margin:0}
+.settings-row input[type=color]{width:38px;height:30px;padding:2px;flex:none}
+.shortcut-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:6px 0;border-top:1px solid var(--border);font-size:13px}
+/* TipTap Notion-like menus */
+.editor-bar{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center}
+.editor-bar .bar-ai{border-color:var(--ai);color:var(--ai);font-weight:600}
+.bar-hint{font-size:12px}
+.bubble-menu{display:flex;gap:2px;align-items:center;background:var(--ink);color:var(--bg);border-radius:9px;padding:4px;box-shadow:0 10px 30px rgba(0,0,0,.25);z-index:70}
+.bubble-menu button{background:transparent;border:none;color:var(--bg);padding:5px 8px;border-radius:6px;font-size:13px}
+.bubble-menu button:hover{background:rgba(127,127,127,.35)}
+.bubble-menu button.active{background:var(--ai);color:#fff}
+.bubble-menu .tool-sep{background:rgba(127,127,127,.5)}
+.floating-menu{display:flex;flex-direction:column;gap:1px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:6px;box-shadow:0 12px 36px rgba(0,0,0,.16);z-index:70;min-width:190px}
+.floating-title{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);padding:4px 8px}
+.floating-menu button{border:none;text-align:left;background:transparent;padding:6px 8px;border-radius:6px}
+.floating-menu button:hover{background:rgba(127,127,127,.09)}
 .ProseMirror p{margin:0 0 1em}
 /* docks */
 .rail{min-width:0}
@@ -20,12 +41,21 @@
 .dock-item:hover{background:rgba(127,127,127,.07)}
 .dock-item.stale{color:var(--old);opacity:.55}
 .dock-item.stale .quote-serif,.dock-item.stale .kind-label{color:var(--old)!important;opacity:.7}
-/* right sections: own max size, header stays, list scrolls */
+/* tabbed rails: one viewport-height scroll region per rail, no stacked 560px cards */
+.dock-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.dock-tabs button{display:inline-flex;align-items:center;gap:6px;border-radius:99px;padding:5px 10px;font-size:12px;font-weight:600;color:var(--muted)}
+.dock-tabs button.active{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tab-badge{font-size:10.5px;font-weight:700;line-height:1;background:rgba(127,127,127,.25);border-radius:99px;padding:2px 6px;font-variant-numeric:tabular-nums}
+.dock-tabs button.active .tab-badge{background:rgba(255,255,255,.22)}
+.tab-dot{width:7px;height:7px;border-radius:50%;background:#E8A317;display:inline-block;flex:none}
+.rail-scroll{overflow-y:auto;min-height:0;overscroll-behavior:contain;scrollbar-width:thin;padding-right:2px;max-height:calc(100vh - 190px)}
+.rail-foot{position:sticky;bottom:0;background:var(--bg);padding-top:8px;margin-top:2px}
 .dock-section{display:flex;flex-direction:column;overflow:hidden}
 .dock-section .dock-scroll{overflow-y:auto;min-height:0;overscroll-behavior:contain;scrollbar-width:thin;padding-right:2px}
 .dock-section .dock-foot{flex:none;padding-top:8px}
 .right-rail{display:flex;flex-direction:column}
-.right-rail .dock-section{flex:none;height:560px;max-height:82vh}
+.right-rail .dock-section{flex:none;max-height:none}
+.right-rail .rail-scroll .dock-section .dock-scroll{overflow:visible}
 .kind-label{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
 .kind-body{font-size:13.5px;line-height:1.5;color:var(--ink)}
 .kind-body.q{font-style:italic}

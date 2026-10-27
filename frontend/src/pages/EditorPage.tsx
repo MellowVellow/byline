@@ -9,7 +9,10 @@ import { api } from '../lib/api'
 import { docToText, locateQuote, locateOffset } from '../lib/locate'
 import type { Anchor, Issue, Reaction, GrammarMatch, Reading, OutlineItem } from '../lib/types'
 import { SAMPLE_DOC, SAMPLE_CONTEXT, FALLBACK_ISSUES, FALLBACK_REACTIONS, FALLBACK_SUGGESTIONS } from '../lib/fallback'
-import { Logo, ThemeToggle } from '../components/Brand'
+import { Logo } from '../components/Brand'
+import SettingsMenu from '../components/SettingsMenu'
+import EditorMenus from '../components/EditorMenus'
+import { loadSettings, saveSettings, type AppSettings } from '../lib/settings'
 import { textFragmentUrl } from '../lib/link'
 import { sentenceCase } from '../lib/case'
 import { LINTER_RULE_LIBRARY, LINT_COLORS, LINT_PRIORITY, type LintResult } from '../lib/rules'
@@ -88,18 +91,17 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   function toggleLint() {
     setLintEnabled(v => { const n = !v; localStorage.setItem('byline.lintEnabled', n ? '1' : '0'); lintEnabledRef.current = n
       if (!n) { lintAbortRef.current?.abort(); lintStore.results = []; lintStore.ranges = new Map(); lintStore.activeUid = null; setLintGroup([]); if (editor) syncLint(editor) }
-      else setTimeout(() => runLint(), 300)
+      else setLintStatus('Lint on — press Run lint to check.')
       return n })
   }
   const [lintStatus, setLintStatus] = useState('')
   const lintRunRef = useRef<() => void>(() => {})
   const lintAbortRef = useRef<AbortController | null>(null)
-  const lintPendingRef = useRef(false)
   const lintBusyRef = useRef(false)
   const lintIdxRef = useRef(0); lintIdxRef.current = lintIdx
   async function runLint() {
     if (!lintEnabledRef.current) return // lint off by default until toggled on
-    if (lintBusyRef.current) { lintPendingRef.current = true; return } // single-flight: queue one rerun, never parallel lint calls
+    if (lintBusyRef.current) return // single-flight: one manual run at a time, never queue auto rerun
     if (!editor || modeStore.mode !== 'editing') return
     const tm = plain(); if (tm.text.trim().length < 20) { setLintStatus('Write at least a sentence, then Run lint.'); return }
     const active = [
@@ -111,8 +113,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     setLoad('lint', true); setLintStatus('Linting…')
     const d = await api.lint({ context: appliedRef.current.context, style: buildStyle(appliedRef.current), text: tm.text, active_rules: active }, ctl.signal)
     lintBusyRef.current = false; setLoad('lint', false)
-    if (ctl.signal.aborted) { if (lintPendingRef.current) { lintPendingRef.current = false; runLint() } return }
-    if (!d?.ok) { setLintStatus(`Lint failed — ${String(d?.error || 'unknown backend error').slice(0, 140)}`); if (lintPendingRef.current) { lintPendingRef.current = false; runLint() } return }
+    if (ctl.signal.aborted) return
+    if (!d?.ok) { setLintStatus(`Lint failed — ${String(d?.error || 'unknown backend error').slice(0, 140)}`); return }
     const results: LintResult[] = (d?.lint_results || []).map((r: LintResult) => ({ ...r, uid: `${r.rule_id}:${r.target}:${Math.random().toString(36).slice(2, 7)}` }))
     if (d) setLintStatus(`${results.length} violation${results.length === 1 ? '' : 's'} · ${active.length} rules active`)
     setLintResults(results)
@@ -124,6 +126,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   function toggleRule(id: string) { setEnabledRules(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n }) }
   function openLintGroup(clicked: LintResult) {
     if (!editor) return
+    openRightTab('lint')
     const cr = lintStore.ranges.get(clicked.uid!)
     const group = cr ? lintStore.results.filter((x: LintResult) => { const q = lintStore.ranges.get(x.uid!); return q && q.from < cr.to && cr.from < q.to }) : [clicked]
     const sorted = [...group].sort((a, b) => (LINT_PRIORITY[a.color_category] ?? 9) - (LINT_PRIORITY[b.color_category] ?? 9))
@@ -142,8 +145,13 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     setLintGroup(g); lintGroupRef.current = g
     if (!g.length) { lintStore.activeUid = null; syncLint(editor) } else { const i = Math.min(lintIdxRef.current, g.length - 1); setLintIdx(i); lintIdxRef.current = i; lintStore.activeUid = g[i].uid!; syncLint(editor) }
     const back = Math.min(writerPosRef.current || editor.state.selection.from, editor.state.doc.content.size); editor.chain().focus().setTextSelection(back).run()
-    setTimeout(() => runLint(), 900)
+    setLintStatus('Applied — press Run lint to re-check.')
   }
+  const [appSettings, setAppSettings] = useState<AppSettings>(loadSettings)
+  const [showSettings, setShowSettings] = useState(false)
+  function updateSettings(s: AppSettings) { setAppSettings(s); saveSettings(s) }
+  useEffect(() => { saveSettings(loadSettings()) }, []) // apply persisted prefs on mount
+  useEffect(() => { const f = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key === ',') { e.preventDefault(); setShowSettings(v => !v) } }; addEventListener('keydown', f); return () => removeEventListener('keydown', f) }, [])
   const [transMenu, setTransMenu] = useState<{ x: number; y: number; h: number; cat: string | null; query: string } | null>(null)
   const transRef = useRef<typeof transMenu>(null); transRef.current = transMenu
   const [assist, setAssist] = useState('Phrase')
@@ -199,7 +207,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   }
   const [stale, setStale] = useState(false)
   const [status, setStatus] = useState<any>(null)
-  const [metrics, setMetrics] = useState<any>(() => { try { return JSON.parse(localStorage.getItem('byline.metrics.v2') || '{"shown":0,"accepted":0,"ms":0}') } catch { return { shown: 0, accepted: 0, ms: 0 } } })
+  const [metrics, setMetrics] = useState<any>(() => { try { return JSON.parse(localStorage.getItem('byline.metrics.v3') || '{"offered":0,"accepted":0,"dismissed":0,"msTotal":0,"msCount":0}') } catch { return { offered: 0, accepted: 0, dismissed: 0, msTotal: 0, msCount: 0 } } })
   const [synonyms, setSynonyms] = useState<string[]>([])
   const [synPos, setSynPos] = useState({ x: 200, y: 200, h: 400 })
   const [synRange, setSynRange] = useState<{ from: number; to: number } | null>(null)
@@ -212,6 +220,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const editingRef = useRef(true); editingRef.current = editing
   function switchMode(m: Mode) {
     setMode(m); modeStore.mode = m; localStorage.setItem('byline.mode', m)
+    if (m === 'drafting') setRightTab('suggest')
     if (m !== 'editing') lintAbortRef.current?.abort()
     if (m === 'drafting') {
       // ghost only: kill editing-AI timers/popups/underlines, keep suggestions alive
@@ -221,7 +230,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       if (editor) { syncAnchors(editor); redraw(editor) }
     } else {
       // editing: restore anchors + fresh checks
-      setTimeout(() => { rebuildAnchors(); requestGrammar(); requestAnnotate(); requestReactions() }, 50); setTimeout(() => { if (modeStore.mode === 'editing') runLint() }, 5000)
+      setTimeout(() => { rebuildAnchors(); requestGrammar(); requestAnnotate(); requestReactions() }, 50)
     }
     setTimeout(() => { if (refs.current.sugg.length) showGhost(refs.current.idx || 0) }, 80)
   }
@@ -234,6 +243,11 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const anyLoading = Object.values(loading).some(Boolean)
   const [leftOpen, setLeftOpen] = useState(localStorage.getItem('byline.leftOpen') === '1')
   const [rightOpen, setRightOpen] = useState(localStorage.getItem('byline.rightOpen') === '1')
+  type LeftTab = 'write' | 'style' | 'outline'
+  type RightTab = 'language' | 'lint' | 'reader' | 'sources' | 'suggest'
+  const [leftTab, setLeftTab] = useState<LeftTab>('write')
+  const [rightTab, setRightTab] = useState<RightTab>('language')
+  function openRightTab(t: RightTab) { setRightTab(t); if (!rightOpen) { setRightOpen(true); localStorage.setItem('byline.rightOpen', '1') } }
   const popupRef = useRef<HTMLDivElement>(null)
   const writerPosRef = useRef(0)
   const [counts, setCounts] = useState({ words: 0, chars: 0 })
@@ -260,7 +274,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   useEffect(() => { refs.current.sugg = suggestions }, [suggestions])
   useEffect(() => { refs.current.idx = ghostIdx }, [ghostIdx])
 
-  const record = (patch: any) => setMetrics((m: any) => { const n = { ...m }; for (const k in patch) n[k] = typeof patch[k] === 'function' ? patch[k](m[k] || 0) : patch[k]; localStorage.setItem('byline.metrics.v2', JSON.stringify(n)); return n })
+  const record = (patch: any) => setMetrics((m: any) => { const n = { ...m }; for (const k in patch) n[k] = typeof patch[k] === 'function' ? patch[k](m[k] || 0) : patch[k]; localStorage.setItem('byline.metrics.v3', JSON.stringify(n)); return n })
+  function resetMetrics() { const n = { offered: 0, accepted: 0, dismissed: 0, msTotal: 0, msCount: 0 }; localStorage.setItem('byline.metrics.v3', JSON.stringify(n)); setMetrics(n) }
 
   const editor = useEditor({
     extensions: [StarterKit, AnchorDecorations, Highlight, TextAlign.configure({ types: ['heading', 'paragraph'] }), CharacterCount],
@@ -277,7 +292,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       t.c = setTimeout(() => refs.current.fns.complete?.(true), 500)
       t.g = setTimeout(() => refs.current.fns.grammar?.(), 900)
       t.s = setTimeout(() => { refs.current.fns.annotate?.(); refs.current.fns.reactions?.() }, 1400)
-      clearTimeout(t.lint); t.lint = setTimeout(() => { if (modeStore.mode === 'editing') runLint() }, 5000) // lint only on long wait or Run button
+      // lint: manual only — Run lint button press, never on edit/mode/toggle
     },
   })
 
@@ -305,7 +320,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     anchorStore.ghost = (before && !/\s/.test(before) ? ' ' : '') + s; anchorStore.ghostPos = pos; syncGhost(editor)
   }
   function archiveSuggestions(list: string[]) { if (list.length) setSuggHistory(h => [...list.filter(s => !h.includes(s)), ...h].slice(0, 30)) }
-  function clearGhost(moveToHistory = true) { if (moveToHistory) archiveSuggestions(refs.current.sugg); anchorStore.ghost = ''; refs.current.sugg = []; setSuggestions([]); if (editor) syncGhost(editor) }
+  function clearGhost(moveToHistory = true) { if (moveToHistory && refs.current.sugg.length) { record({ dismissed: (v: number) => v + 1 }); archiveSuggestions(refs.current.sugg) } anchorStore.ghost = ''; refs.current.sugg = []; setSuggestions([]); if (editor) syncGhost(editor) }
   function acceptGhost(idx: number) {
     if (!editor) return
     const s = refs.current.sugg[idx]; if (!s) return
@@ -367,7 +382,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     if (!sugg.length || ctl.signal.aborted) return
     archiveSuggestions(refs.current.sugg.filter(s => !sugg.includes(s)))
     refs.current.sugg = sugg; setSuggestions(sugg); setGhostIdx(0); refs.current.idx = 0
-    record({ shown: (v: number) => v + sugg.length, ms: Math.round(performance.now() - t0) })
+    record({ offered: (v: number) => v + 1, msTotal: (v: number) => v + Math.round(performance.now() - t0), msCount: (v: number) => v + 1 })
     const pos2 = editor.state.selection.from; const b2 = editor.state.doc.textBetween(Math.max(0, pos2 - 1), pos2)
     anchorStore.ghost = (b2 && !/\s/.test(b2) ? ' ' : '') + sugg[0]; anchorStore.ghostPos = pos2; syncGhost(editor)
     const c = editor.view.coordsAtPos(pos2); const y = c.bottom + 8; setSuggPos({ x: Math.max(8, Math.min(c.left, innerWidth - 380)), y, h: Math.max(170, innerHeight - y - 12) })
@@ -389,7 +404,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey
       if (mod && e.code === 'Space') { e.preventDefault(); e.stopPropagation(); refs.current.fns.complete?.(); return }
-      if (mod && e.key === '/') { e.preventDefault(); e.stopPropagation(); if (transRef.current) { setTransMenu(null); transRef.current = null; return } clearGhost(false); const c = editor.view.coordsAtPos(editor.state.selection.from); const y = c.bottom + 8; const m = { x: Math.max(8, Math.min(c.left, innerWidth - 380)), y, h: Math.max(170, innerHeight - y - 12), cat: null as string | null, query: '' }; transRef.current = m; setTransMenu(m); return }
+      if (mod && e.key === '/') { e.preventDefault(); e.stopPropagation(); openTransMenu(); return }
       if (transRef.current) {
         const m = transRef.current
         const cats = Object.keys(TRANSITIONS).filter(c => matchText(m.query, c) || TRANSITIONS[c].some(t => matchText(m.query, t)))
@@ -471,7 +486,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     setPopupGroup(g); groupRef.current = g; setPopupIdx(idx); idxRef.current = idx; setSelected(g[idx]); anchorStore.linkedId = g[idx].id; if (editor) redraw(editor)
   }
   function applySelected() { const a = selectedRef.current; if (a) applyAnchor(a) }
-  function focusAnchor(a: Anchor) { if (!editor) return; const tm = plain(); const r = locateQuote(tm, a.quote, a.context); if (r) anchorStore.ranges.set(a.id, r); const pos = editor.view.coordsAtPos(r?.from || editor.state.selection.from); const group = anchorsAt(a); openGroup(group, pos.left, pos.bottom + 6, Math.max(0, group.findIndex(g => g.id === a.id)), true) }
+  function focusAnchor(a: Anchor) { if (!editor) return; openRightTab(a.kind === 'reaction' ? 'reader' : a.kind === 'claim' ? 'sources' : 'language'); const tm = plain(); const r = locateQuote(tm, a.quote, a.context); if (r) anchorStore.ranges.set(a.id, r); const pos = editor.view.coordsAtPos(r?.from || editor.state.selection.from); const group = anchorsAt(a); openGroup(group, pos.left, pos.bottom + 6, Math.max(0, group.findIndex(g => g.id === a.id)), true) }
   async function onDblClick(e: any) {
     if (!editor) return
     const { from, to } = editor.state.selection; const word = editor.state.doc.textBetween(from, to).trim()
@@ -499,6 +514,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const [moved] = segs.splice(srcSeg, 1); segs.splice(dstSeg, 0, moved)
     editor.commands.setContent({ ...json, content: [...preface, ...segs.flat()] })
   }
+  function openTransMenu() {
+    if (!editor) return
+    if (transRef.current) { transRef.current = null; setTransMenu(null); return }
+    clearGhost(false)
+    const c = editor.view.coordsAtPos(editor.state.selection.from); const y = c.bottom + 8
+    const m = { x: Math.max(8, Math.min(c.left, innerWidth - 380)), y, h: Math.max(170, innerHeight - y - 12), cat: null as string | null, query: '' }
+    transRef.current = m; setTransMenu(m)
+  }
   function insertTransition(tpl: string) {
     if (!editor) return
     const at = editor.state.selection.from; const blank = tpl.indexOf('[]')
@@ -509,8 +532,16 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   }
   function toggleDock(side: 'left' | 'right') { if (side === 'left') { setLeftOpen(v => { localStorage.setItem('byline.leftOpen', v ? '0' : '1'); return !v }) } else { setRightOpen(v => { localStorage.setItem('byline.rightOpen', v ? '0' : '1'); return !v }) } }
 
+  useEffect(() => { editor?.view.dom.setAttribute('spellcheck', appSettings.spellcheck ? 'true' : 'false') }, [editor, appSettings.spellcheck])
   if (!editor) return null
-  const acc = metrics.shown ? Math.round(100 * metrics.accepted / metrics.shown) : 0
+  const acc = metrics.offered ? Math.round(100 * metrics.accepted / metrics.offered) : 0
+  const avgMs = metrics.msCount ? Math.round(metrics.msTotal / metrics.msCount) : 0
+  const draftNow = draftObj()
+  const tabDirty = {
+    write: JSON.stringify({ context: applied.context, level: applied.level, assist: applied.assist, persona: applied.persona }) !== JSON.stringify({ context: draftNow.context, level: draftNow.level, assist: draftNow.assist, persona: draftNow.persona }),
+    style: JSON.stringify({ tones: applied.tones, voice: applied.voice, rhythm: applied.rhythm, gramVoice: applied.gramVoice, clause: applied.clause, density: applied.density, audLevel: applied.audLevel, audText: applied.audText }) !== JSON.stringify({ tones: draftNow.tones, voice: draftNow.voice, rhythm: draftNow.rhythm, gramVoice: draftNow.gramVoice, clause: draftNow.clause, density: draftNow.density, audLevel: draftNow.audLevel, audText: draftNow.audText }),
+    outline: false,
+  }
   const cols = `${leftOpen ? '264px' : '52px'} minmax(0,1fr) ${rightOpen ? '348px' : '52px'}`
   return (
     <div>
@@ -522,9 +553,10 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         </div>
         <div className="top-right">
         {anyLoading && <span className="ai-loading"><Spinner /> AI working</span>}
-        <span className="metric">{acc}% accepted · {metrics.ms}ms · {status?.model || 'offline'}</span>
+        {appSettings.showMetrics && <span className="metric" title={`Ghost acceptance: ${metrics.accepted} accepted / ${metrics.offered} batches offered · ${metrics.dismissed} dismissed · avg latency ${avgMs}ms`}>Ghost taken {acc}% ({metrics.accepted}/{metrics.offered}) · {avgMs}ms avg · {status?.model || 'offline'}</span>}
+        {appSettings.showMetrics && <button title="Reset ghost metrics" onClick={resetMetrics}>Reset metrics</button>}
         <span className="dot" style={{ background: status?.meta_configured ? '#1E8E3E' : '#D93025' }} />
-        <ThemeToggle />
+        <button onClick={() => setShowSettings(true)} title="Settings (Ctrl+,)">⚙ Settings <span className="kbd">Ctrl ,</span></button>
         <a className={`nav-btn ${location.pathname.startsWith('/app') ? 'active' : ''}`} href="/app">App</a>
         <a className={`nav-btn ${location.pathname.startsWith('/demo') ? 'active' : ''}`} href="/demo">Demo</a>
         <button onClick={() => { const b = new Blob([editor.getHTML()], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'byline.html'; a.click() }}>Export</button>
@@ -535,9 +567,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         <aside className="rail">
           {!leftOpen ? <div className="rail-strip"><button onClick={() => toggleDock('left')} title="Expand">›</button><span className="strip-dot" style={{ background: 'var(--ai)' }} /><span className="strip-dot" style={{ background: 'var(--grey)' }} /></div> : <>
             <div className="rail-head"><strong style={{ fontSize: 13 }}>Write</strong><button onClick={() => toggleDock('left')} title="Collapse">‹</button></div>
+            <div className="dock-tabs" role="tablist" aria-label="Write settings">
+              {(['write', 'style', 'outline'] as LeftTab[]).map(t => <button key={t} role="tab" aria-selected={leftTab === t} className={leftTab === t ? 'active' : ''} onClick={() => setLeftTab(t)}>{t === 'write' ? 'Write' : t === 'style' ? 'Style' : 'Outline'}{tabDirty[t] && <span className="tab-dot" title="Unapplied changes" />}</button>)}
+            </div>
+            <div className="rail-scroll">
+            {leftTab === 'write' && <>
             <div className="dock"><h3>Context</h3>
               <textarea className="context-box" value={context} onChange={e => { setContext(e.target.value); setStale(true) }} placeholder="What should the finished text be about?" />
-              <div style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }}><button className="primary" disabled={!dirty} onClick={applySettings}>Apply{dirty ? ' ●' : ''}</button>{dirty && <span className="meta">unapplied changes</span>}</div>
+              {dirty && <div className="meta" style={{ marginTop: 8 }}>Unapplied changes — use Apply below.</div>}
             </div>
             <div className="dock"><h3>Diction</h3>
               <div className="meta">Same denotation, different connotation.</div>
@@ -546,6 +583,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               <label>Assist</label><select style={{ width: '100%' }} value={assist} onChange={e => setAssist(e.target.value)}>{ASSISTS.map(l => <option key={l}>{l}</option>)}</select>
               <label>Reader persona</label><select style={{ width: '100%' }} value={persona} onChange={e => setPersona(e.target.value)}>{PERSONAS.map(l => <option key={l}>{l}</option>)}</select>
             </div>
+            </>}
+            {leftTab === 'style' && <>
             <div className="dock"><h3>Tone</h3>
               <div className="meta">Click: allowed → not allowed → off.</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>{TONES.map(t => { const st = tones[t]; return <button key={t} className={`tone-tag ${st || ''}`} onClick={() => cycleTone(t)}>{st === 'ban' ? '✕ ' : st === 'allow' ? '✓ ' : ''}{t}</button> })}</div>
@@ -573,60 +612,46 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               <input type="range" min={1} max={5} step={1} value={audLevel} onChange={e => setAudLevel(Number(e.target.value))} style={{ width: '100%' }} />
               <div className="meta">Level {audLevel}/5{audLevel <= 2 ? ' — undefined jargon/acronyms flagged' : audLevel >= 4 ? ' — basics not explained' : ''}</div>
             </div>
-            <div className="dock"><h3>Contents</h3>
+            </>}
+            {leftTab === 'outline' && <div className="dock"><h3>Contents</h3>
               {tocItems().length === 0 && <div className="meta">Add H1–H3 headings — drag to reorder sections.</div>}
               {tocItems().map((h, i) => <div key={i} className="toc-item" draggable onDragStart={() => setDragToc(i)} onDragOver={e => e.preventDefault()} onDrop={() => { if (dragToc !== null) moveSection(dragToc, i); setDragToc(null) }} style={{ paddingLeft: 8 + (h.level - 1) * 14 }}><span className="meta">⠿ H{h.level}</span> {h.text || '(untitled)'}</div>)}
-            </div>
-            <button className="primary" disabled={!dirty} onClick={applySettings} style={{ width: '100%', marginBottom: 12 }}>Apply settings{dirty ? ' ●' : ''}</button>
-            {editing && <div className="dock"><h3><span className="swatch" style={{ background: 'var(--ai)' }} />Perceived main idea{(loading.main || loading.outline) && <Spinner />}</h3>
-              <div className="quote-serif">{mainIdea || '—'}</div>
-              <button disabled={!editing} style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={refreshMainIdea}>{loading.main ? 'Reading…' : 'Refresh'}</button>
-              {outline.map((o, i) => <div key={i} className="dock-item" onClick={() => focusAnchor({ id: `o${i}`, kind: 'reaction', quote: o.quote, context: o.context, title: 'Outline', detail: o.label })}>{o.label}<div className="meta">“{o.quote}”</div></div>)}
-              <button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={refreshOutline}>Outline</button>
             </div>}
+            </div>
+            <div className="rail-foot"><button className="primary" disabled={!dirty} onClick={applySettings} style={{ width: '100%' }}>Apply settings{dirty ? ' ●' : ''}</button>{dirty && <div className="meta" style={{ marginTop: 6 }}>Unapplied changes in {tabDirty.write ? 'Write' : ''}{tabDirty.write && tabDirty.style ? ' + ' : ''}{tabDirty.style ? 'Style' : ''}</div>}</div>
           </>}
         </aside>
 
         <main>
-          <div className="toolbar">
-            <button title="Undo (Ctrl+Z)" onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()}>↩</button>
-            <button title="Redo (Ctrl+Shift+Z)" onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()}>↪</button>
-            <span className="tool-sep" />
-            <button title="Bold" className={editor.isActive('bold') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBold().run()}><strong>B</strong></button>
-            <button title="Italic" className={editor.isActive('italic') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleItalic().run()}><em>I</em></button>
-            <button title="Underline" className={editor.isActive('underline') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => (editor.chain() as any).focus().toggleUnderline().run()}><u>U</u></button>
-            <button title="Strikethrough" className={editor.isActive('strike') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleStrike().run()}><s>S</s></button>
-            <button title="Highlight" className={editor.isActive('highlight') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleHighlight().run()}>▮</button>
-            <button title="Inline code" className={editor.isActive('code') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleCode().run()}>{'</>'}</button>
-            <span className="tool-sep" />
-            <button title="Paragraph" className={editor.isActive('paragraph') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().setParagraph().run()}>¶</button>
-            {[1, 2, 3].map(l => <button key={l} title={`Heading ${l}`} className={editor.isActive('heading', { level: l }) ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: l as any }).run()}>H{l}</button>)}
-            <span className="tool-sep" />
-            <button title="Bullet list" className={editor.isActive('bulletList') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()}>• List</button>
-            <button title="Numbered list" className={editor.isActive('orderedList') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleOrderedList().run()}>1. List</button>
-            <button title="Quote" className={editor.isActive('blockquote') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBlockquote().run()}>❝ Quote</button>
-            <button title="Code block" className={editor.isActive('codeBlock') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleCodeBlock().run()}>Code block</button>
-            <button title="Divider" onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().setHorizontalRule().run()}>―</button>
-            <span className="tool-sep" />
-            {(['left', 'center', 'right'] as const).map(a => <button key={a} title={`Align ${a}`} className={editor.isActive({ textAlign: a }) ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => (editor.chain() as any).focus().setTextAlign(a).run()}>{a === 'left' ? '⇤' : a === 'center' ? '↔' : '⇥'}</button>)}
-            <button title="Link" className={editor.isActive('link') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => { const url = prompt('Link URL'); if (url) (editor.chain() as any).focus().setLink({ href: url }).run(); else (editor.chain() as any).focus().unsetLink().run() }}>Link</button>
-            <button title="Clear formatting" onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()}>Clear</button>
-            <span className="tool-sep" />
-            <button onMouseDown={e => e.preventDefault()} onClick={() => requestComplete()}>Suggest <span className="kbd">Ctrl Space</span></button>
-            <span className="metric">{counts.words} words · {counts.chars} chars</span>
-          </div>
+          <EditorMenus editor={editor} counts={counts} showWordCount={appSettings.showWordCount} onSuggest={() => requestComplete()} onSentenceStarter={openTransMenu} />
           <div className="paper" onDoubleClick={onDblClick}><EditorContent editor={editor} /></div>
         </main>
 
         <aside className={`rail right-rail ${mode === 'drafting' ? 'ai-off' : ''}`}>
           {!rightOpen ? <div className="rail-strip"><button onClick={() => toggleDock('right')} title="Expand">‹</button><span className="strip-dot" style={{ background: 'var(--lt)' }} /><span className="strip-dot" style={{ background: 'var(--yellow)' }} /><span className="strip-dot" style={{ background: 'var(--blue)' }} /><span className="strip-dot" style={{ background: 'var(--ai)' }} /></div> : <>
             <div className="rail-head"><strong style={{ fontSize: 13 }}>Read</strong><button onClick={() => toggleDock('right')} title="Collapse">›</button></div>
-            {editing && <><div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--lt)' }} />Language{(loading.grammar || loading.annotate) && <Spinner />}</h3>
+            <div className="dock-tabs" role="tablist" aria-label="Read panels">
+              {editing && <button role="tab" aria-selected={rightTab === 'language'} className={rightTab === 'language' ? 'active' : ''} onClick={() => setRightTab('language')}>Language{(grammar.length + issues.length) > 0 && <span className="tab-badge">{grammar.length + issues.length}</span>}{loading.grammar || loading.annotate ? <Spinner /> : null}</button>}
+              {editing && <button role="tab" aria-selected={rightTab === 'lint'} className={rightTab === 'lint' ? 'active' : ''} onClick={() => setRightTab('lint')}>Lint{lintResults.length > 0 && <span className="tab-badge">{lintResults.length}</span>}{loading.lint ? <Spinner /> : null}</button>}
+              {editing && <button role="tab" aria-selected={rightTab === 'reader'} className={rightTab === 'reader' ? 'active' : ''} onClick={() => setRightTab('reader')}>Reader{reactions.length > 0 && <span className="tab-badge">{reactions.length}</span>}{loading.reactions || loading.main ? <Spinner /> : null}</button>}
+              {editing && <button role="tab" aria-selected={rightTab === 'sources'} className={rightTab === 'sources' ? 'active' : ''} onClick={() => setRightTab('sources')}>Sources{readings.length > 0 && <span className="tab-badge">{readings.length}</span>}{loading.readings ? <Spinner /> : null}</button>}
+              <button role="tab" aria-selected={rightTab === 'suggest' || !editing} className={rightTab === 'suggest' || !editing ? 'active' : ''} onClick={() => setRightTab('suggest')}>Suggest{suggestions.length > 0 && <span className="tab-badge">{suggestions.length}</span>}{loading.complete ? <Spinner /> : null}</button>
+            </div>
+            <div className="rail-scroll">
+            {editing && rightTab === 'language' && <><div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--lt)' }} />Language{(loading.grammar || loading.annotate) && <Spinner />}</h3>
               <div className="dock-scroll">
               {grammar.map((g, i) => { const a = anchorStore.anchors.find(x => x.id === `g${i}-${g.from}`); const st = LANG_STYLE.grammar; return <div key={`g${i}`} className={`dock-item ${g.stale ? 'stale' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label} · LT</div><span className="quote-serif">{g.quote || ''}</span><div className="reason-text">{g.message}</div>{g.replacements[0] && <div className="replacement-text" style={{ color: st.color }}>→ {g.replacements[0]}</div>}</div> })}
               {issues.map(it => { const a = anchorStore.anchors.find(x => x.id === it.id); const st = LANG_STYLE[it.type]; return <div key={it.id} className={`dock-item ${it.stale ? 'stale' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label} · AI</div><span className="quote-serif">{it.quote}</span><div className="reason-text">{it.reason}</div>{it.replacement && <div className="replacement-text" style={{ color: st.color }}>→ {it.replacement}</div>}</div> })}
               {!grammar.length && !issues.length && <div className="meta">—</div>}
               </div><div className="dock-foot"><span className="meta">Dictionary: {dict.spelling.length} · Ignored: {dict.ignore.length}</span>{dict.spelling.length > 0 && <button style={{ marginLeft: 8 }} onMouseDown={e => e.preventDefault()} onClick={exportAdditions}>Export additions</button>}</div>
+            </div>
+            </>}
+            {editing && rightTab === 'reader' && <>
+            <div className="dock"><h3><span className="swatch" style={{ background: 'var(--ai)' }} />Perceived main idea{(loading.main || loading.outline) && <Spinner />}</h3>
+              <div className="quote-serif">{mainIdea || '—'}</div>
+              <button disabled={!editing} style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={refreshMainIdea}>{loading.main ? 'Reading…' : 'Refresh'}</button>
+              {outline.map((o, i) => <div key={i} className="dock-item" onClick={() => focusAnchor({ id: `o${i}`, kind: 'reaction', quote: o.quote, context: o.context, title: 'Outline', detail: o.label })}>{o.label}<div className="meta">“{o.quote}”</div></div>)}
+              <button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={refreshOutline}>Outline</button>
             </div>
             <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--ai)' }} />Reader{loading.reactions && <Spinner />}</h3>
               <div className="dock-scroll">
@@ -634,31 +659,36 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               {!reactions.length && <div className="meta">—</div>}
               </div><div className="dock-foot"><button disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={requestReactions}>Refresh</button></div>
             </div>
+            </>}
+            {editing && rightTab === 'sources' && <>
             <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--blue)' }} />Sources{loading.readings && <Spinner />}</h3>
               <div className="dock-scroll">
               {readings.map((r, i) => <div key={i} className={`dock-item ${r.stale ? 'stale' : ''}`}><div className="kind-label" style={{ color: 'var(--blue)' }}>{r.label}</div><a href={textFragmentUrl(r.url, r.excerpt || r.claim_quote)} target="_blank" rel="noreferrer" style={{ fontWeight: 600 }}>{r.title || r.url}</a><div className="reason-text">vs “{r.claim_quote}” — {r.why}</div><div className="meta" style={{ fontStyle: 'italic' }}>{r.excerpt}</div></div>)}
               {!readings.length && <div className="meta">—</div>}
               </div><div className="dock-foot"><button disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshReadings}>{loading.readings ? 'Searching…' : 'Search'}</button></div>
             </div>
-            </>}<div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--grey)' }} />Suggestions{loading.complete && <Spinner />}</h3>
+            </>}
+            {(rightTab === 'suggest' || !editing) && <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--grey)' }} />Suggestions{loading.complete && <Spinner />}</h3>
               <div className="dock-scroll">
               {suggestions.map((s, i) => <div key={`s${i}`} className={`ghost-row ${i === ghostIdx ? 'sel' : ''}`} onClick={() => acceptGhost(i)}><span className="quote-serif">{s}</span></div>)}
               {suggHistory.map((s, i) => <div key={`h${i}`} className="ghost-row" style={{ opacity: .45 }}>{s}</div>)}
               {loading.complete && !suggestions.length && <div className="meta"><LoadingDots /></div>}{!suggestions.length && !suggHistory.length && !loading.complete && <div className="meta">—</div>}
               </div>
               {suggestions.length > 0 && <div className="dock-foot"><button onClick={() => clearGhost()}>Dismiss <span className="kbd">Esc</span></button></div>}
-            </div>
-            {editing && <div className="dock dock-section" style={lintEnabled ? undefined : { opacity: .55 }}><h3>Lint results {loading.lint && <Spinner />}<span className="spacer" /><button role="switch" aria-checked={lintEnabled} aria-label="Toggle lint" className={`switch ${lintEnabled ? 'on' : ''}`} onMouseDown={e => e.preventDefault()} onClick={toggleLint}><span className="knob" /></button></h3>
+            </div>}
+            {editing && rightTab === 'lint' && <div className="dock dock-section" style={lintEnabled ? undefined : { opacity: .55 }}><h3>Lint {loading.lint && <Spinner />}<span className="spacer" /><button role="switch" aria-checked={lintEnabled} aria-label="Toggle lint" className={`switch ${lintEnabled ? 'on' : ''}`} onMouseDown={e => e.preventDefault()} onClick={toggleLint}><span className="knob" /></button></h3>
               <div className="dock-scroll">
               {[...lintResults].sort((a, b) => (LINT_PRIORITY[a.color_category] ?? 9) - (LINT_PRIORITY[b.color_category] ?? 9)).map(r => { const rule = LINTER_RULE_LIBRARY.find(x => x.id === r.rule_id); return <div key={r.uid} className="dock-item" onMouseDown={e => e.preventDefault()} onClick={() => openLintGroup(r)}><div className="kind-label" style={{ color: `var(--lint-${r.color_category})` }}>{LINT_COLORS[r.color_category]?.label || r.color_category} · {rule?.name || r.rule_id}</div><span className="quote-serif">{r.target}</span><div className="reason-text">{r.message}</div>{r.suggestion && <div className="replacement-text">→ {r.suggestion}</div>}</div> })}
-              {!lintResults.length && !loading.lint && <div className="meta">—</div>}
+              {!lintResults.length && !loading.lint && <div className="meta">{lintEnabled ? 'No results yet — press Run lint. Lint never runs automatically.' : 'Off — enable lint, then press Run lint.'}</div>}
               {loading.lint && !lintResults.length && <div className="meta"><LoadingDots /></div>}
               </div><div className="dock-foot"><div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}><button className="primary" disabled={!lintEnabled} onMouseDown={e => e.preventDefault()} onClick={runLint}>{loading.lint ? 'Linting…' : 'Run lint'}</button><button onMouseDown={e => e.preventDefault()} onClick={() => setShowLibrary(true)}>Rule library</button></div>{lintStatus && <div className="meta" style={{ marginTop: 6 }}>{lintStatus}</div>}</div>
             </div>}
+            </div>
           </>}
         </aside>
       </div>
 
+      {showSettings && <SettingsMenu settings={appSettings} onChange={updateSettings} onClose={() => setShowSettings(false)} />}
       {showLibrary && (
         <div className="library-backdrop" onMouseDown={() => setShowLibrary(false)}>
           <div className="library-modal fade" role="dialog" aria-label="Rule library" onMouseDown={e => e.stopPropagation()}>
