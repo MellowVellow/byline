@@ -1,0 +1,22 @@
+# Muse Glimmer QLoRA (Axolotl) — based on Meta cookbook recipe (pinned in their docs)
+base_model: meta-models/Muse-Glimmer-30B
+load_in_4bit: true
+adapter: qlora
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+lora_target_modules: [q_proj, v_proj, k_proj, o_proj]
+datasets:
+  - path: train.jsonl
+    type: chat_template
+sequence_len: 1024
+sample_packing: false
+eval_sample_packing: false
+gradient_accumulation_steps: 4
+micro_batch_size: 1
+num_epochs: 3
+learning_rate: 2.0e-4
+lr_scheduler: cosine
+bf16: true
+output_dir: ./out-qlora
+save_strategy: epoch

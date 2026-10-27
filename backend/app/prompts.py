@@ -95,3 +95,17 @@ def lint_prompt(context, style, text, rules_json):
             "color_category (copy that rule's color), message (one line, name the rule), suggestion (replacement text for target only, grammatical in place). Max 12. "
             'JSON: {"lint_results":[{"rule_id":"...","color_category":"amber|green|cyan|rose|violet","target":"...","context":"...","message":"...","suggestion":"..."}]}')
     return system, user
+
+def diagram_prompt(context, text, kind):
+    system = f"Information designer. JSON only. {QUOTE_RULE} Produce a valid Mermaid {kind} diagram of the main idea: 5-9 nodes, short labels (<=6 words), no quotes/brackets inside labels."
+    user = (f"CONTEXT: {context or '(none)'}\nKIND: {kind} (mindmap root syntax if mindmap, flowchart TD if flowchart)\nTEXT:\n{text}\n"
+            'TASK: Return {"mermaid":"<full mermaid source>","caption":"<one-sentence perceived main idea>","nodes":[{"label":"<node label>","quote":"...","context":"..."}]} - one node per main point, anchored to exact quote supporting it.')
+    return system, user
+
+def outline_generate_prompt(answers_json):
+    system = "Writing coach. JSON only. Turn survey answers into a context summary and a generative outline for a document that does not exist yet."
+    user = (f"SURVEY ANSWERS (JSON):\n{answers_json}\n"
+            'TASK: {"context_summary":"<2-3 sentence North-Star context the writer can paste>","audience_text":"","audience_level":3,"outline":[{"heading":"...","purpose":"...","points":["..."]}]} - 4-7 headings, each with purpose + 2-4 bullet points.')
+    return system, user
+
+FACTS_SYSTEM = "Researcher agent. Extract only facts actually supported by the provided source/search results. Every fact needs a source title, URL, locator (page/section), and a short excerpt copied from the source. Never invent facts or URLs."

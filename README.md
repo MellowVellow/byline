@@ -7,7 +7,7 @@ Entirely new build (EXAMPLE/ kept as reference only). Quote-anchored AI: model r
 ## Surfaces
 - `/` landing + waitlist (Supabase `waitlist` table, local-file fallback) — run `supabase/waitlist.sql`
 - `/demo` public demo, preloaded cats-vs-dogs, canned fallback if backend down
-- `/app` full editor: ghost Tab completions (Muse Spark 1.3), LT grammar (red), vocab/cohesion (purple/yellow wavy), reader reactions + perceived main idea/intent gap (purple), Tavily readings (blue), outline, synonyms, metrics (acceptance %, latency)
+- `/app` full editor: ghost Tab completions (Muse Spark 1.3), LT grammar (red), vocab/cohesion (purple/yellow wavy), reader reactions + perceived main idea/intent gap (purple), Meta-grounded readings (blue), outline, synonyms, metrics (acceptance %, latency)
 
 ## Run
 ```bash
@@ -20,7 +20,7 @@ npm --prefix frontend install && npm --prefix frontend run dev   # :5173, proxie
 
 ## Deploy
 - Frontend → Vercel: set backend URL in `vercel.json` rewrite (replace YOUR-BACKEND) or set `VITE_API_URL` env at build.
-- Backend → Fly/Render/Railway: `uvicorn app.main:app`, env `META_API_KEY, TAVILY_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY, CORS_ORIGINS=https://your-vercel-domain`.
+- Backend → Fly/Render/Railway: `uvicorn app.main:app`, env `META_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY, CORS_ORIGINS=https://your-vercel-domain`.
 - LanguageTool → same host docker sidecar; public LT API URL also works via `LANGUAGETOOL_URL`.
 
 ## Dictionary exceptions (LanguageTool manual)

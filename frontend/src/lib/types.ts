@@ -6,3 +6,5 @@ export type Reading = { title: string; url: string; label: string; why: string; 
 export type OutlineItem = Anchored & { label: string }
 export type AnchorKind = 'grammar' | 'vocabulary' | 'relevance' | 'reaction' | 'claim'
 export type Anchor = { id: string; kind: AnchorKind; tone?: string; quote: string; context: string; title: string; detail: string; replacement?: string; url?: string; excerpt?: string }
+
+export type Fact = { fact: string; source_title: string; url: string; locator: string; excerpt: string }

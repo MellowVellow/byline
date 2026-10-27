@@ -16,6 +16,10 @@ import { loadSettings, saveSettings, type AppSettings } from '../lib/settings'
 import { textFragmentUrl } from '../lib/link'
 import { sentenceCase } from '../lib/case'
 import { LINTER_RULE_LIBRARY, LINT_COLORS, LINT_PRIORITY, type LintResult } from '../lib/rules'
+import Diagram, { type DiagramNode } from '../components/Diagram'
+import { researchUpload, transcribeWav } from '../lib/api'
+import { recordWav } from '../lib/wav'
+import type { Fact } from '../lib/types'
 
 const DICTIONS = ['Formal', 'Casual', 'Slang', 'Simple', 'General', 'Academic', 'Technical', 'Buzzwords', 'Bullshitting']
 const DICTION_EXAMPLE: Record<string, string> = { Formal: 'are not angry', Casual: "aren't mad", Slang: "ain't ticked" }
@@ -86,6 +90,15 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [lintIdx, setLintIdx] = useState(0)
   const lintGroupRef = useRef<LintResult[]>([]); lintGroupRef.current = lintGroup
   const [showLibrary, setShowLibrary] = useState(false)
+  const [diagram, setDiagram] = useState<{ mermaid: string; caption: string; nodes: DiagramNode[] }>({ mermaid: '', caption: '', nodes: [] })
+  const [diagramKind, setDiagramKind] = useState<'mindmap' | 'flowchart'>('mindmap')
+  const [facts, setFacts] = useState<Fact[]>(() => { try { return JSON.parse(localStorage.getItem(demo ? 'byline.facts.demo' : 'byline.facts.app') || '[]') } catch { return [] } })
+  const [researchUrl, setResearchUrl] = useState('')
+  const [researchQ, setResearchQ] = useState('')
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const [answers, setAnswers] = useState({ goal: '', doc_type: 'essay', audience: '', audience_level: 3, key_points: '', voice_note: '' })
+  const [recField, setRecField] = useState('')
+  const recRef = useRef<any>(null)
   const [lintEnabled, setLintEnabled] = useState(localStorage.getItem('byline.lintEnabled') === '1')
   const lintEnabledRef = useRef(false); lintEnabledRef.current = lintEnabled
   function toggleLint() {
@@ -326,6 +339,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const s = refs.current.sugg[idx]; if (!s) return
     const pos = editor.state.selection.from; const before = editor.state.doc.textBetween(Math.max(0, pos - 1), pos)
     editor.chain().focus().insertContent((before && !/\s/.test(before) ? ' ' : '') + s).run()
+    try { const ds = JSON.parse(localStorage.getItem('byline.dataset') || '[]'); ds.push({ context: appliedRef.current.context, before: editor.state.doc.textBetween(Math.max(0, pos - 400), pos, '\n\n'), accepted: s, assist: appliedRef.current.assist, ts: Date.now() }); localStorage.setItem('byline.dataset', JSON.stringify(ds.slice(-1000))) } catch { /* noop */ }
     refs.current.acceptedVersion = refs.current.version // after insert transaction
     record({ accepted: (v: number) => v + 1 }); archiveSuggestions(refs.current.sugg.filter(x => x !== s)); clearGhost(false)
   }
@@ -530,6 +544,44 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     if (blank >= 0) editor.chain().setTextSelection(at + prefix.length + blank).run()
     setTransMenu(null)
   }
+  async function refreshDiagram() {
+    if (!editor) return; setLoad('diagram', true)
+    const d = await api.diagram({ context: appliedRef.current.context, text: plain().text, kind: diagramKind })
+    if (d?.ok) { setDiagram({ mermaid: d.mermaid, caption: d.caption, nodes: d.nodes || [] }); if (d.caption) setMainIdea(d.caption) }
+    setLoad('diagram', false)
+  }
+  async function runResearch(file?: File) {
+    setLoad('research', true)
+    const d = file ? await researchUpload(file, researchQ || 'Extract key facts for my writing') : await api.research({ url: researchUrl, question: researchQ || 'Extract the key facts relevant to my writing, with sources.' })
+    if (d?.ok && d.facts?.length) { setFacts(old => { const n = [...d.facts, ...old].slice(0, 40); localStorage.setItem(demo ? 'byline.facts.demo' : 'byline.facts.app', JSON.stringify(n)); return n }) }
+    else if (d?.error) alert(`Research failed: ${d.error}`)
+    setLoad('research', false)
+  }
+  async function toggleMic(field: string) {
+    if (recField === field && recRef.current) { const blob = await recRef.current.stop(); setRecField(''); setLoad('asr', true); const text = await transcribeWav(blob); setLoad('asr', false); if (text) setAnswers(a => ({ ...a, [field]: ((a as any)[field] ? (a as any)[field] + ' ' : '') + text })); return }
+    try { recRef.current = await recordWav(25); setRecField(field) } catch { alert('Microphone unavailable') }
+  }
+  async function generateFromSurvey() {
+    setLoad('outlinegen', true)
+    const d = await api.outlineGenerate({ answers })
+    setLoad('outlinegen', false)
+    if (!d?.ok) { alert('Outline generation failed'); return }
+    const summary = d.context_summary || answers.goal
+    setContext(summary); if (d.audience_text) setAudText(d.audience_text); if (d.audience_level) setAudLevel(d.audience_level)
+    const html = (d.outline || []).map((o: any) => `<h2>${o.heading}</h2><p><em>${o.purpose || ''}</em></p>${(o.points || []).map((pt: string) => `<p>${pt}</p>`).join('')}`).join('')
+    if (editor) { const empty = plain().text.trim().length < 3; if (empty) editor.commands.setContent(html || '<p></p>'); else editor.chain().focus().setTextSelection(editor.state.doc.content.size).insertContent(html).run() }
+    const next = { ...draftObj(), context: summary, audText: d.audience_text || audText, audLevel: d.audience_level || audLevel }
+    appliedRef.current = next as any; setApplied(next as any); setWizardOpen(false)
+    setTimeout(() => { requestComplete(); requestAnnotate(); requestReactions(); refreshMainIdea() }, 80)
+  }
+  async function exportDataset() {
+    let pairs: any[] = []; try { pairs = JSON.parse(localStorage.getItem('byline.dataset') || '[]') } catch { /* noop */ }
+    if (!pairs.length) { alert('No accepted suggestions captured yet. Accept ghost suggestions (Tab) first.'); return }
+    const d = await api.dataset(pairs)
+    const blob = new Blob([pairs.map(x => JSON.stringify(x)).join('\n')], { type: 'application/json' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'byline_dataset.jsonl'; a.click()
+    alert(d?.ok ? `Dataset: ${pairs.length} pairs downloaded, server total ${d.total}. Next LoRA step: see lora/README.md` : 'Dataset downloaded locally; backend save failed.')
+  }
   function toggleDock(side: 'left' | 'right') { if (side === 'left') { setLeftOpen(v => { localStorage.setItem('byline.leftOpen', v ? '0' : '1'); return !v }) } else { setRightOpen(v => { localStorage.setItem('byline.rightOpen', v ? '0' : '1'); return !v }) } }
 
   useEffect(() => { editor?.view.dom.setAttribute('spellcheck', appSettings.spellcheck ? 'true' : 'false') }, [editor, appSettings.spellcheck])
@@ -618,7 +670,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               {tocItems().map((h, i) => <div key={i} className="toc-item" draggable onDragStart={() => setDragToc(i)} onDragOver={e => e.preventDefault()} onDrop={() => { if (dragToc !== null) moveSection(dragToc, i); setDragToc(null) }} style={{ paddingLeft: 8 + (h.level - 1) * 14 }}><span className="meta">⠿ H{h.level}</span> {h.text || '(untitled)'}</div>)}
             </div>}
             </div>
-            <div className="rail-foot"><button className="primary" disabled={!dirty} onClick={applySettings} style={{ width: '100%' }}>Apply settings{dirty ? ' ●' : ''}</button>{dirty && <div className="meta" style={{ marginTop: 6 }}>Unapplied changes in {tabDirty.write ? 'Write' : ''}{tabDirty.write && tabDirty.style ? ' + ' : ''}{tabDirty.style ? 'Style' : ''}</div>}</div>
+            <div className="rail-foot"><button className="primary" disabled={!dirty} onClick={applySettings} style={{ width: '100%' }}>Apply settings{dirty ? ' ●' : ''}</button><div style={{ display: 'flex', gap: 6, marginTop: 8 }}><button style={{ flex: 1 }} onClick={() => setWizardOpen(true)}>Setup wizard</button><button style={{ flex: 1 }} onClick={exportDataset}>Export dataset</button></div>{dirty && <div className="meta" style={{ marginTop: 6 }}>Unapplied changes in {tabDirty.write ? 'Write' : ''}{tabDirty.write && tabDirty.style ? ' + ' : ''}{tabDirty.style ? 'Style' : ''}</div>}</div>
           </>}
         </aside>
 
@@ -648,8 +700,11 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             </>}
             {editing && rightTab === 'reader' && <>
             <div className="dock"><h3><span className="swatch" style={{ background: 'var(--ai)' }} />Perceived main idea{(loading.main || loading.outline) && <Spinner />}</h3>
-              <div className="quote-serif">{mainIdea || '—'}</div>
-              <button disabled={!editing} style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={refreshMainIdea}>{loading.main ? 'Reading…' : 'Refresh'}</button>
+              <div className="quote-serif">{mainIdea || diagram.caption || '—'}</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}><button disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshMainIdea}>{loading.main ? 'Reading…' : 'Main idea'}</button>
+              <select value={diagramKind} onChange={e => setDiagramKind(e.target.value as any)}><option value="mindmap">Mindmap</option><option value="flowchart">Flowchart</option></select>
+              <button disabled={!editing} onClick={refreshDiagram}>{loading.diagram ? 'Drawing…' : 'Draw diagram'}</button></div>
+              <Diagram source={diagram.mermaid} caption="" nodes={diagram.nodes} onNode={n => focusAnchor({ id: `dg:${n.label}`, kind: 'reaction', quote: n.quote, context: n.context, title: n.label, detail: n.quote })} />
               {outline.map((o, i) => <div key={i} className="dock-item" onClick={() => focusAnchor({ id: `o${i}`, kind: 'reaction', quote: o.quote, context: o.context, title: 'Outline', detail: o.label })}>{o.label}<div className="meta">“{o.quote}”</div></div>)}
               <button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={refreshOutline}>Outline</button>
             </div>
@@ -663,6 +718,13 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             {editing && rightTab === 'sources' && <>
             <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--blue)' }} />Sources{loading.readings && <Spinner />}</h3>
               <div className="dock-scroll">
+              <div style={{ display: 'grid', gap: 6, marginBottom: 10 }}>
+                <input value={researchUrl} onChange={e => setResearchUrl(e.target.value)} placeholder="Research URL — web page or PDF" />
+                <input value={researchQ} onChange={e => setResearchQ(e.target.value)} placeholder="Question (optional)" />
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button className="primary" disabled={!researchUrl || !!loading.research} onMouseDown={e => e.preventDefault()} onClick={() => runResearch()}>{loading.research ? 'Researching…' : 'Research URL'}</button>
+                <label className="nav-btn" style={{ cursor: 'pointer' }}>Upload file<input type="file" hidden accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.docx,.csv" onChange={e => { const f = e.target.files?.[0]; if (f) runResearch(f); e.target.value = '' }} /></label></div>
+              </div>
+              {facts.map((f, i) => <div key={i} className="dock-item"><div className="kind-label" style={{ color: 'var(--blue)' }}>Fact · {f.locator || 'source'}</div><div>{f.fact}</div><div className="meta"><a href={f.url || '#'} target="_blank" rel="noreferrer">{f.source_title || f.url}</a> — “{f.excerpt}”</div><button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().insertContent(` (${f.source_title || 'source'}${f.locator ? `, ${f.locator}` : ''}: ${f.url})`).run()}>Insert citation</button></div>)}
               {readings.map((r, i) => <div key={i} className={`dock-item ${r.stale ? 'stale' : ''}`}><div className="kind-label" style={{ color: 'var(--blue)' }}>{r.label}</div><a href={textFragmentUrl(r.url, r.excerpt || r.claim_quote)} target="_blank" rel="noreferrer" style={{ fontWeight: 600 }}>{r.title || r.url}</a><div className="reason-text">vs “{r.claim_quote}” — {r.why}</div><div className="meta" style={{ fontStyle: 'italic' }}>{r.excerpt}</div></div>)}
               {!readings.length && <div className="meta">—</div>}
               </div><div className="dock-foot"><button disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshReadings}>{loading.readings ? 'Searching…' : 'Search'}</button></div>
@@ -706,6 +768,26 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               <div className="kind-label" style={{ color: 'var(--lint-violet)', fontSize: 12 }}>Custom rules · violet</div>
               {customRules.map((t, i) => <div key={i} className="library-rule"><span className="tone-tag allow">✓ Enabled</span> <strong>CUSTOM_{String(i + 1).padStart(2, '0')}</strong><button style={{ float: 'right' }} onClick={() => { const n = customRules.filter((_, j) => j !== i); setCustomRules(n); localStorage.setItem('byline.customRules', JSON.stringify(n)) }}>✕</button><p>{t}</p></div>)}
               <div style={{ display: 'flex', gap: 6, marginTop: 10 }}><input style={{ flex: 1 }} value={customInput} onChange={e => setCustomInput(e.target.value)} placeholder="Add custom rule — e.g. no passive voice in headers" onKeyDown={e => { if (e.key === 'Enter' && customInput.trim()) { const n = [...customRules, customInput.trim()]; setCustomRules(n); localStorage.setItem('byline.customRules', JSON.stringify(n)); setCustomInput('') } }} /><button className="primary" onClick={() => { if (!customInput.trim()) return; const n = [...customRules, customInput.trim()]; setCustomRules(n); localStorage.setItem('byline.customRules', JSON.stringify(n)); setCustomInput('') }}>Add rule</button></div>
+            </div>
+          </div>
+        </div>
+      )}
+      {wizardOpen && (
+        <div className="library-backdrop" onMouseDown={() => setWizardOpen(false)}>
+          <div className="library-modal fade" role="dialog" aria-label="Setup wizard" onMouseDown={e => e.stopPropagation()} style={{ width: 'min(640px,96vw)' }}>
+            <div className="library-head"><strong>Setup wizard</strong><span className="meta">Answer or speak — outline writes itself</span><span className="spacer" /><button onClick={() => setWizardOpen(false)}>Close</button></div>
+            <div className="library-scroll">
+              {([['goal', 'What are you writing about? (goal / thesis)'], ['key_points', 'Key points you must cover'], ['audience', 'Who is reading this?'], ['voice_note', 'Any voice/style notes?']] as const).map(([field, label]) => (
+                <div key={field} style={{ marginBottom: 14 }}><label style={{ marginTop: 0 }}>{label}</label>
+                  <div style={{ display: 'flex', gap: 6 }}><input style={{ flex: 1 }} value={(answers as any)[field]} onChange={e => setAnswers(a => ({ ...a, [field]: e.target.value }))} placeholder={field === 'goal' ? 'Argue cats are better than dogs…' : ''} />
+                  <button className={recField === field ? 'primary' : ''} onMouseDown={e => e.preventDefault()} onClick={() => toggleMic(field)}>{loading.asr && recField === field ? '…' : recField === field ? '■ Stop + transcribe' : '🎙 Voice'}</button></div>
+                </div>
+              ))}
+              <label>Document type</label>
+              <select style={{ width: '100%' }} value={answers.doc_type} onChange={e => setAnswers(a => ({ ...a, doc_type: e.target.value }))}><option>essay</option><option>report</option><option>proposal</option><option>email</option><option>blog</option></select>
+              <label>Audience knowledge · 1 Beginner ↔ 5 Expert</label>
+              <input type="range" min={1} max={5} step={1} value={answers.audience_level} onChange={e => setAnswers(a => ({ ...a, audience_level: Number(e.target.value) }))} style={{ width: '100%' }} />
+              <button className="primary" style={{ width: '100%', marginTop: 14 }} onClick={generateFromSurvey}>{loading.outlinegen ? 'Generating outline…' : 'Generate outline + apply context'}</button>
             </div>
           </div>
         </div>

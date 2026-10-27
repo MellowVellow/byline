@@ -169,3 +169,7 @@ input[type=range]{accent-color:var(--ink);padding:0;border:none;background:trans
 .library-rule{border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:10px;line-height:1.55}
 .library-rule p{margin:7px 0}
 .library-example{display:grid;gap:6px;background:var(--dock);border-radius:6px;padding:9px}
+.diagram-card{margin-top:10px}
+.diagram-svg{overflow-x:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;cursor:pointer}
+.diagram-svg svg{max-width:100%;height:auto}
+.diagram-src{font-size:11px;white-space:pre-wrap;background:var(--dock);border-radius:6px;padding:8px;overflow-x:auto}

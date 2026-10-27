@@ -28,3 +28,16 @@ class LintRuleIn(BaseModel):
 class LintIn(BaseModel):
     context: str = ""; style: str = ""; text: str = ""
     active_rules: list[LintRuleIn] = []
+
+
+class ResearchIn(BaseModel):
+    url: str = ""; question: str = "Extract the key facts relevant to my writing, with sources."
+
+class DiagramIn(BaseModel):
+    context: str = ""; style: str = ""; text: str = ""; kind: str = "mindmap"
+
+class OutlineGenIn(BaseModel):
+    answers: dict = {}
+
+class DatasetIn(BaseModel):
+    pairs: list[dict] = []
