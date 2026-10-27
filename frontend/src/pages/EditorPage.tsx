@@ -211,7 +211,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       if (editor) { syncAnchors(editor); redraw(editor) }
     } else {
       // editing: restore anchors + fresh checks
-      setTimeout(() => { rebuildAnchors(); requestGrammar(); requestAnnotate(); requestReactions(); runLint() }, 50)
+      setTimeout(() => { rebuildAnchors(); requestGrammar(); requestAnnotate(); requestReactions() }, 50); setTimeout(() => { if (modeStore.mode === 'editing') runLint() }, 5000)
     }
     setTimeout(() => { if (refs.current.sugg.length) showGhost(refs.current.idx || 0) }, 80)
   }
@@ -266,7 +266,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       clearTimeout(t.c); clearTimeout(t.g); clearTimeout(t.s)
       t.c = setTimeout(() => refs.current.fns.complete?.(true), 500)
       t.g = setTimeout(() => refs.current.fns.grammar?.(), 900)
-      t.s = setTimeout(() => { refs.current.fns.annotate?.(); refs.current.fns.reactions?.(); if (modeStore.mode === 'editing') runLint() }, 1400)
+      t.s = setTimeout(() => { refs.current.fns.annotate?.(); refs.current.fns.reactions?.() }, 1400)
+      clearTimeout(t.lint); t.lint = setTimeout(() => { if (modeStore.mode === 'editing') runLint() }, 5000) // lint only on long wait or Run button
     },
   })
 
@@ -285,7 +286,6 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   }, [editor, grammar, issues, reactions, readings])
   useEffect(() => { if (savedSugg?.current?.length && editor) { refs.current.sugg = savedSugg.current; setTimeout(() => showGhost(savedSugg.idx || 0), 300) } }, [editor]) // eslint-disable-line
   useEffect(() => { if (editing) rebuildAnchors(); else { anchorStore.anchors = []; anchorStore.ranges = new Map(); if (editor) syncAnchors(editor) } }, [rebuildAnchors, editing]) // eslint-disable-line
-  useEffect(() => { if (mode !== 'editing') return; const t = setTimeout(() => lintRunRef.current(), 700); return () => clearTimeout(t) }, [enabledRules, customRules, mode]) // eslint-disable-line
   useEffect(() => { if (!showLibrary) return; const f = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowLibrary(false) }; addEventListener('keydown', f); return () => removeEventListener('keydown', f) }, [showLibrary])
 
   function showGhost(idx: number) {
@@ -611,25 +611,6 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         <aside className={`rail right-rail ${mode === 'drafting' ? 'ai-off' : ''}`}>
           {!rightOpen ? <div className="rail-strip"><button onClick={() => toggleDock('right')} title="Expand">‹</button><span className="strip-dot" style={{ background: 'var(--lt)' }} /><span className="strip-dot" style={{ background: 'var(--yellow)' }} /><span className="strip-dot" style={{ background: 'var(--blue)' }} /><span className="strip-dot" style={{ background: 'var(--ai)' }} /></div> : <>
             <div className="rail-head"><strong style={{ fontSize: 13 }}>Read</strong><button onClick={() => toggleDock('right')} title="Collapse">›</button></div>
-            {editing && <>
-            <div className="dock dock-section"><h3>Lint results {loading.lint && <Spinner />}</h3>
-              <div className="dock-scroll">
-              {[...lintResults].sort((a, b) => (LINT_PRIORITY[a.color_category] ?? 9) - (LINT_PRIORITY[b.color_category] ?? 9)).map(r => { const rule = LINTER_RULE_LIBRARY.find(x => x.id === r.rule_id); return <div key={r.uid} className="dock-item" onMouseDown={e => e.preventDefault()} onClick={() => openLintGroup(r)}><div className="kind-label" style={{ color: `var(--lint-${r.color_category})` }}>{LINT_COLORS[r.color_category]?.label || r.color_category} · {rule?.name || r.rule_id}</div><span className="quote-serif">{r.target}</span><div className="reason-text">{r.message}</div>{r.suggestion && <div className="replacement-text">→ {r.suggestion}</div>}</div> })}
-              {!lintResults.length && !loading.lint && <div className="meta">No violations. Run lint after writing.</div>}
-              {loading.lint && !lintResults.length && <div className="meta"><LoadingDots /></div>}
-              </div><div className="dock-foot"><div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}><button className="primary" onMouseDown={e => e.preventDefault()} onClick={runLint}>{loading.lint ? 'Linting…' : 'Run lint'}</button><button onMouseDown={e => e.preventDefault()} onClick={() => setShowLibrary(true)}>Rule library</button></div>{lintStatus && <div className="meta" style={{ marginTop: 6 }}>{lintStatus}</div>}</div>
-            </div>
-            <div className="dock dock-section"><h3>Active rules</h3>
-              <div className="dock-scroll">
-              {Object.entries(LINT_COLORS).map(([color, meta]) => <div key={color} style={{ marginBottom: 10 }}><div className="kind-label" style={{ color: `var(--lint-${color})` }}>{meta.label}</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>{LINTER_RULE_LIBRARY.filter(r => r.color === color).map(r => <button key={r.id} className={`tone-tag ${enabledRules.has(r.id) ? 'allow' : ''}`} onClick={() => toggleRule(r.id)} title={r.description}>{enabledRules.has(r.id) ? '✓ ' : ''}{r.name}</button>)}</div>
-              </div>)}
-              <div className="kind-label" style={{ color: 'var(--lint-violet)' }}>Custom rules · violet</div>
-              {customRules.map((t, i) => <div key={i} className="dock-item"><span className="tone-tag allow">✓ {t}</span><button style={{ float: 'right' }} onClick={() => { const n = customRules.filter((_, j) => j !== i); setCustomRules(n); localStorage.setItem('byline.customRules', JSON.stringify(n)) }}>✕</button></div>)}
-              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}><input style={{ flex: 1 }} value={customInput} onChange={e => setCustomInput(e.target.value)} placeholder='e.g. no passive voice in headers' onKeyDown={e => { if (e.key === 'Enter' && customInput.trim()) { const n = [...customRules, customInput.trim()]; setCustomRules(n); localStorage.setItem('byline.customRules', JSON.stringify(n)); setCustomInput('') } }} /><button className="primary" onClick={() => { if (!customInput.trim()) return; const n = [...customRules, customInput.trim()]; setCustomRules(n); localStorage.setItem('byline.customRules', JSON.stringify(n)); setCustomInput('') }}>Add</button></div>
-              </div>
-            </div>
-            </>}
             {editing && <><div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--lt)' }} />Language{(loading.grammar || loading.annotate) && <Spinner />}</h3>
               <div className="dock-scroll">
               {grammar.map((g, i) => { const a = anchorStore.anchors.find(x => x.id === `g${i}-${g.from}`); const st = LANG_STYLE.grammar; return <div key={`g${i}`} className={`dock-item ${g.stale ? 'stale' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label} · LT</div><span className="quote-serif">{g.quote || ''}</span><div className="reason-text">{g.message}</div>{g.replacements[0] && <div className="replacement-text" style={{ color: st.color }}>→ {g.replacements[0]}</div>}</div> })}
@@ -657,6 +638,13 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               </div>
               {suggestions.length > 0 && <div className="dock-foot"><button onClick={() => clearGhost()}>Dismiss <span className="kbd">Esc</span></button></div>}
             </div>
+            {editing && <div className="dock dock-section"><h3>Lint results {loading.lint && <Spinner />}</h3>
+              <div className="dock-scroll">
+              {[...lintResults].sort((a, b) => (LINT_PRIORITY[a.color_category] ?? 9) - (LINT_PRIORITY[b.color_category] ?? 9)).map(r => { const rule = LINTER_RULE_LIBRARY.find(x => x.id === r.rule_id); return <div key={r.uid} className="dock-item" onMouseDown={e => e.preventDefault()} onClick={() => openLintGroup(r)}><div className="kind-label" style={{ color: `var(--lint-${r.color_category})` }}>{LINT_COLORS[r.color_category]?.label || r.color_category} · {rule?.name || r.rule_id}</div><span className="quote-serif">{r.target}</span><div className="reason-text">{r.message}</div>{r.suggestion && <div className="replacement-text">→ {r.suggestion}</div>}</div> })}
+              {!lintResults.length && !loading.lint && <div className="meta">—</div>}
+              {loading.lint && !lintResults.length && <div className="meta"><LoadingDots /></div>}
+              </div><div className="dock-foot"><div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}><button className="primary" onMouseDown={e => e.preventDefault()} onClick={runLint}>{loading.lint ? 'Linting…' : 'Run lint'}</button><button onMouseDown={e => e.preventDefault()} onClick={() => setShowLibrary(true)}>Rule library</button></div>{lintStatus && <div className="meta" style={{ marginTop: 6 }}>{lintStatus}</div>}</div>
+            </div>}
           </>}
         </aside>
       </div>
@@ -676,8 +664,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
                 </div>)}
               </div>)}
               <div className="kind-label" style={{ color: 'var(--lint-violet)', fontSize: 12 }}>Custom rules · violet</div>
-              {customRules.map((t, i) => <div key={i} className="library-rule"><span className="tone-tag allow">✓ Enabled</span> <strong>CUSTOM_{String(i + 1).padStart(2, '0')}</strong><p>{t}</p></div>)}
-              {!customRules.length && <p className="meta">Add custom rules from Lint section — they run as violet rules.</p>}
+              {customRules.map((t, i) => <div key={i} className="library-rule"><span className="tone-tag allow">✓ Enabled</span> <strong>CUSTOM_{String(i + 1).padStart(2, '0')}</strong><button style={{ float: 'right' }} onClick={() => { const n = customRules.filter((_, j) => j !== i); setCustomRules(n); localStorage.setItem('byline.customRules', JSON.stringify(n)) }}>✕</button><p>{t}</p></div>)}
+              <div style={{ display: 'flex', gap: 6, marginTop: 10 }}><input style={{ flex: 1 }} value={customInput} onChange={e => setCustomInput(e.target.value)} placeholder="Add custom rule — e.g. no passive voice in headers" onKeyDown={e => { if (e.key === 'Enter' && customInput.trim()) { const n = [...customRules, customInput.trim()]; setCustomRules(n); localStorage.setItem('byline.customRules', JSON.stringify(n)); setCustomInput('') } }} /><button className="primary" onClick={() => { if (!customInput.trim()) return; const n = [...customRules, customInput.trim()]; setCustomRules(n); localStorage.setItem('byline.customRules', JSON.stringify(n)); setCustomInput('') }}>Add rule</button></div>
             </div>
           </div>
         </div>
