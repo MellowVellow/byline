@@ -179,7 +179,16 @@ async def lint(body: LintIn):
         rules = [{"id": r.id, "color": r.category, "rule": r.rule} for r in body.active_rules if r.id and r.rule]
         rule_map = {r["id"]: r["color"] for r in rules}
         s, u = prompts.lint_prompt(body.context, body.style, body.text, _json.dumps(rules))
-        data, usage, model = await llm.json_call(s, u, max_tokens=1400, temperature=0.3)
+        data, usage, model = None, {}, ""
+        last_err = None
+        for _attempt in range(2):  # one retry on parse/upstream hiccup
+            try:
+                data, usage, model = await llm.json_call(s, u, max_tokens=1800, temperature=0.3)
+                break
+            except Exception as e:  # noqa: BLE001
+                last_err = e
+        if data is None:
+            raise last_err or RuntimeError("lint LLM failed")
         out = []
         for it in data.get("lint_results", []):
             if not isinstance(it, dict):

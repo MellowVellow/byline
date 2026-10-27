@@ -7,6 +7,17 @@ async function post(path: string, body: unknown, signal?: AbortSignal): Promise<
     return d?.ok ? d : null
   } catch { return null }
 }
+async function postRaw(path: string, body: unknown, signal?: AbortSignal): Promise<any> {
+  try {
+    const r = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal })
+    const d = await r.json().catch(() => null)
+    if (d) return d
+    return { ok: false, error: `HTTP ${r.status} (no JSON from backend)` }
+  } catch (e: any) {
+    if (e?.name === 'AbortError') return { ok: false, aborted: true }
+    return { ok: false, error: `Cannot reach backend at ${BASE || 'same origin'} — is :8000 running?` }
+  }
+}
 export const api = {
   health: async () => { try { const r = await fetch(`${BASE}/api/health`); return r.ok ? await r.json() : null } catch { return null } },
   complete: (b: unknown, s?: AbortSignal) => post('/api/complete', b, s),
@@ -17,6 +28,6 @@ export const api = {
   synonyms: (b: unknown) => post('/api/synonyms', b),
   grammar: (b: unknown, s?: AbortSignal) => post('/api/grammar', b, s),
   readings: (b: unknown) => post('/api/readings', b),
-  lint: (b: unknown, s?: AbortSignal) => post('/api/lint', b, s),
+  lint: (b: unknown, s?: AbortSignal) => postRaw('/api/lint', b, s),
   waitlist: (email: string, note = '') => post('/api/waitlist', { email, note }),
 }

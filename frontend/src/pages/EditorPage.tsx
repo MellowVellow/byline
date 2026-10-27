@@ -84,18 +84,25 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [showLibrary, setShowLibrary] = useState(false)
   const [lintStatus, setLintStatus] = useState('')
   const lintRunRef = useRef<() => void>(() => {})
+  const lintAbortRef = useRef<AbortController | null>(null)
+  const lintPendingRef = useRef(false)
+  const lintBusyRef = useRef(false)
   const lintIdxRef = useRef(0); lintIdxRef.current = lintIdx
   async function runLint() {
+    if (lintBusyRef.current) { lintPendingRef.current = true; return } // single-flight: queue one rerun, never parallel lint calls
     if (!editor || modeStore.mode !== 'linting') return
     const tm = plain(); if (tm.text.trim().length < 20) { setLintStatus('Write at least a sentence, then Run lint.'); return }
     const active = [
       ...LINTER_RULE_LIBRARY.filter(r => enabledRules.has(r.id)).map(r => ({ id: r.id, category: r.color, rule: `${r.name}: ${r.instruction}` })),
       ...customRules.map((t, i) => ({ id: `CUSTOM_${String(i + 1).padStart(2, '0')}`, category: 'violet', rule: t })),
     ]
+    lintBusyRef.current = true
+    const ctl = new AbortController(); lintAbortRef.current = ctl
     setLoad('lint', true); setLintStatus('Linting…')
-    const d = await api.lint({ context: appliedRef.current.context, style: buildStyle(appliedRef.current), text: tm.text, active_rules: active })
-    setLoad('lint', false)
-    if (!d) setLintStatus('Lint failed — backend offline, text unchanged.')
+    const d = await api.lint({ context: appliedRef.current.context, style: buildStyle(appliedRef.current), text: tm.text, active_rules: active }, ctl.signal)
+    lintBusyRef.current = false; setLoad('lint', false)
+    if (ctl.signal.aborted) { if (lintPendingRef.current) { lintPendingRef.current = false; runLint() } return }
+    if (!d?.ok) { setLintStatus(`Lint failed — ${String(d?.error || 'unknown backend error').slice(0, 140)}`); if (lintPendingRef.current) { lintPendingRef.current = false; runLint() } return }
     const results: LintResult[] = (d?.lint_results || []).map((r: LintResult) => ({ ...r, uid: `${r.rule_id}:${r.target}:${Math.random().toString(36).slice(2, 7)}` }))
     if (d) setLintStatus(`${results.length} violation${results.length === 1 ? '' : 's'} · ${active.length} rules active`)
     setLintResults(results)
@@ -193,6 +200,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const editingRef = useRef(true); editingRef.current = editing
   function switchMode(m: Mode) {
     setMode(m); modeStore.mode = m; localStorage.setItem('byline.mode', m)
+    if (m !== 'linting') lintAbortRef.current?.abort()
     if (m === 'linting') {
       refs.current.abort?.abort(); clearTimeout(refs.current.timers.c); clearTimeout(refs.current.timers.g); clearTimeout(refs.current.timers.s)
       anchorStore.anchors = []; anchorStore.ranges = new Map(); anchorStore.linkedId = null; anchorStore.ghost = ''
