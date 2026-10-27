@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AURA — Bespoke Experience Survey</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts: Playfair Display & Lora -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet">
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Tone.js for optional subtle elegant audio chimes -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        serif: ['"Playfair Display"', 'Georgia', 'serif'],
+                        body: ['"Lora"', 'serif'],
+                    },
+                    colors: {
+                        cream: '#FDFBF7',
+                        linen: '#F4F0EA',
+                        charcoal: '#141413',
+                        darkcard: '#1C1C1A',
+                        gold: '#C5A059',
+                        goldhover: '#B38E46',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Base typography & scrollbar */
+        body {
+            font-family: 'Lora', serif;
+            transition: background-color 0.4s ease, color 0.4s ease;
+        }
+
+        h1, h2, h3, h4, .font-serif-title {
+            font-family: 'Playfair Display', serif;
+        }
+
+        /* Keyframe Animations for Questions sliding in from top */
+        @keyframes slideDownFadeIn {
+            0% {
+                opacity: 0;
+                transform: translateY(-32px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideUpFadeOut {
+            0% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+        }
+
+        .animate-slide-down {
+            animation: slideDownFadeIn 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .animate-slide-out {
+            animation: slideUpFadeOut 0.35s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+        }
+
+        /* Staggered entrance for list options */
+        .stagger-option {
+            opacity: 0;
+            animation: slideDownFadeIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        /* Custom subtle scrollbar */
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(197, 160, 89, 0.3);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(197, 160, 89, 0.6);
+        }
+
+        /* Custom radio check visual */
+        .option-card {
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .option-card:hover {
+            transform: translateY(-2px);
+        }
+        .option-card.selected {
+            border-color: #C5A059 !important;
+            box-shadow: 0 4px 20px -2px rgba(197, 160, 89, 0.15);
+        }
+    </style>
+</head>
+<body class="bg-cream dark:bg-charcoal text-stone-900 dark:text-stone-100 min-h-screen flex flex-col justify-between selection:bg-gold/20 selection:text-gold">
+
+    <!-- TOP HEADER / BRANDING NAVIGATION -->
+    <header class="w-full max-w-4xl mx-auto px-6 py-8 flex items-center justify-between border-b border-stone-200/60 dark:border-stone-800/60">
+        <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 rounded-full border border-gold/40 flex items-center justify-center text-gold font-serif italic text-sm font-semibold">
+                A
+            </div>
+            <span class="font-serif tracking-widest text-xs uppercase text-stone-500 dark:text-stone-400 font-semibold">AURA Studio</span>
+        </div>
+
+        <div class="flex items-center space-x-4">
+            <!-- Audio Chime Toggle -->
+            <button id="audioToggleBtn" title="Toggle soft chimes" aria-label="Toggle audio effects" class="p-2 text-stone-500 hover:text-gold dark:text-stone-400 dark:hover:text-gold transition-colors rounded-full hover:bg-stone-200/50 dark:hover:bg-stone-800/50">
+                <i data-lucide="volume-2" class="w-4 h-4"></i>
+            </button>
+
+            <!-- Theme Toggle -->
+            <button id="themeToggleBtn" title="Switch Theme" aria-label="Switch dark or light theme" class="p-2 text-stone-500 hover:text-gold dark:text-stone-400 dark:hover:text-gold transition-colors rounded-full hover:bg-stone-200/50 dark:hover:bg-stone-800/50">
+                <i data-lucide="moon" class="w-4 h-4 dark:hidden"></i>
+                <i data-lucide="sun" class="w-4 h-4 hidden dark:block"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT AREA CONTAINER -->
+    <main class="w-full max-w-2xl mx-auto px-6 py-8 md:py-12 flex-grow flex flex-col justify-center">
+
+        <!-- PROGRESS BAR & STEP INDICATOR -->
+        <div id="progressSection" class="mb-10 opacity-0 transition-opacity duration-500">
+            <div class="flex justify-between items-end mb-2">
+                <span id="stepCategory" class="text-xs uppercase tracking-widest text-gold font-semibold font-serif">Survey Progress</span>
+                <span id="stepCounter" class="text-xs font-serif text-stone-400 dark:text-stone-500">01 / 05</span>
+            </div>
+            <div class="w-full bg-stone-200 dark:bg-stone-800 h-0.5 rounded-full overflow-hidden">
+                <div id="progressBar" class="bg-gold h-full w-0 transition-all duration-500 ease-out"></div>
+            </div>
+        </div>
+
+        <!-- DYNAMIC SURVEY CONTAINER -->
+        <div id="surveyContainer" class="relative">
+            <!-- Steps are dynamically injected here via JavaScript -->
+        </div>
+
+    </main>
+
+    <!-- FOOTER / NAVIGATION CONTROLS -->
+    <footer class="w-full max-w-2xl mx-auto px-6 py-6 border-t border-stone-200/60 dark:border-stone-800/60 flex items-center justify-between">
+        <button id="prevBtn" onclick="survey.previousStep()" class="inline-flex items-center space-x-2 text-sm text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100 transition-colors disabled:opacity-0 disabled:pointer-events-none px-3 py-2">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            <span class="font-serif italic">Back</span>
+        </button>
+
+        <div id="keyboardHint" class="hidden sm:flex items-center space-x-1 text-[11px] text-stone-400 dark:text-stone-600 uppercase tracking-widest font-mono">
+            <span>Press</span>
+            <kbd class="px-1.5 py-0.5 bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-400 rounded text-[10px]">Enter ↵</kbd>
+        </div>
+
+        <button id="nextBtn" onclick="survey.nextStep()" class="inline-flex items-center space-x-2 bg-stone-900 hover:bg-gold text-white dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-gold dark:hover:text-white px-6 py-3 rounded-full font-serif text-sm tracking-wide transition-all duration-300 shadow-sm hover:shadow-md disabled:opacity-30 disabled:pointer-events-none">
+            <span id="nextBtnText">Continue</span>
+            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+    </footer>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // --- SURVEY QUESTIONS DATA CONFIGURATION ---
+        const surveyQuestions = [
+            {
+                id: 'welcome',
+                type: 'welcome',
+                category: 'Welcome',
+                title: 'Refinement through Reflection.',
+                subtitle: 'We invite you to share your perspective. Your feedback guides our pursuit of understated perfection and craftsmanship.',
+                estimatedTime: 'Takes ~2 minutes'
+            },
+            {
+                id: 'overall_satisfaction',
+                type: 'single',
+                category: '01. First Impression',
+                title: 'How would you describe your initial encounter with our platform?',
+                subtitle: 'Select the option that best resonates with your impression.',
+                options: [
+                    { label: 'Seamless & Inspiring', subtitle: 'Exceeded all expectations with flawless execution.', value: 'seamless' },
+                    { label: 'Elegantly Functional', subtitle: 'Clear, smooth, and well structured.', value: 'functional' },
+                    { label: 'Unremarkable', subtitle: 'Met basic needs without a memorable spark.', value: 'unremarkable' },
+                    { label: 'Needs Refinement', subtitle: 'Friction points hindered the overall experience.', value: 'needs_refinement' }
+                ]
+            },
+            {
+                id: 'nps_rating',
+                type: 'rating',
+                category: '02. Recommendation',
+                title: 'How likely are you to recommend AURA to a colleague or peer?',
+                subtitle: 'On a scale from 1 (Unlikely) to 10 (Extremely Likely).',
+                min: 1,
+                max: 10
+            },
+            {
+                id: 'key_highlights',
+                type: 'multiple',
+                category: '03. Key Elements',
+                title: 'Which aspects stood out most to you during your journey?',
+                subtitle: 'Select all that apply to your experience.',
+                options: [
+                    { label: 'Visual & Typography Aesthetics', value: 'aesthetics' },
+                    { label: 'Speed & Interaction Responsiveness', value: 'speed' },
+                    { label: 'Clarity of Content & Guidance', value: 'clarity' },
+                    { label: 'Attentive Customer Concierge', value: 'service' },
+                    { label: 'Product Curation & Quality', value: 'curation' }
+                ]
+            },
+            {
+                id: 'qualitative_feedback',
+                type: 'text',
+                category: '04. Perspective',
+                title: 'In your own words, what single detail could we elevate further?',
+                subtitle: 'Your candid thoughts are deeply valued.',
+                placeholder: 'Share your thoughts here...'
+            },
+            {
+                id: 'thankyou',
+                type: 'thankyou',
+                category: 'Complete',
+                title: 'With Grateful Appreciation.',
+                subtitle: 'Your insights have been recorded. Thank you for shaping the future of AURA.'
+            }
+        ];
+
+        // --- AUDIO CONTROLLER (TONE.JS) ---
+        class SoundEffects {
+            constructor() {
+                this.enabled = true;
+                this.synth = null;
+                this.initTone();
+            }
+
+            initTone() {
+                try {
+                    this.synth = new Tone.PolySynth(Tone.Synth, {
+                        oscillator: { type: 'sine' },
+                        envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.4 }
+                    }).toDestination();
+                    this.synth.volume.value = -18; // Soft volume
+                } catch(e) {
+                    console.log('Audio init postponed');
+                }
+            }
+
+            playSoftChime(note = 'C5') {
+                if (!this.enabled) return;
+                try {
+                    if (Tone.context.state !== 'running') {
+                        Tone.start();
+                    }
+                    if (this.synth) {
+                        this.synth.triggerAttackRelease(note, '8n');
+                    }
+                } catch(e) {}
+            }
+
+            playSuccess() {
+                if (!this.enabled) return;
+                try {
+                    if (Tone.context.state !== 'running') Tone.start();
+                    if (this.synth) {
+                        const now = Tone.now();
+                        this.synth.triggerAttackRelease('E5', '8n', now);
+                        this.synth.triggerAttackRelease('G#5', '8n', now + 0.12);
+                        this.synth.triggerAttackRelease('B5', '4n', now + 0.24);
+                    }
+                } catch(e) {}
+            }
+        }
+
+        const sounds = new SoundEffects();
+
+        // --- SURVEY STATE ENGINE ---
+        class SurveyEngine {
+            constructor(questions) {
+                this.questions = questions;
+                this.currentStepIndex = 0;
+                this.answers = {};
+                this.container = document.getElementById('surveyContainer');
+                this.prevBtn = document.getElementById('prevBtn');
+                this.nextBtn = document.getElementById('nextBtn');
+                this.nextBtnText = document.getElementById('nextBtnText');
+                this.progressSection = document.getElementById('progressSection');
+                this.progressBar = document.getElementById('progressBar');
+                this.stepCounter = document.getElementById('stepCounter');
+                this.stepCategory = document.getElementById('stepCategory');
+
+                this.init();
+            }
+
+            init() {
+                this.renderStep(this.currentStepIndex);
+                this.setupKeyboardListeners();
+            }
+
+            get currentQuestion() {
+                return this.questions[this.currentStepIndex];
+            }
+
+            get totalSteps() {
+                // Exclude welcome and thank you from numerical step total
+                return this.questions.filter(q => q.type !== 'welcome' && q.type !== 'thankyou').length;
+            }
+
+            getCurrentStepNumber() {
+                if (this.currentQuestion.type === 'welcome') return 0;
+                if (this.currentQuestion.type === 'thankyou') return this.totalSteps;
+                let num = 0;
+                for (let i = 0; i <= this.currentStepIndex; i++) {
+                    if (this.questions[i].type !== 'welcome' && this.questions[i].type !== 'thankyou') {
+                        num++;
+                    }
+                }
+                return num;
+            }
+
+            updateProgress() {
+                const currentNum = this.getCurrentStepNumber();
+                const total = this.totalSteps;
+
+                if (this.currentQuestion.type === 'welcome' || this.currentQuestion.type === 'thankyou') {
+                    this.progressSection.classList.add('opacity-0');
+                } else {
+                    this.progressSection.classList.remove('opacity-0');
+                    const percent = (currentNum / total) * 100;
+                    this.progressBar.style.width = `${percent}%`;
+                    this.stepCounter.innerText = `0${currentNum} / 0${total}`;
+                    this.stepCategory.innerText = this.currentQuestion.category || 'Survey';
+                }
+            }
+
+            updateNavButtons() {
+                const q = this.currentQuestion;
+
+                // Back button visibility
+                if (this.currentStepIndex === 0 || q.type === 'thankyou') {
+                    this.prevBtn.disabled = true;
+                } else {
+                    this.prevBtn.disabled = false;
+                }
+
+                // Next button behavior and title
+                if (q.type === 'welcome') {
+                    this.nextBtnText.innerText = 'Begin Survey';
+                    this.nextBtn.disabled = false;
+                } else if (q.type === 'thankyou') {
+                    this.nextBtnText.innerText = 'Restart';
+                    this.nextBtn.disabled = false;
+                } else if (this.currentStepIndex === this.questions.length - 2) {
+                    this.nextBtnText.innerText = 'Submit';
+                    this.nextBtn.disabled = !this.isStepValid();
+                } else {
+                    this.nextBtnText.innerText = 'Continue';
+                    this.nextBtn.disabled = !this.isStepValid();
+                }
+
+                // Hide keyboard hint on intro/outro
+                const hint = document.getElementById('keyboardHint');
+                if (q.type === 'welcome' || q.type === 'thankyou') {
+                    hint.classList.add('hidden');
+                } else {
+                    hint.classList.remove('hidden');
+                }
+            }
+
+            isStepValid() {
+                const q = this.currentQuestion;
+                if (q.type === 'welcome' || q.type === 'thankyou') return true;
+                const val = this.answers[q.id];
+                if (q.type === 'single' || q.type === 'rating') {
+                    return val !== undefined && val !== null && val !== '';
+                }
+                if (q.type === 'multiple') {
+                    return Array.isArray(val) && val.length > 0;
+                }
+                if (q.type === 'text') {
+                    return true; // Optional text or valid if typed
+                }
+                return true;
+            }
+
+            renderStep(index) {
+                const q = this.questions[index];
+                this.updateProgress();
+                this.updateNavButtons();
+
+                let contentHtml = '';
+
+                if (q.type === 'welcome') {
+                    contentHtml = `
+                        <div class="animate-slide-down space-y-6 text-center py-6">
+                            <span class="inline-block px-3 py-1 bg-stone-200/60 dark:bg-stone-800/60 text-gold text-xs font-serif italic rounded-full border border-gold/20">
+                                ${q.estimatedTime}
+                            </span>
+                            <h1 class="text-4xl sm:text-5xl md:text-6xl font-serif text-stone-900 dark:text-stone-100 leading-tight tracking-tight">
+                                ${q.title}
+                            </h1>
+                            <p class="text-stone-600 dark:text-stone-400 font-body text-base sm:text-lg max-w-xl mx-auto leading-relaxed italic">
+                                "${q.subtitle}"
+                            </p>
+                            <div class="pt-6">
+                                <button onclick="survey.nextStep()" class="inline-flex items-center space-x-3 bg-stone-900 hover:bg-gold text-white dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-gold dark:hover:text-white px-8 py-4 rounded-full font-serif text-base tracking-wide transition-all duration-300 shadow-md">
+                                    <span>Begin Reflection</span>
+                                    <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                } 
+                else if (q.type === 'single') {
+                    const currentVal = this.answers[q.id];
+                    contentHtml = `
+                        <div class="animate-slide-down space-y-8">
+                            <div class="space-y-2">
+                                <h2 class="text-2xl sm:text-3xl md:text-4xl font-serif text-stone-900 dark:text-stone-100 leading-snug">
+                                    ${q.title}
+                                </h2>
+                                <p class="text-stone-500 dark:text-stone-400 font-body text-sm sm:text-base italic">
+                                    ${q.subtitle}
+                                </p>
+                            </div>
+
+                            <div class="space-y-3">
+                                ${q.options.map((opt, i) => {
+                                    const isSelected = currentVal === opt.value;
+                                    const delay = i * 0.08;
+                                    return `
+                                        <div 
+                                            onclick="survey.selectSingle('${q.id}', '${opt.value}')"
+                                            style="animation-delay: ${delay}s"
+                                            class="stagger-option option-card cursor-pointer p-5 rounded-xl border border-stone-200 dark:border-stone-800 bg-white/40 dark:bg-darkcard/40 hover:border-gold/60 dark:hover:border-gold/60 flex items-start justify-between group ${isSelected ? 'selected border-gold bg-stone-50 dark:bg-stone-900/40' : ''}"
+                                        >
+                                            <div class="space-y-1 pr-4">
+                                                <div class="font-serif text-base font-medium text-stone-900 dark:text-stone-100 group-hover:text-gold transition-colors">
+                                                    ${opt.label}
+                                                </div>
+                                                ${opt.subtitle ? `<div class="text-xs text-stone-500 dark:text-stone-400 font-body italic">${opt.subtitle}</div>` : ''}
+                                            </div>
+                                            <div class="w-5 h-5 rounded-full border border-stone-300 dark:border-stone-700 flex items-center justify-center mt-0.5 group-hover:border-gold transition-colors ${isSelected ? 'border-gold bg-gold text-white' : ''}">
+                                                ${isSelected ? '<i data-lucide="check" class="w-3 h-3 text-white"></i>' : ''}
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `;
+                } 
+                else if (q.type === 'rating') {
+                    const currentVal = this.answers[q.id];
+                    contentHtml = `
+                        <div class="animate-slide-down space-y-10">
+                            <div class="space-y-2">
+                                <h2 class="text-2xl sm:text-3xl md:text-4xl font-serif text-stone-900 dark:text-stone-100 leading-snug">
+                                    ${q.title}
+                                </h2>
+                                <p class="text-stone-500 dark:text-stone-400 font-body text-sm sm:text-base italic">
+                                    ${q.subtitle}
+                                </p>
+                            </div>
+
+                            <div class="space-y-4">
+                                <div class="grid grid-cols-5 sm:grid-cols-10 gap-2">
+                                    ${Array.from({ length: 10 }, (_, i) => i + 1).map(num => {
+                                        const isSelected = currentVal === num;
+                                        return `
+                                            <button 
+                                                type="button"
+                                                onclick="survey.selectRating('${q.id}', ${num})"
+                                                class="h-14 rounded-lg font-serif text-base transition-all duration-200 border border-stone-200 dark:border-stone-800 flex items-center justify-center hover:border-gold hover:text-gold ${isSelected ? 'bg-gold text-white border-gold shadow-md font-semibold scale-105' : 'bg-white/40 dark:bg-darkcard/40 text-stone-800 dark:text-stone-200'}"
+                                            >
+                                                ${num}
+                                            </button>
+                                        `;
+                                    }).join('')}
+                                </div>
+                                <div class="flex justify-between text-xs text-stone-400 dark:text-stone-500 font-serif italic px-1">
+                                    <span>1 — Unlikely</span>
+                                    <span>10 — Highly Likely</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                else if (q.type === 'multiple') {
+                    const currentVals = this.answers[q.id] || [];
+                    contentHtml = `
+                        <div class="animate-slide-down space-y-8">
+                            <div class="space-y-2">
+                                <h2 class="text-2xl sm:text-3xl md:text-4xl font-serif text-stone-900 dark:text-stone-100 leading-snug">
+                                    ${q.title}
+                                </h2>
+                                <p class="text-stone-500 dark:text-stone-400 font-body text-sm sm:text-base italic">
+                                    ${q.subtitle}
+                                </p>
+                            </div>
+
+                            <div class="space-y-3">
+                                ${q.options.map((opt, i) => {
+                                    const isSelected = currentVals.includes(opt.value);
+                                    const delay = i * 0.07;
+                                    return `
+                                        <div 
+                                            onclick="survey.toggleMultiple('${q.id}', '${opt.value}')"
+                                            style="animation-delay: ${delay}s"
+                                            class="stagger-option option-card cursor-pointer p-5 rounded-xl border border-stone-200 dark:border-stone-800 bg-white/40 dark:bg-darkcard/40 hover:border-gold/60 dark:hover:border-gold/60 flex items-center justify-between group ${isSelected ? 'selected border-gold bg-stone-50 dark:bg-stone-900/40' : ''}"
+                                        >
+                                            <span class="font-serif text-base text-stone-900 dark:text-stone-100 group-hover:text-gold transition-colors">
+                                                ${opt.label}
+                                            </span>
+                                            <div class="w-5 h-5 rounded border border-stone-300 dark:border-stone-700 flex items-center justify-center group-hover:border-gold transition-colors ${isSelected ? 'border-gold bg-gold text-white' : ''}">
+                                                ${isSelected ? '<i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>' : ''}
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+                else if (q.type === 'text') {
+                    const currentVal = this.answers[q.id] || '';
+                    contentHtml = `
+                        <div class="animate-slide-down space-y-8">
+                            <div class="space-y-2">
+                                <h2 class="text-2xl sm:text-3xl md:text-4xl font-serif text-stone-900 dark:text-stone-100 leading-snug">
+                                    ${q.title}
+                                </h2>
+                                <p class="text-stone-500 dark:text-stone-400 font-body text-sm sm:text-base italic">
+                                    ${q.subtitle}
+                                </p>
+                            </div>
+
+                            <div class="pt-2">
+                                <textarea 
+                                    id="textInput"
+                                    rows="4"
+                                    oninput="survey.handleTextInput('${q.id}', this.value)"
+                                    placeholder="${q.placeholder}"
+                                    class="w-full bg-transparent border-b-2 border-stone-300 dark:border-stone-700 focus:border-gold dark:focus:border-gold text-stone-900 dark:text-stone-100 font-body text-lg focus:outline-none transition-colors py-3 resize-none placeholder:text-stone-400 dark:placeholder:text-stone-600 placeholder:italic"
+                                >${currentVal}</textarea>
+                            </div>
+                        </div>
+                    `;
+                }
+                else if (q.type === 'thankyou') {
+                    contentHtml = `
+                        <div class="animate-slide-down space-y-8 text-center py-4">
+                            <div class="w-16 h-16 mx-auto rounded-full bg-stone-200/50 dark:bg-stone-800/50 border border-gold/40 flex items-center justify-center text-gold">
+                                <i data-lucide="check-circle-2" class="w-8 h-8"></i>
+                            </div>
+
+                            <div class="space-y-3">
+                                <h2 class="text-4xl sm:text-5xl font-serif text-stone-900 dark:text-stone-100">
+                                    ${q.title}
+                                </h2>
+                                <p class="text-stone-500 dark:text-stone-400 font-body text-base max-w-md mx-auto italic">
+                                    "${q.subtitle}"
+                                </p>
+                            </div>
+
+                            <!-- SUMMARY BREAKDOWN CARD -->
+                            <div class="text-left bg-white/40 dark:bg-darkcard/40 border border-stone-200 dark:border-stone-800 rounded-2xl p-6 space-y-4 max-w-lg mx-auto shadow-sm">
+                                <h3 class="font-serif text-xs uppercase tracking-widest text-gold font-semibold border-b border-stone-200 dark:border-stone-800 pb-2">
+                                    Summary of Reflection
+                                </h3>
+                                
+                                <div class="space-y-3 text-sm">
+                                    <div>
+                                        <span class="text-stone-400 font-body block text-xs">First Impression</span>
+                                        <span class="font-serif text-stone-900 dark:text-stone-200 capitalize">${this.getOptionLabel('overall_satisfaction', this.answers['overall_satisfaction'])}</span>
+                                    </div>
+                                    <div>
+                                        <span class="text-stone-400 font-body block text-xs">Likelihood to Recommend</span>
+                                        <span class="font-serif text-stone-900 dark:text-stone-200">${this.answers['nps_rating'] || 'N/A'} / 10</span>
+                                    </div>
+                                    <div>
+                                        <span class="text-stone-400 font-body block text-xs">Highlighted Aspects</span>
+                                        <span class="font-serif text-stone-900 dark:text-stone-200">${this.getMultipleLabels('key_highlights', this.answers['key_highlights'])}</span>
+                                    </div>
+                                    ${this.answers['qualitative_feedback'] ? `
+                                        <div>
+                                            <span class="text-stone-400 font-body block text-xs">Personal Feedback</span>
+                                            <p class="font-body italic text-stone-700 dark:text-stone-300 text-xs mt-0.5">"${this.answers['qualitative_feedback']}"</p>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+
+                            <div class="pt-4">
+                                <button onclick="survey.restart()" class="inline-flex items-center space-x-2 text-xs font-serif uppercase tracking-widest text-stone-500 hover:text-gold dark:text-stone-400 dark:hover:text-gold transition-colors">
+                                    <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                                    <span>Submit Another Response</span>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                this.container.innerHTML = contentHtml;
+                lucide.createIcons();
+
+                // Focus text input if on text step
+                if (q.type === 'text') {
+                    setTimeout(() => {
+                        const input = document.getElementById('textInput');
+                        if (input) input.focus();
+                    }, 200);
+                }
+            }
+
+            getOptionLabel(questionId, val) {
+                const q = this.questions.find(item => item.id === questionId);
+                if (!q || !q.options) return val || 'None';
+                const found = q.options.find(o => o.value === val);
+                return found ? found.label : val;
+            }
+
+            getMultipleLabels(questionId, vals) {
+                if (!Array.isArray(vals) || vals.length === 0) return 'None selected';
+                const q = this.questions.find(item => item.id === questionId);
+                if (!q || !q.options) return vals.join(', ');
+                return vals.map(v => {
+                    const f = q.options.find(o => o.value === v);
+                    return f ? f.label : v;
+                }).join(', ');
+            }
+
+            selectSingle(questionId, val) {
+                this.answers[questionId] = val;
+                sounds.playSoftChime('E5');
+                this.renderStep(this.currentStepIndex);
+                
+                // Auto-advance after small graceful delay
+                setTimeout(() => {
+                    this.nextStep();
+                }, 350);
+            }
+
+            selectRating(questionId, val) {
+                this.answers[questionId] = val;
+                sounds.playSoftChime('G5');
+                this.renderStep(this.currentStepIndex);
+
+                // Auto advance
+                setTimeout(() => {
+                    this.nextStep();
+                }, 350);
+            }
+
+            toggleMultiple(questionId, val) {
+                let current = this.answers[questionId] || [];
+                if (current.includes(val)) {
+                    current = current.filter(item => item !== val);
+                } else {
+                    current.push(val);
+                }
+                this.answers[questionId] = current;
+                sounds.playSoftChime('A4');
+                this.renderStep(this.currentStepIndex);
+            }
+
+            handleTextInput(questionId, val) {
+                this.answers[questionId] = val;
+                this.updateNavButtons();
+            }
+
+            nextStep() {
+                if (this.currentStepIndex < this.questions.length - 1) {
+                    // Trigger slide out animation
+                    const currentElem = this.container.firstElementChild;
+                    if (currentElem) {
+                        currentElem.classList.remove('animate-slide-down');
+                        currentElem.classList.add('animate-slide-out');
+                    }
+
+                    setTimeout(() => {
+                        this.currentStepIndex++;
+                        if (this.currentQuestion.type === 'thankyou') {
+                            sounds.playSuccess();
+                        } else {
+                            sounds.playSoftChime('C5');
+                        }
+                        this.renderStep(this.currentStepIndex);
+                    }, 300);
+                } else if (this.currentQuestion.type === 'thankyou') {
+                    this.restart();
+                }
+            }
+
+            previousStep() {
+                if (this.currentStepIndex > 0) {
+                    const currentElem = this.container.firstElementChild;
+                    if (currentElem) {
+                        currentElem.classList.remove('animate-slide-down');
+                        currentElem.classList.add('animate-slide-out');
+                    }
+
+                    setTimeout(() => {
+                        this.currentStepIndex--;
+                        sounds.playSoftChime('A4');
+                        this.renderStep(this.currentStepIndex);
+                    }, 300);
+                }
+            }
+
+            restart() {
+                this.answers = {};
+                this.currentStepIndex = 0;
+                this.renderStep(0);
+            }
+
+            setupKeyboardListeners() {
+                document.addEventListener('keydown', (e) => {
+                    // Don't intercept enter inside textarea unless Shift is pressed
+                    if (e.key === 'Enter') {
+                        if (document.activeElement.tagName === 'TEXTAREA' && !e.ctrlKey && !e.metaKey) {
+                            return;
+                        }
+                        e.preventDefault();
+                        if (this.isStepValid()) {
+                            this.nextStep();
+                        }
+                    }
+                });
+            }
+        }
+
+        // --- THEME ENGINE ---
+        const themeToggleBtn = document.getElementById('themeToggleBtn');
+        themeToggleBtn.addEventListener('click', () => {
+            document.documentElement.classList.toggle('dark');
+        });
+
+        // --- AUDIO TOGGLE ENGINE ---
+        const audioToggleBtn = document.getElementById('audioToggleBtn');
+        audioToggleBtn.addEventListener('click', () => {
+            sounds.enabled = !sounds.enabled;
+            audioToggleBtn.classList.toggle('text-gold', sounds.enabled);
+            audioToggleBtn.classList.toggle('opacity-50', !sounds.enabled);
+        });
+
+        // Initialize survey when DOM is ready
+        let survey;
+        window.addEventListener('DOMContentLoaded', () => {
+            survey = new SurveyEngine(surveyQuestions);
+        });
+    </script>
+</body>
+</html>

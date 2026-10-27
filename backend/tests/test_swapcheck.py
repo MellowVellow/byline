@@ -22,3 +22,9 @@ def test_an_agreement():
 def test_determiner_to_determiner_ok():
     t3 = "Many reasons exist."
     assert slot_ok(t3, 0, "Many", "Several")
+
+from app.swapcheck import match_case
+
+def test_match_case_preserves_capital():
+    assert match_case("Plethora", "lot") == "Lot"
+    assert match_case("plethora", "Lot") == "Lot"

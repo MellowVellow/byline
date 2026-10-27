@@ -66,11 +66,17 @@ async def lt_rule_counts(sentence: str) -> Counter | None:
 def adds_error(base: Counter, cand: Counter) -> bool:
     return any(cand[k] > base.get(k, 0) for k in cand)
 
-async def swap_ok(text: str, quote: str, replacement: str, _cache: dict | None = None) -> bool:
-    """Full check for replacing first exact occurrence of quote in text."""
+async def swap_ok(text: str, quote: str, replacement: str, _cache: dict | None = None, context: str = "") -> bool:
+    """Full check for replacing the context-located occurrence of quote in text."""
     if not replacement:
         return True
-    idx = text.find(quote)
+    idx = -1
+    if context:
+        ci = text.find(context)
+        if ci >= 0:
+            qi = context.find(quote)
+            if qi >= 0: idx = ci + qi
+    if idx < 0: idx = text.find(quote)
     if idx < 0:
         return False
     if not slot_ok(text, idx, quote, replacement):
@@ -94,3 +100,13 @@ async def swap_ok(text: str, quote: str, replacement: str, _cache: dict | None =
     if cand is None:
         return True
     return not adds_error(base, cand)
+
+
+def match_case(quote: str, replacement: str) -> str:
+    """Preserve capitalization pattern of quote on replacement."""
+    if not replacement: return replacement
+    if quote[:1].isupper() and replacement[:1].islower():
+        return replacement[:1].upper() + replacement[1:]
+    if quote.isupper() and len(quote) > 1:
+        return replacement.upper()
+    return replacement

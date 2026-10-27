@@ -17,15 +17,21 @@ import { textFragmentUrl } from '../lib/link'
 import { sentenceCase } from '../lib/case'
 import { LINTER_RULE_LIBRARY, LINT_COLORS, LINT_PRIORITY, type LintResult } from '../lib/rules'
 import Diagram, { type DiagramNode } from '../components/Diagram'
-import { researchUpload, transcribeWav } from '../lib/api'
-import { recordWav } from '../lib/wav'
+import Outline from '../components/Outline'
+import SetupWizard from '../components/SetupWizard'
+import SourcesLibrary from '../components/SourcesLibrary'
+import { sfxSuccess } from '../lib/sfx'
+import { TableOfContents, getHierarchicalIndexes, type TableOfContentData } from '@tiptap/extension-table-of-contents'
+import { PageBreak, Footnote, collectFootnotes } from '../editor/extensions'
+import { exportDocx } from '../lib/docx-export'
+import { researchUpload } from '../lib/api'
 import type { Fact } from '../lib/types'
+import { blip, sfxEnabled, setSfxEnabled } from '../lib/sfx'
 
 const DICTIONS = ['Formal', 'Casual', 'Slang', 'Simple', 'General', 'Academic', 'Technical', 'Buzzwords', 'Bullshitting']
-const DICTION_EXAMPLE: Record<string, string> = { Formal: 'are not angry', Casual: "aren't mad", Slang: "ain't ticked" }
 const TONES = ['Serious', 'Humorous', 'Sarcastic', 'Bleak and oppressive', 'Objective', 'Subjective', 'Logical', 'Emotional', 'Intimate', 'Distant', 'Journal', 'Formal conference speech']
 const VOICE_PRESETS = ["Ernest Hemingway — minimalist, direct prose, short declarative sentences, no adornment", "F. Scott Fitzgerald (The Great Gatsby) — lyrical, rich with symbolic imagery, long musical sentences", "Gen Z style — emotionally expressive, internet-native, casual, still readable", "Poem / Poetic — exaggerated, lyrical imagery, sometimes meta, rhythm over exposition"]
-const RHYTHMS = ['', 'Staccato — short independent clauses (urgency, may turn robotic)', 'Varied — forced mix of short (<8 words) and long (>20 words) sentences', 'Flowing (Legato) — long compound-complex sentences, rhythmic punctuation']
+const RHYTHMS = ['', 'Staccato', 'Varied', 'Flowing']
 const TRANSITIONS: Record<string, string[]> = {
   'Introduction / framing': ['To begin with, []', 'Regarding [], ', 'In this context, []', 'This essay argues that []', 'Recent studies suggest that []'],
   'Addition / similarity': ['Furthermore, []', 'Moreover, []', 'Similarly, []', 'Likewise, []', 'In addition, []'],
@@ -96,9 +102,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [researchUrl, setResearchUrl] = useState('')
   const [researchQ, setResearchQ] = useState('')
   const [wizardOpen, setWizardOpen] = useState(false)
+  const [sfxOn, setSfxOn] = useState(sfxEnabled())
   const [answers, setAnswers] = useState({ goal: '', doc_type: 'essay', audience: '', audience_level: 3, key_points: '', voice_note: '' })
-  const [recField, setRecField] = useState('')
-  const recRef = useRef<any>(null)
   const [lintEnabled, setLintEnabled] = useState(localStorage.getItem('byline.lintEnabled') === '1')
   const lintEnabledRef = useRef(false); lintEnabledRef.current = lintEnabled
   function toggleLint() {
@@ -199,8 +204,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [issues, setIssues] = useState<Issue[]>([])
   const [reactions, setReactions] = useState<Reaction[]>([])
   const [grammar, setGrammar] = useState<GrammarMatch[]>([])
-  const [readings, setReadings] = useState<Reading[]>([])
+  const factsKey = demo ? 'byline.facts.demo' : 'byline.facts.app'
+  const readingsKey = demo ? 'byline.readings.demo' : 'byline.readings.app'
+  const [readings, setReadings] = useState<Reading[]>(() => { try { return JSON.parse(localStorage.getItem(demo ? 'byline.readings.demo' : 'byline.readings.app') || '[]') } catch { return [] } })
+  const [showSources, setShowSources] = useState(false)
+  useEffect(() => { try { localStorage.setItem(factsKey, JSON.stringify(facts)) } catch { /* full/blocked */ } }, [facts, factsKey])
+  useEffect(() => { try { localStorage.setItem(readingsKey, JSON.stringify(readings.slice(0, 40))) } catch { /* full/blocked */ } }, [readings, readingsKey])
   const [outline, setOutline] = useState<OutlineItem[]>([])
+  const [toc, setToc] = useState<TableOfContentData>([])
   const [mainIdea, setMainIdea] = useState('')
   const [selected, setSelected] = useState<Anchor | null>(null)
   const [popupGroup, setPopupGroup] = useState<Anchor[]>([])
@@ -227,11 +238,11 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [suggHistory, setSuggHistory] = useState<string[]>(savedSugg?.history || [])
   useEffect(() => { localStorage.setItem(suggKey, JSON.stringify({ current: suggestions, history: suggHistory, idx: ghostIdx })) }, [suggestions, suggHistory, ghostIdx, suggKey])
   type Mode = 'drafting' | 'editing'
-  const [mode, setMode] = useState<Mode>(() => { const v = localStorage.getItem('byline.mode'); return v === 'straight' || v === 'drafting' ? 'drafting' : 'editing' })
+  const [mode, setMode] = useState<Mode>(() => { const v = localStorage.getItem('byline.mode'); return v === 'editing' ? 'editing' : 'drafting' })
   modeStore.mode = mode
   const editing = mode === 'editing'
   const editingRef = useRef(true); editingRef.current = editing
-  function switchMode(m: Mode) {
+  function switchMode(m: Mode) { blip('mode')
     setMode(m); modeStore.mode = m; localStorage.setItem('byline.mode', m)
     if (m === 'drafting') setRightTab('suggest')
     if (m !== 'editing') lintAbortRef.current?.abort()
@@ -273,7 +284,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const n = { spelling: [...dictRef.current.spelling], ignore: [...dictRef.current.ignore] }
     if (!n[list].some(x => x.toLowerCase() === w.toLowerCase())) n[list].push(w)
     saveDict(n)
-    setGrammar(xs => xs.filter(g => (g.quote || '').toLowerCase() !== w.toLowerCase()))
+    setGrammar(xs => xs.filter(g => (g.quote || '').toLowerCase() !== w.toLowerCase())); setIssues(xs => xs.filter(i => i.quote.trim().toLowerCase() !== w.toLowerCase()))
     closePopup()
   }
   function exportAdditions() {
@@ -288,10 +299,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   useEffect(() => { refs.current.idx = ghostIdx }, [ghostIdx])
 
   const record = (patch: any) => setMetrics((m: any) => { const n = { ...m }; for (const k in patch) n[k] = typeof patch[k] === 'function' ? patch[k](m[k] || 0) : patch[k]; localStorage.setItem('byline.metrics.v3', JSON.stringify(n)); return n })
-  function resetMetrics() { const n = { offered: 0, accepted: 0, dismissed: 0, msTotal: 0, msCount: 0 }; localStorage.setItem('byline.metrics.v3', JSON.stringify(n)); setMetrics(n) }
 
   const editor = useEditor({
-    extensions: [StarterKit, AnchorDecorations, Highlight, TextAlign.configure({ types: ['heading', 'paragraph'] }), CharacterCount],
+    extensions: [
+      StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5, 6] } }),
+      AnchorDecorations, Highlight, TextAlign.configure({ types: ['heading', 'paragraph'] }), CharacterCount,
+      PageBreak, Footnote,
+      TableOfContents.configure({ getIndex: getHierarchicalIndexes, onUpdate: (data) => setToc([...data]) }),
+    ],
     editorProps: { attributes: { spellcheck: 'false', autocorrect: 'off', autocapitalize: 'off' } },
     content: demo ? SAMPLE_DOC : (saved?.html || '<p></p>'),
     onSelectionUpdate: ({ editor }) => { setTick(t => t + 1); const pos = editor.state.selection.from; const movedBack = pos < prevPosRef.current; prevPosRef.current = pos; if (movedBack) (refs.current as any).suppressAuto = true; if (movedBack) { if (groupRef.current.length) refs.current.fns.closePopup?.(); if (anchorStore.ghost) refs.current.fns.clearGhost?.() } else if (anchorStore.ghost && pos !== anchorStore.ghostPos) refs.current.fns.clearGhost?.() },
@@ -315,7 +330,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     if (!editor) return
     const tm = docToText(editor); const anchors: Anchor[] = []
     grammar.filter(g => !g.stale).forEach((g, i) => anchors.push({ id: `g${i}-${g.from}`, kind: 'grammar', tone: 'grammar', quote: tm.text.slice(g.from, g.to), context: tm.text.slice(Math.max(0, g.from - 30), g.to + 30), title: 'Grammar', detail: g.message, replacement: g.replacements[0] || '' }))
-    issues.filter(it => !it.stale).forEach(it => anchors.push({ id: it.id || nid(), kind: it.type === 'vocabulary' ? 'vocabulary' : 'relevance', tone: it.type, quote: it.quote, context: it.context, title: it.type === 'vocabulary' ? 'Word choice' : 'Cohesion', detail: it.reason, replacement: it.replacement }))
+    issues.filter(it => !it.stale).forEach(it => anchors.push({ id: it.id || nid(), kind: it.type === 'vocabulary' ? 'vocabulary' : 'relevance', tone: it.type, quote: it.quote, context: it.context, title: it.type === 'vocabulary' ? 'Word choice' : 'Cohesion', detail: it.reason, replacement: it.replacement, alternatives: it.alternatives }))
     reactions.filter(r => !r.stale).forEach(r => anchors.push({ id: r.id || nid(), kind: 'reaction', tone: r.kind, quote: r.quote, context: r.context, title: `Reader · ${REACTION_STYLE[r.kind]?.label || r.kind}`, detail: r.text }))
     readings.filter(r => !r.stale).forEach((r, i) => { if (r.claim_quote) anchors.push({ id: `c${i}`, kind: 'claim', quote: r.claim_quote, context: r.claim_context, title: `Source · ${r.label}`, detail: `${r.title} — ${r.why}`, url: r.url, excerpt: r.excerpt }) })
     anchorStore.anchors = anchors; anchorStore.ranges = new Map()
@@ -334,7 +349,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   }
   function archiveSuggestions(list: string[]) { if (list.length) setSuggHistory(h => [...list.filter(s => !h.includes(s)), ...h].slice(0, 30)) }
   function clearGhost(moveToHistory = true) { if (moveToHistory && refs.current.sugg.length) { record({ dismissed: (v: number) => v + 1 }); archiveSuggestions(refs.current.sugg) } anchorStore.ghost = ''; refs.current.sugg = []; setSuggestions([]); if (editor) syncGhost(editor) }
-  function acceptGhost(idx: number) {
+  function acceptGhost(idx: number) { blip('accept')
     if (!editor) return
     const s = refs.current.sugg[idx]; if (!s) return
     const pos = editor.state.selection.from; const before = editor.state.doc.textBetween(Math.max(0, pos - 1), pos)
@@ -350,7 +365,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const hit = anchorStore.anchors.filter(x => { const q = anchorStore.ranges.get(x.id); return q && q.from < r.to && r.from < q.to })
     return sortByLayer(hit.length ? hit : [a])
   }
-  function openGroup(group: Anchor[], x: number, y: number, start = 0, pinned = false) {
+  function openGroup(group: Anchor[], x: number, y: number, start = 0, pinned = false) { blip('open')
     if (!group.length) return
     if (editor) writerPosRef.current = editor.state.selection.from
     const idx = Math.min(start, group.length - 1); const active = group[idx]
@@ -403,7 +418,13 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     redraw(editor)
   }
   async function requestGrammar() { if (!editingRef.current || !editor) return; const tm = plain(); if (!tm.text.trim()) return; setLoad('grammar', true); const d = await api.grammar({ text: tm.text }); setLoad('grammar', false); if (d?.matches) { const seen = new Set<string>(); const fresh = d.matches.map((m: GrammarMatch) => ({ ...m, quote: tm.text.slice(m.from, m.to) })).filter((m: GrammarMatch) => { const k = `${m.from}-${m.to}`; if (seen.has(k)) return false; seen.add(k); return true }).filter((m: GrammarMatch) => { const w = (m.quote || '').trim().toLowerCase(); return !dictRef.current.ignore.some(x => x.toLowerCase() === w) && !dictRef.current.spelling.some(x => x.toLowerCase() === w) }); setGrammar(old => [...fresh, ...old.filter(o => !fresh.some((m: GrammarMatch) => m.from === o.from && m.to === o.to)).map(o => ({ ...o, stale: true }))].slice(0, 40)) } }
-  async function requestAnnotate() { if (!editingRef.current || !editor) return; const tm = plain(); if (tm.text.trim().length < 20) return; setLoad('annotate', true); const d = await api.annotate({ context: appliedRef.current.context, level: appliedRef.current.level, text: tm.text, style: buildStyle(appliedRef.current) }); setLoad('annotate', false); const fresh: Issue[] = d?.issues ? d.issues.map((i: Issue) => ({ ...i, id: nid() })) : (demo ? FALLBACK_ISSUES.map(i => ({ ...i, id: nid() })) : []); setIssues(old => [...fresh, ...old.filter(o => !fresh.some(f => f.quote === o.quote && f.type === o.type)).map(o => ({ ...o, stale: true }))].slice(0, 40)); setStale(false) }
+  async function requestAnnotate() { if (!editingRef.current || !editor) return; const tm = plain(); if (tm.text.trim().length < 20) return; setLoad('annotate', true); const d = await api.annotate({ context: appliedRef.current.context, level: appliedRef.current.level, text: tm.text, style: buildStyle(appliedRef.current) }); setLoad('annotate', false); let fresh: Issue[] = d?.issues ? d.issues.map((i: Issue) => ({ ...i, id: nid() })) : (demo ? FALLBACK_ISSUES.map(i => ({ ...i, id: nid() })) : []);
+    try {
+      const appliedPairs: any[] = JSON.parse(localStorage.getItem('byline.vocabApplied') || '[]')
+      const pref: Record<string, string> = JSON.parse(localStorage.getItem('byline.preferred') || '{}')
+      fresh = fresh.filter(i2 => { const q = i2.quote.trim().toLowerCase(); if (!q.includes(' ') && (dictRef.current.ignore.some(x => x.toLowerCase() === q) || dictRef.current.spelling.some(x => x.toLowerCase() === q))) return false; if (appliedPairs.some(ap => ap.to === q && (i2.replacement || '').toLowerCase() === ap.from)) return false; return true })
+      fresh = fresh.map(i2 => { const pword = pref[i2.quote.trim().toLowerCase()]; if (pword && i2.alternatives?.length) { const idx = i2.alternatives.findIndex(a => a.text.toLowerCase() === pword); if (idx > 0) { const alts = [...i2.alternatives]; const [x] = alts.splice(idx, 1); alts.unshift(x); return { ...i2, alternatives: alts, replacement: alts[0].text } } } return i2 })
+    } catch { /* noop */ } setIssues(old => [...fresh, ...old.filter(o => !fresh.some(f => f.quote === o.quote && f.type === o.type)).map(o => ({ ...o, stale: true }))].slice(0, 40)); setStale(false) }
   async function requestReactions() { if (!editingRef.current || !editor) return; const tm = plain(); if (tm.text.trim().length < 20) return; setLoad('reactions', true); const d = await api.reactions({ context: appliedRef.current.context, level: appliedRef.current.level, text: tm.text, persona: appliedRef.current.persona, style: buildStyle(appliedRef.current) }); setLoad('reactions', false); const fresh: Reaction[] = d?.reactions ? d.reactions.map((r: Reaction) => ({ ...r, id: nid() })) : (demo ? FALLBACK_REACTIONS.map(r => ({ ...r, id: nid() })) : []); setReactions(old => [...fresh, ...old.filter(o => !fresh.some(f => f.quote === o.quote && f.kind === o.kind)).map(o => ({ ...o, stale: true }))].slice(0, 40)) }
   async function refreshMainIdea() { if (!editingRef.current || !editor) return; setLoad('main', true); const d = await api.mainIdea({ context: appliedRef.current.context, level: appliedRef.current.level, text: plain().text, style: buildStyle(appliedRef.current) }); if (d?.main_idea) setMainIdea(d.main_idea); setLoad('main', false) }
   async function refreshReadings() { if (!editingRef.current || !editor) return; setLoad('readings', true); const d = await api.readings({ context: appliedRef.current.context, level: appliedRef.current.level, text: plain().text }); if (d?.readings) setReadings(old => [...d.readings, ...old.map(o => ({ ...o, stale: true }))].slice(0, 40)); setLoad('readings', false) }
@@ -439,6 +460,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       }
       if (selectedRef.current || groupRef.current.length) {
         if (e.key === 'Escape') { e.preventDefault(); closePopup(); return }
+        if (/^[1-9]$/.test(e.key) && selectedRef.current?.alternatives?.length) { const alt = selectedRef.current.alternatives[Number(e.key) - 1]; if (alt) { e.preventDefault(); e.stopPropagation(); applyAnchor(selectedRef.current, alt.text); return } }
         if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); tabPopup(); return }
       }
       if (synRef.current.length) {
@@ -481,8 +503,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   }, [editor]) // eslint-disable-line
   useEffect(() => { api.health().then(setStatus); if (demo) setTimeout(() => { requestAnnotate(); requestReactions(); requestGrammar() }, 600) }, [editor]) // eslint-disable-line
 
-  function applyAnchor(a: Anchor) {
+  function applyAnchor(a: Anchor, override?: string) {
     if (!editor) return
+    if (override) a = { ...a, replacement: override }
+    if (a.kind === 'vocabulary' && a.replacement) {
+      try { const pairs = JSON.parse(localStorage.getItem('byline.vocabApplied') || '[]'); pairs.push({ from: a.quote.trim().toLowerCase(), to: a.replacement.trim().toLowerCase(), ts: Date.now() }); localStorage.setItem('byline.vocabApplied', JSON.stringify(pairs.slice(-200)))
+        const pref = JSON.parse(localStorage.getItem('byline.preferred') || '{}'); pref[a.quote.trim().toLowerCase()] = a.replacement.trim().toLowerCase(); localStorage.setItem('byline.preferred', JSON.stringify(pref)) } catch { /* noop */ }
+      blip('accept')
+    }
     const rep = a.replacement || ''; if (!rep) { tabAdvanceOnly(); return }
     const tm = plain(); const r = locateQuote(tm, a.quote, a.context); if (!r) { removeFromGroup(a); return }
     editor.chain().setTextSelection(r).deleteSelection().insertContent(rep).run()
@@ -512,7 +540,6 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     setLoad('synonyms', true); const d = await api.synonyms({ context: appliedRef.current.context, level: appliedRef.current.level, word, sentence: sent, style: buildStyle(appliedRef.current) }); setLoad('synonyms', false); if (d?.synonyms) setSynonyms(d.synonyms.slice(0, 3))
   }
   function replaceWord(w: string) { if (!editor || !w) return; const r = synRangeRef.current; if (r) editor.chain().focus().setTextSelection(r).deleteSelection().insertContent(w).run(); else editor.chain().focus().deleteSelection().insertContent(w).run(); setSynonyms([]); synRangeRef.current = null }
-  const [dragToc, setDragToc] = useState<number | null>(null)
   function tocItems(): { level: number; text: string; child: number }[] {
     if (!editor) return []
     const out: { level: number; text: string; child: number }[] = []
@@ -527,6 +554,17 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const segs = starts.map((st, i) => content.slice(st, starts[i + 1] ?? content.length))
     const [moved] = segs.splice(srcSeg, 1); segs.splice(dstSeg, 0, moved)
     editor.commands.setContent({ ...json, content: [...preface, ...segs.flat()] })
+  }
+  async function doExportDocx() {
+    if (!editor) return
+    setLoad('docx', true)
+    try { await exportDocx(editor.getJSON(), { title: 'Untitled document', header: '', footer: '', pageNumbers: false }) }
+    catch (e) { alert(`DOCX export failed: ${e instanceof Error ? e.message : e}`) }
+    setLoad('docx', false)
+  }
+  function doExportHtml() {
+    if (!editor) return
+    const b = new Blob([editor.getHTML()], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'byline.html'; a.click()
   }
   function openTransMenu() {
     if (!editor) return
@@ -553,26 +591,29 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   async function runResearch(file?: File) {
     setLoad('research', true)
     const d = file ? await researchUpload(file, researchQ || 'Extract key facts for my writing') : await api.research({ url: researchUrl, question: researchQ || 'Extract the key facts relevant to my writing, with sources.' })
-    if (d?.ok && d.facts?.length) { setFacts(old => { const n = [...d.facts, ...old].slice(0, 40); localStorage.setItem(demo ? 'byline.facts.demo' : 'byline.facts.app', JSON.stringify(n)); return n }) }
+    if (d?.ok && d.facts?.length) { setFacts(old => [...d.facts, ...old].filter((f, i, a) => a.findIndex(x => x.fact === f.fact && x.url === f.url) === i).slice(0, 40)) }
     else if (d?.error) alert(`Research failed: ${d.error}`)
     setLoad('research', false)
-  }
-  async function toggleMic(field: string) {
-    if (recField === field && recRef.current) { const blob = await recRef.current.stop(); setRecField(''); setLoad('asr', true); const text = await transcribeWav(blob); setLoad('asr', false); if (text) setAnswers(a => ({ ...a, [field]: ((a as any)[field] ? (a as any)[field] + ' ' : '') + text })); return }
-    try { recRef.current = await recordWav(25); setRecField(field) } catch { alert('Microphone unavailable') }
   }
   async function generateFromSurvey() {
     setLoad('outlinegen', true)
     const d = await api.outlineGenerate({ answers })
     setLoad('outlinegen', false)
-    if (!d?.ok) { alert('Outline generation failed'); return }
+    if (!d?.ok) return false
     const summary = d.context_summary || answers.goal
-    setContext(summary); if (d.audience_text) setAudText(d.audience_text); if (d.audience_level) setAudLevel(d.audience_level)
-    const html = (d.outline || []).map((o: any) => `<h2>${o.heading}</h2><p><em>${o.purpose || ''}</em></p>${(o.points || []).map((pt: string) => `<p>${pt}</p>`).join('')}`).join('')
+    const tonesNext: Record<string, 'allow' | 'ban'> = Array.isArray(d.tones) ? Object.fromEntries(d.tones.filter((t: string) => TONES.includes(t)).map((t: string) => [t, 'allow' as const])) : tones
+    const next0 = {
+      level: DICTIONS.includes(d.diction) ? d.diction : level, voice: typeof d.voice === 'string' && d.voice ? d.voice : voice, tones: tonesNext,
+      rhythm: [1, 2, 3].includes(d.rhythm) ? d.rhythm : rhythm, gramVoice: d.gram_voice === 'active' ? 'active' as const : d.gram_voice === 'passive' ? 'passive' as const : gramVoice,
+      clause: ['Simple', 'Coordinated', 'Subordinated'].includes(d.clause) ? d.clause : clause, density: [1, 2, 3].includes(d.density) ? d.density : density,
+      audText: d.audience_text || audText, audLevel: d.audience_level || audLevel,
+    }
+    setContext(summary); setLevel(next0.level); setVoice(next0.voice); setTones(tonesNext); setRhythm(next0.rhythm); setGramVoice(next0.gramVoice as any); setClause(next0.clause); setDensity(next0.density); setAudText(next0.audText); setAudLevel(next0.audLevel)
+    const html = (d.outline || []).map((o: any, i: number) => `<h${i === 0 ? 1 : 2}>${o.heading}</h${i === 0 ? 1 : 2}><p><em>${o.purpose || ''}</em></p>${(o.points || []).map((pt: string) => `<p>${pt}</p>`).join('')}`).join('')
     if (editor) { const empty = plain().text.trim().length < 3; if (empty) editor.commands.setContent(html || '<p></p>'); else editor.chain().focus().setTextSelection(editor.state.doc.content.size).insertContent(html).run() }
-    const next = { ...draftObj(), context: summary, audText: d.audience_text || audText, audLevel: d.audience_level || audLevel }
+    const next = { ...draftObj(), context: summary, ...next0 }
     appliedRef.current = next as any; setApplied(next as any); setWizardOpen(false)
-    setTimeout(() => { requestComplete(); requestAnnotate(); requestReactions(); refreshMainIdea() }, 80)
+    setTimeout(() => { requestComplete(); requestAnnotate(); requestReactions(); refreshMainIdea() }, 80); sfxSuccess(); return true
   }
   async function exportDataset() {
     let pairs: any[] = []; try { pairs = JSON.parse(localStorage.getItem('byline.dataset') || '[]') } catch { /* noop */ }
@@ -606,12 +647,10 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         <div className="top-right">
         {anyLoading && <span className="ai-loading"><Spinner /> AI working</span>}
         {appSettings.showMetrics && <span className="metric" title={`Ghost acceptance: ${metrics.accepted} accepted / ${metrics.offered} batches offered · ${metrics.dismissed} dismissed · avg latency ${avgMs}ms`}>Ghost taken {acc}% ({metrics.accepted}/{metrics.offered}) · {avgMs}ms avg · {status?.model || 'offline'}</span>}
-        {appSettings.showMetrics && <button title="Reset ghost metrics" onClick={resetMetrics}>Reset metrics</button>}
-        <span className="dot" style={{ background: status?.meta_configured ? '#1E8E3E' : '#D93025' }} />
-        <button onClick={() => setShowSettings(true)} title="Settings (Ctrl+,)">⚙ Settings <span className="kbd">Ctrl ,</span></button>
+        <span className="dot" style={{ background: status?.meta_configured ? '#1E8E3E' : '#D93025' }} title={status?.meta_configured ? 'Backend connected' : 'Backend offline'} />
         <a className={`nav-btn ${location.pathname.startsWith('/app') ? 'active' : ''}`} href="/app">App</a>
         <a className={`nav-btn ${location.pathname.startsWith('/demo') ? 'active' : ''}`} href="/demo">Demo</a>
-        <button onClick={() => { const b = new Blob([editor.getHTML()], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'byline.html'; a.click() }}>Export</button>
+        <button className="icon-btn settings-icon" onClick={() => setShowSettings(true)} title="Settings (Ctrl+,)" aria-label="Settings"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1"/></svg></button>
         </div>
       </header>
 
@@ -620,32 +659,28 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           {!leftOpen ? <div className="rail-strip"><button onClick={() => toggleDock('left')} title="Expand">›</button><span className="strip-dot" style={{ background: 'var(--ai)' }} /><span className="strip-dot" style={{ background: 'var(--grey)' }} /></div> : <>
             <div className="rail-head"><strong style={{ fontSize: 13 }}>Write</strong><button onClick={() => toggleDock('left')} title="Collapse">‹</button></div>
             <div className="dock-tabs" role="tablist" aria-label="Write settings">
-              {(['write', 'style', 'outline'] as LeftTab[]).map(t => <button key={t} role="tab" aria-selected={leftTab === t} className={leftTab === t ? 'active' : ''} onClick={() => setLeftTab(t)}>{t === 'write' ? 'Write' : t === 'style' ? 'Style' : 'Outline'}{tabDirty[t] && <span className="tab-dot" title="Unapplied changes" />}</button>)}
+              {(['write', 'style', 'outline'] as LeftTab[]).map(t => <button key={t} role="tab" aria-selected={leftTab === t} className={leftTab === t ? 'active' : ''} onClick={() => setLeftTab(t)}>{t === 'write' ? 'Write' : t === 'style' ? 'Syntax' : 'Outline'}{tabDirty[t] && <span className="tab-dot" title="Unapplied changes" />}</button>)}
             </div>
             <div className="rail-scroll">
             {leftTab === 'write' && <>
             <div className="dock"><h3>Context</h3>
-              <textarea className="context-box" value={context} onChange={e => { setContext(e.target.value); setStale(true) }} placeholder="What should the finished text be about?" />
-              {dirty && <div className="meta" style={{ marginTop: 8 }}>Unapplied changes — use Apply below.</div>}
+              <textarea className="context-box" value={context} onChange={e => { setContext(e.target.value); setStale(true) }} placeholder="What should the finished text be about?" aria-label="Context" />
             </div>
             <div className="dock"><h3>Diction</h3>
-              <div className="meta">Same denotation, different connotation.</div>
-              <select style={{ width: '100%' }} value={level} onChange={e => setLevel(e.target.value)}>{DICTIONS.map(l => <option key={l}>{l}</option>)}</select>
-              {DICTION_EXAMPLE[level] && <div className="meta" style={{ marginTop: 6 }}>“{DICTION_EXAMPLE[level]}”</div>}
+              <select style={{ width: '100%' }} value={level} onChange={e => setLevel(e.target.value)} aria-label="Diction">{DICTIONS.map(l => <option key={l}>{l}</option>)}</select>
               <label>Assist</label><select style={{ width: '100%' }} value={assist} onChange={e => setAssist(e.target.value)}>{ASSISTS.map(l => <option key={l}>{l}</option>)}</select>
               <label>Reader persona</label><select style={{ width: '100%' }} value={persona} onChange={e => setPersona(e.target.value)}>{PERSONAS.map(l => <option key={l}>{l}</option>)}</select>
             </div>
             </>}
             {leftTab === 'style' && <>
             <div className="dock"><h3>Tone</h3>
-              <div className="meta">Click: allowed → not allowed → off.</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>{TONES.map(t => { const st = tones[t]; return <button key={t} className={`tone-tag ${st || ''}`} onClick={() => cycleTone(t)}>{st === 'ban' ? '✕ ' : st === 'allow' ? '✓ ' : ''}{t}</button> })}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{TONES.map(t => { const st = tones[t]; return <button key={t} className={`tone-tag ${st || ''}`} title={`${t}: ${st === 'allow' ? 'allowed' : st === 'ban' ? 'not allowed' : 'off'} — click to cycle`} aria-label={`${t}, ${st === 'allow' ? 'allowed' : st === 'ban' ? 'not allowed' : 'off'}`} onClick={() => cycleTone(t)}>{st === 'ban' ? '✕ ' : st === 'allow' ? '✓ ' : ''}{t}</button> })}</div>
             </div>
             <div className="dock"><h3>Voice</h3>
               <input style={{ width: '100%' }} list="voice-presets" value={voice} onChange={e => setVoice(e.target.value)} placeholder="Describe a voice, or pick an example…" />
               <datalist id="voice-presets">{VOICE_PRESETS.map(v => <option key={v} value={v} />)}</datalist>
             </div>
-            <div className="dock"><h3>Style</h3>
+            <div className="dock"><h3>Syntax</h3>
               <label>Sentence rhythm · Short ↔ Long</label>
               <input type="range" min={1} max={3} step={1} value={rhythm} onChange={e => setRhythm(Number(e.target.value))} style={{ width: '100%' }} />
               <div className="meta">{RHYTHMS[rhythm]}</div>
@@ -662,21 +697,25 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               <input style={{ width: '100%' }} value={audText} onChange={e => setAudText(e.target.value)} placeholder="Stakeholders, undergraduates…" />
               <label>Knowledge · 1 Beginner ↔ 5 Expert</label>
               <input type="range" min={1} max={5} step={1} value={audLevel} onChange={e => setAudLevel(Number(e.target.value))} style={{ width: '100%' }} />
-              <div className="meta">Level {audLevel}/5{audLevel <= 2 ? ' — undefined jargon/acronyms flagged' : audLevel >= 4 ? ' — basics not explained' : ''}</div>
+              <div className="meta">{audLevel}/5</div>
             </div>
             </>}
-            {leftTab === 'outline' && <div className="dock"><h3>Contents</h3>
-              {tocItems().length === 0 && <div className="meta">Add H1–H3 headings — drag to reorder sections.</div>}
-              {tocItems().map((h, i) => <div key={i} className="toc-item" draggable onDragStart={() => setDragToc(i)} onDragOver={e => e.preventDefault()} onDrop={() => { if (dragToc !== null) moveSection(dragToc, i); setDragToc(null) }} style={{ paddingLeft: 8 + (h.level - 1) * 14 }}><span className="meta">⠿ H{h.level}</span> {h.text || '(untitled)'}</div>)}
-            </div>}
+            {leftTab === 'outline' && <>
+            <div className="dock"><h3>Outline</h3>
+              <Outline editor={editor} data={toc} onMove={moveSection} />
             </div>
-            <div className="rail-foot"><button className="primary" disabled={!dirty} onClick={applySettings} style={{ width: '100%' }}>Apply settings{dirty ? ' ●' : ''}</button><div style={{ display: 'flex', gap: 6, marginTop: 8 }}><button style={{ flex: 1 }} onClick={() => setWizardOpen(true)}>Setup wizard</button><button style={{ flex: 1 }} onClick={exportDataset}>Export dataset</button></div>{dirty && <div className="meta" style={{ marginTop: 6 }}>Unapplied changes in {tabDirty.write ? 'Write' : ''}{tabDirty.write && tabDirty.style ? ' + ' : ''}{tabDirty.style ? 'Style' : ''}</div>}</div>
+            </>}
+            </div>
+            <div className="rail-foot"><button className="primary" disabled={!dirty} onClick={applySettings} style={{ width: '100%' }}>Apply settings{dirty ? ' ●' : ''}</button></div>
           </>}
         </aside>
 
         <main>
-          <EditorMenus editor={editor} counts={counts} showWordCount={appSettings.showWordCount} onSuggest={() => requestComplete()} onSentenceStarter={openTransMenu} />
-          <div className="paper" onDoubleClick={onDblClick}><EditorContent editor={editor} /></div>
+          <EditorMenus editor={editor} counts={counts} showWordCount={appSettings.showWordCount} onSuggest={() => requestComplete()} onSentenceStarter={openTransMenu} onWizard={() => setWizardOpen(true)} onExportDocx={doExportDocx} onExportHtml={doExportHtml} onExportDataset={exportDataset} exportingDocx={!!loading.docx} />
+          <div className="paper" onDoubleClick={onDblClick}>
+            <EditorContent editor={editor} />
+            {collectFootnotes(editor.getJSON()).length > 0 && <div className="footnotes"><hr />{collectFootnotes(editor.getJSON()).map(n => <div key={n.id} className="footnote-item"><sup>{n.label}</sup> {n.content}</div>)}</div>}
+          </div>
         </main>
 
         <aside className={`rail right-rail ${mode === 'drafting' ? 'ai-off' : ''}`}>
@@ -724,10 +763,10 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button className="primary" disabled={!researchUrl || !!loading.research} onMouseDown={e => e.preventDefault()} onClick={() => runResearch()}>{loading.research ? 'Researching…' : 'Research URL'}</button>
                 <label className="nav-btn" style={{ cursor: 'pointer' }}>Upload file<input type="file" hidden accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.docx,.csv" onChange={e => { const f = e.target.files?.[0]; if (f) runResearch(f); e.target.value = '' }} /></label></div>
               </div>
-              {facts.map((f, i) => <div key={i} className="dock-item"><div className="kind-label" style={{ color: 'var(--blue)' }}>Fact · {f.locator || 'source'}</div><div>{f.fact}</div><div className="meta"><a href={f.url || '#'} target="_blank" rel="noreferrer">{f.source_title || f.url}</a> — “{f.excerpt}”</div><button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().insertContent(` (${f.source_title || 'source'}${f.locator ? `, ${f.locator}` : ''}: ${f.url})`).run()}>Insert citation</button></div>)}
-              {readings.map((r, i) => <div key={i} className={`dock-item ${r.stale ? 'stale' : ''}`}><div className="kind-label" style={{ color: 'var(--blue)' }}>{r.label}</div><a href={textFragmentUrl(r.url, r.excerpt || r.claim_quote)} target="_blank" rel="noreferrer" style={{ fontWeight: 600 }}>{r.title || r.url}</a><div className="reason-text">vs “{r.claim_quote}” — {r.why}</div><div className="meta" style={{ fontStyle: 'italic' }}>{r.excerpt}</div></div>)}
-              {!readings.length && <div className="meta">—</div>}
-              </div><div className="dock-foot"><button disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshReadings}>{loading.readings ? 'Searching…' : 'Search'}</button></div>
+              {facts.map((f, i) => <div key={i} className="source-card"><span className="source-badge">Fact{f.locator ? ` · ${f.locator}` : ''}</span><div className="source-why">{f.fact}</div><div className="source-excerpt"><a href={f.url || '#'} target="_blank" rel="noreferrer">{f.source_title || f.url}</a>{f.excerpt ? ` — “${f.excerpt}”` : ''}</div><button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().insertContent(` (${f.source_title || 'source'}${f.locator ? `, ${f.locator}` : ''}: ${f.url})`).run()}>Insert citation</button></div>)}
+              {readings.map((r, i) => <div key={i} className={`source-card ${r.stale ? 'stale' : ''}`} style={r.stale ? { opacity: .6 } : undefined}><span className="source-badge">{r.label}</span><a className="source-title" href={textFragmentUrl(r.url, r.excerpt || r.claim_quote)} target="_blank" rel="noreferrer">{r.title || r.url}</a><div className="source-why">vs “{r.claim_quote}” — {r.why}</div>{r.excerpt && r.excerpt !== r.why && <div className="source-excerpt">“{r.excerpt}”</div>}</div>)}
+              {!readings.length && !facts.length && <div className="meta">—</div>}
+              </div><div className="dock-foot"><div style={{ display: 'flex', gap: 6 }}><button className="primary" disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshReadings}>{loading.readings ? 'Searching…' : 'Search'}</button><button onMouseDown={e => e.preventDefault()} onClick={() => setShowSources(true)}>Library ({facts.length + readings.length})</button></div></div>
             </div>
             </>}
             {(rightTab === 'suggest' || !editing) && <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--grey)' }} />Suggestions{loading.complete && <Spinner />}</h3>
@@ -741,7 +780,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             {editing && rightTab === 'lint' && <div className="dock dock-section" style={lintEnabled ? undefined : { opacity: .55 }}><h3>Lint {loading.lint && <Spinner />}<span className="spacer" /><button role="switch" aria-checked={lintEnabled} aria-label="Toggle lint" className={`switch ${lintEnabled ? 'on' : ''}`} onMouseDown={e => e.preventDefault()} onClick={toggleLint}><span className="knob" /></button></h3>
               <div className="dock-scroll">
               {[...lintResults].sort((a, b) => (LINT_PRIORITY[a.color_category] ?? 9) - (LINT_PRIORITY[b.color_category] ?? 9)).map(r => { const rule = LINTER_RULE_LIBRARY.find(x => x.id === r.rule_id); return <div key={r.uid} className="dock-item" onMouseDown={e => e.preventDefault()} onClick={() => openLintGroup(r)}><div className="kind-label" style={{ color: `var(--lint-${r.color_category})` }}>{LINT_COLORS[r.color_category]?.label || r.color_category} · {rule?.name || r.rule_id}</div><span className="quote-serif">{r.target}</span><div className="reason-text">{r.message}</div>{r.suggestion && <div className="replacement-text">→ {r.suggestion}</div>}</div> })}
-              {!lintResults.length && !loading.lint && <div className="meta">{lintEnabled ? 'No results yet — press Run lint. Lint never runs automatically.' : 'Off — enable lint, then press Run lint.'}</div>}
+              {!lintResults.length && !loading.lint && <div className="meta">{lintEnabled ? 'No results.' : 'Lint off.'}</div>}
               {loading.lint && !lintResults.length && <div className="meta"><LoadingDots /></div>}
               </div><div className="dock-foot"><div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}><button className="primary" disabled={!lintEnabled} onMouseDown={e => e.preventDefault()} onClick={runLint}>{loading.lint ? 'Linting…' : 'Run lint'}</button><button onMouseDown={e => e.preventDefault()} onClick={() => setShowLibrary(true)}>Rule library</button></div>{lintStatus && <div className="meta" style={{ marginTop: 6 }}>{lintStatus}</div>}</div>
             </div>}
@@ -772,33 +811,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           </div>
         </div>
       )}
-      {wizardOpen && (
-        <div className="library-backdrop" onMouseDown={() => setWizardOpen(false)}>
-          <div className="library-modal fade" role="dialog" aria-label="Setup wizard" onMouseDown={e => e.stopPropagation()} style={{ width: 'min(640px,96vw)' }}>
-            <div className="library-head"><strong>Setup wizard</strong><span className="meta">Answer or speak — outline writes itself</span><span className="spacer" /><button onClick={() => setWizardOpen(false)}>Close</button></div>
-            <div className="library-scroll">
-              {([['goal', 'What are you writing about? (goal / thesis)'], ['key_points', 'Key points you must cover'], ['audience', 'Who is reading this?'], ['voice_note', 'Any voice/style notes?']] as const).map(([field, label]) => (
-                <div key={field} style={{ marginBottom: 14 }}><label style={{ marginTop: 0 }}>{label}</label>
-                  <div style={{ display: 'flex', gap: 6 }}><input style={{ flex: 1 }} value={(answers as any)[field]} onChange={e => setAnswers(a => ({ ...a, [field]: e.target.value }))} placeholder={field === 'goal' ? 'Argue cats are better than dogs…' : ''} />
-                  <button className={recField === field ? 'primary' : ''} onMouseDown={e => e.preventDefault()} onClick={() => toggleMic(field)}>{loading.asr && recField === field ? '…' : recField === field ? '■ Stop + transcribe' : '🎙 Voice'}</button></div>
-                </div>
-              ))}
-              <label>Document type</label>
-              <select style={{ width: '100%' }} value={answers.doc_type} onChange={e => setAnswers(a => ({ ...a, doc_type: e.target.value }))}><option>essay</option><option>report</option><option>proposal</option><option>email</option><option>blog</option></select>
-              <label>Audience knowledge · 1 Beginner ↔ 5 Expert</label>
-              <input type="range" min={1} max={5} step={1} value={answers.audience_level} onChange={e => setAnswers(a => ({ ...a, audience_level: Number(e.target.value) }))} style={{ width: '100%' }} />
-              <button className="primary" style={{ width: '100%', marginTop: 14 }} onClick={generateFromSurvey}>{loading.outlinegen ? 'Generating outline…' : 'Generate outline + apply context'}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {showSources && <SourcesLibrary facts={facts} readings={readings} onClose={() => setShowSources(false)} onDeleteFact={f => setFacts(old => old.filter(x => !(x.fact === f.fact && x.url === f.url)))} onDeleteReading={r => setReadings(old => old.filter(x => !(x.url === r.url && x.claim_quote === r.claim_quote)))} onClear={() => { setFacts([]); setReadings([]) }} onInsertFact={f => { editor.chain().focus().insertContent(` (${f.source_title || 'source'}${f.locator ? `, ${f.locator}` : ''}: ${f.url})`).run(); setShowSources(false) }} />}
+      {wizardOpen && <SetupWizard answers={answers} setAnswers={f => setAnswers(f as any)} onClose={() => setWizardOpen(false)} onGenerate={generateFromSurvey} generating={!!loading.outlinegen} />}
       {transMenu && (
         <div className="sugg-popup fade" style={{ left: transMenu.x, top: transMenu.y, maxHeight: transMenu.h, overflowY: 'auto' }} role="menu" aria-label="Transitions">
           <div className="trans-query">{transMenu.cat ? `${transMenu.cat} — ` : ''}Type to filter{transMenu.query ? `: ${transMenu.query}` : ''}<span className="trans-caret">▌</span></div>
           {!transMenu.cat
             ? Object.keys(TRANSITIONS).filter(c => matchText(transMenu.query, c) || TRANSITIONS[c].some(t => matchText(transMenu.query, t))).map((c, i) => <div key={c} className="sugg-row" onMouseDown={e => { e.preventDefault(); const n = { ...transMenu, cat: c, query: '' }; transRef.current = n; setTransMenu(n) }}><span className="num">{digitFor(i)}</span>{c}</div>)
             : <><div className="sugg-row" onMouseDown={e => { e.preventDefault(); const n = { ...transMenu, cat: null, query: '' }; transRef.current = n; setTransMenu(n) }}>← Categories</div>{TRANSITIONS[transMenu.cat].filter(t => matchText(transMenu.query, t)).map((t, i) => <div key={t} className="sugg-row" onMouseDown={e => { e.preventDefault(); transRef.current = null; setTransMenu(null); insertTransition(t) }}><span className="num">{digitFor(i)}</span>{t.replace('[]', '…')}</div>)}</>}
-          {transMenu.query && <div className="meta" style={{ padding: '6px 12px' }}>Backspace edits · Tab/Enter picks first · 1–9,0 pick row</div>}
         </div>
       )}
       {suggestions.length > 0 && (
@@ -836,7 +856,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
                   {a.replacement
                     ? <button className="primary" onMouseDown={e => e.preventDefault()} onClick={e => { e.stopPropagation(); applySelected() }}>Apply “{a.replacement}” <span className="kbd">Tab</span></button>
                     : <button className="primary" onMouseDown={e => e.preventDefault()} onClick={e => { e.stopPropagation(); tabPopup() }}>Next <span className="kbd">Tab</span></button>}
-                  {a.kind === 'grammar' && !a.quote.includes(' ') && <div style={{ display: 'flex', gap: 6, marginTop: 8 }}><button onMouseDown={e => e.preventDefault()} onClick={e => { e.stopPropagation(); exceptWord('ignore', a.quote) }}>Ignore word</button><button onMouseDown={e => e.preventDefault()} onClick={e => { e.stopPropagation(); exceptWord('spelling', a.quote) }}>Add to dictionary</button></div>}
+                  {(a.kind === 'grammar' || a.kind === 'vocabulary') && !a.quote.includes(' ') && <div style={{ display: 'flex', gap: 6, marginTop: 8 }}><button onMouseDown={e => e.preventDefault()} onClick={e => { e.stopPropagation(); exceptWord('ignore', a.quote) }}>Ignore word</button><button onMouseDown={e => e.preventDefault()} onClick={e => { e.stopPropagation(); exceptWord('spelling', a.quote) }}>Add to dictionary</button></div>}
+                  {active && a.alternatives && a.alternatives.length > 1 && <div style={{ display: 'grid', gap: 5, marginTop: 8 }}>{a.alternatives.map((alt, ai) => <button key={alt.text} className="alt-row" onMouseDown={e => e.preventDefault()} onClick={e => { e.stopPropagation(); applyAnchor(a, alt.text) }}><span className="num">{ai + 1}</span><strong>{alt.text}</strong>{alt.note && <span className="meta"> — {alt.note}</span>}</button>)}</div>}
                 </>}
               </div>
             )

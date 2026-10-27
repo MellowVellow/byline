@@ -4,6 +4,10 @@ import DOMPurify from 'dompurify'
 
 export type DiagramNode = { label: string; quote: string; context: string }
 
+/* htmlLabels:false → labels render as SVG <text>, not <foreignObject> HTML.
+   DOMPurify svg profile strips <foreignObject> subtrees → blank nodes. */
+export const sanitizeDiagramSvg = (svg: string) => DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } })
+
 export default function Diagram({ source, caption, nodes, onNode }: { source: string; caption: string; nodes: DiagramNode[]; onNode: (n: DiagramNode) => void }) {
   const ref = useRef<HTMLDivElement>(null)
   const [err, setErr] = useState('')
@@ -11,10 +15,10 @@ export default function Diagram({ source, caption, nodes, onNode }: { source: st
   useEffect(() => {
     if (!source || !ref.current) return
     const dark = document.documentElement.dataset.theme === 'dark'
-    mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'neutral', securityLevel: 'strict' })
+    mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'neutral', securityLevel: 'strict', htmlLabels: false, flowchart: { htmlLabels: false } })
     const id = `mmd-${Math.random().toString(36).slice(2, 8)}`
     mermaid.render(id, source).then(({ svg }) => {
-      if (ref.current) { ref.current.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } }); setErr('') }
+      if (ref.current) { ref.current.innerHTML = sanitizeDiagramSvg(svg); setErr('') }
     }).catch(e => setErr(String(e?.message || e).slice(0, 160)))
   }, [source])
   function click(e: any) {

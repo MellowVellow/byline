@@ -10,7 +10,7 @@ from .config import settings, cors_list, ROOT
 from .models import CompleteIn, TextIn, SynonymIn, GrammarIn, WaitlistIn, ClaimIn, LintIn, ResearchIn, DiagramIn, OutlineGenIn, DatasetIn
 from .quote import filter_anchored
 from .grammar_filter import filter_matches
-from .swapcheck import swap_ok
+from .swapcheck import swap_ok, match_case
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="Byline v2")
@@ -70,31 +70,53 @@ async def complete(body: CompleteIn):
         return ok(suggestions=sugg, version=body.version, model=model, ms=round(dt * 1000), usage=usage) if sugg else fail(version=body.version)
     except Exception as e: return fail(error=str(e)[:200], version=body.version)
 
+ZIPF_THRESHOLDS = {"Simple": 4.6, "Casual": 4.4, "Slang": 4.4, "General": 4.0, "Formal": 3.6, "Technical": 3.2, "Academic": 3.2, "Expert": 2.8, "Buzzwords": 4.2, "Bullshitting": 4.2}
+
+def frequency_candidates(text: str, level: str) -> str:
+    try:
+        from wordfreq import zipf_frequency
+        import re as _re
+        words = sorted(set(w.lower() for w in _re.findall(r"[A-Za-z][a-z]{3,}", text)))
+        th = ZIPF_THRESHOLDS.get(level, 4.0)
+        scored = [(zipf_frequency(w, "en"), w) for w in words]
+        rare = sorted((z, w) for z, w in scored if 0 < z < th)[:20]
+        return ", ".join(f"{w} ({z:.1f})" for z, w in rare)
+    except Exception:
+        return ""
+
 @app.post("/api/annotate")
 async def annotate(body: TextIn):
     try:
-        s, u = prompts.annotate_prompt(body.context, body.level, body.text, body.before, body.after, body.style)
+        s, u = prompts.annotate_prompt(body.context, body.level, body.text, body.before, body.after, body.style, frequency_candidates(body.text, body.level))
         data, usage, model = await llm.json_call(s, u, max_tokens=1000, temperature=0.4)
         issues = filter_anchored(data.get("issues", []), body.text)
         cache: dict = {}
         for it in issues:
             rep = (it.get("replacement") or "").strip()
-            if not rep:
-                continue
-            if await swap_ok(body.text, it["quote"], rep, cache):
-                continue
-            # broken swap (e.g. noun->determiner): try same-POS synonyms, LT+slot filtered
-            fixed = ""
-            if " " not in it["quote"].strip():
+            raw_alts = []
+            for a in it.get("alternatives", []) or []:
+                if isinstance(a, dict) and a.get("text"): raw_alts.append({"text": str(a["text"]), "note": str(a.get("note", ""))})
+                elif isinstance(a, str): raw_alts.append({"text": a, "note": ""})
+            if rep and not any(a["text"].lower() == rep.lower() for a in raw_alts): raw_alts.insert(0, {"text": rep, "note": ""})
+            valid = []
+            for a in raw_alts[:5]:
+                cand = match_case(it["quote"], a["text"])
+                if cand.lower() != it["quote"].lower() and await swap_ok(body.text, it["quote"], cand, cache, it.get("context", "")):
+                    valid.append({"text": cand, "note": a["note"]})
+                if len(valid) >= 3: break
+            if not valid and " " not in it["quote"].strip():
                 try:
                     ss, uu = prompts.synonyms_prompt(body.context, body.level, it["quote"], body.text[:400], body.style)
                     d2, _, _ = await llm.json_call(ss, uu, max_tokens=500, temperature=0.4)
-                    for cand in [w for w in d2.get("synonyms", []) if isinstance(w, str) and " " not in w][:8]:
-                        if cand.lower() != it["quote"].lower() and await swap_ok(body.text, it["quote"], cand, cache):
-                            fixed = cand; break
+                    for cand0 in [w for w in d2.get("synonyms", []) if isinstance(w, str) and " " not in w][:8]:
+                        cand = match_case(it["quote"], cand0)
+                        if cand.lower() != it["quote"].lower() and await swap_ok(body.text, it["quote"], cand, cache, it.get("context", "")):
+                            valid.append({"text": cand, "note": "synonym"})
+                        if len(valid) >= 3: break
                 except Exception:
                     pass
-            it["replacement"] = fixed  # "" = flag shown, no unsafe Apply offered
+            it["alternatives"] = valid
+            it["replacement"] = valid[0]["text"] if valid else "" 
         return ok(issues=issues, model=model, usage=usage)
     except Exception as e: return fail(error=str(e)[:200])
 
@@ -135,8 +157,7 @@ async def synonyms(body: SynonymIn):
             for w in words:
                 if w.lower() != body.word.lower() and await swap_ok(body.sentence, body.word, w, cache):
                     kept.append(w)
-            if kept:
-                words = kept
+            words = kept
         return ok(synonyms=words, model=model, usage=usage)
     except Exception as e: return fail(error=str(e)[:200])
 
@@ -243,8 +264,16 @@ async def outline_generate(body: OutlineGenIn):
     try:
         s, u = prompts.outline_generate_prompt(json.dumps(body.answers)[:3000])
         data, usage, model = await llm.json_call(s, u, max_tokens=1400, temperature=0.5)
-        return ok(context_summary=data.get("context_summary", ""), audience_text=data.get("audience_text", ""), audience_level=data.get("audience_level", 3),
-                  outline=data.get("outline", []), model=model, usage=usage) if data.get("outline") else fail()
+        if not data.get("outline"): return fail()
+        clamp = lambda v, lo, hi, d: v if isinstance(v, int) and lo <= v <= hi else d
+        return ok(context_summary=data.get("context_summary", ""), audience_text=data.get("audience_text", ""), audience_level=clamp(data.get("audience_level"), 1, 5, 3),
+                  diction=data.get("diction") if data.get("diction") in prompts.DICTIONS else "General",
+                  tones=[t for t in data.get("tones", []) if t in prompts.TONES][:3] if isinstance(data.get("tones"), list) else [],
+                  voice=str(data.get("voice", ""))[:200], rhythm=clamp(data.get("rhythm"), 1, 3, 2),
+                  gram_voice=data.get("gram_voice") if data.get("gram_voice") in ("active", "passive") else "passive",
+                  clause=data.get("clause") if data.get("clause") in prompts.CLAUSES else "Subordinated",
+                  density=clamp(data.get("density"), 1, 3, 2),
+                  outline=data.get("outline", []), model=model, usage=usage)
     except Exception as e: return fail(error=str(e)[:200])
 
 @app.post("/api/transcribe")

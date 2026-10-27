@@ -43,11 +43,11 @@ def complete_prompt(context, level, before, after, assist, voice="", style=""):
             "TASK: 3 continuations from cursor fitting context+level. One per line.")
     return system, user
 
-def annotate_prompt(context, level, text, before="", after="", style=""):
+def annotate_prompt(context, level, text, before="", after="", style="", candidates=""):
     system = f"Careful editor. JSON only. {QUOTE_RULE} Grammar/spelling handled elsewhere - never flag those."
     user = (f"CONTEXT: {context or '(none)'}\n{_lvl(level)}\nPREV (context only): {before or '(none)'}\nNEXT (context only): {after or '(none)'}\n"
-            f"TEXT:\n{text}{_style(style)}\nTASK: Flag vocabulary (single word/phrase wrong for level), relevance/cohesion (off-topic vs context, abrupt jump), tone that violates STYLE banned tags or misses allowed tags, and jargon/acronyms undefined for target audience. Max 6. "
-            'JSON: {"issues":[{"quote":"...","context":"...","type":"vocabulary|relevance","reason":"...","replacement":"..."}]} Replacement = full replacement for quote only, swapped into sentence it MUST stay grammatical: same part of speech as quote (noun->noun, verb->verb), respect preceding a/an/the. Never replace a noun with many/much/few.')
+            f"TEXT:\n{text}{_style(style)}\nFREQUENCY CANDIDATES (deterministic, may be fine in context - YOU are final judge, flag only if truly mismatched for level/audience): {candidates or '(none)'}\nTASK: Flag vocabulary (single word/phrase wrong for level), relevance/cohesion (off-topic vs context, abrupt jump), tone that violates STYLE banned tags or misses allowed tags, and jargon/acronyms undefined for target audience. Max 6. "
+            'JSON: {"issues":[{"quote":"...","context":"...","type":"vocabulary|relevance","reason":"...","replacement":"...","alternatives":[{"text":"...","note":"<short gloss + register, e.g. plain, everyday>"}]}]} Replacement = best full replacement for quote only, swapped into sentence it MUST stay grammatical: same part of speech as quote (noun->noun, verb->verb), respect preceding a/an/the. Never replace a noun with many/much/few. For vocabulary issues give up to 3 alternatives total (best first, replacement = alternatives[0].text), each with a one-line note: what it means + register level. Relevance issues: alternatives may be empty.')
     return system, user
 
 def reactions_prompt(context, level, text, persona="Skeptical reader", style=""):
@@ -102,10 +102,15 @@ def diagram_prompt(context, text, kind):
             'TASK: Return {"mermaid":"<full mermaid source>","caption":"<one-sentence perceived main idea>","nodes":[{"label":"<node label>","quote":"...","context":"..."}]} - one node per main point, anchored to exact quote supporting it.')
     return system, user
 
+DICTIONS = ["Formal", "Casual", "Slang", "Simple", "General", "Academic", "Technical", "Buzzwords", "Bullshitting"]
+TONES = ["Serious", "Humorous", "Sarcastic", "Bleak and oppressive", "Objective", "Subjective", "Logical", "Emotional", "Intimate", "Distant", "Journal", "Formal conference speech"]
+CLAUSES = ["Simple", "Coordinated", "Subordinated"]
+
 def outline_generate_prompt(answers_json):
-    system = "Writing coach. JSON only. Turn survey answers into a context summary and a generative outline for a document that does not exist yet."
+    system = "Writing coach. JSON only. Turn survey answers into a context summary, a generative outline, and every Write/Syntax setting for a document that does not exist yet."
     user = (f"SURVEY ANSWERS (JSON):\n{answers_json}\n"
-            'TASK: {"context_summary":"<2-3 sentence North-Star context the writer can paste>","audience_text":"","audience_level":3,"outline":[{"heading":"...","purpose":"...","points":["..."]}]} - 4-7 headings, each with purpose + 2-4 bullet points.')
+            f'DICTION (pick exactly one): {DICTIONS}. TONES ALLOWED (pick 0-3 exactly): {TONES}. CLAUSE (pick exactly one): {CLAUSES}.\n'
+            'TASK: {"context_summary":"<2-3 sentence North-Star context>","audience_text":"","audience_level":3,"diction":"General","tones":["Serious"],"voice":"<voice/style in one phrase, from voice_note>","rhythm":2,"gram_voice":"passive","clause":"Subordinated","density":2,"outline":[{"heading":"...","purpose":"...","points":["..."]}]} - rhythm/density/audience_level are ints (rhythm,density 1-3; audience 1-5), gram_voice is "active"|"passive". 4-7 headings, each with purpose + 2-4 bullet points.')
     return system, user
 
 FACTS_SYSTEM = "Researcher agent. Extract only facts actually supported by the provided source/search results. Every fact needs a source title, URL, locator (page/section), and a short excerpt copied from the source. Never invent facts or URLs."

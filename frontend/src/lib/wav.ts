@@ -1,17 +1,24 @@
-/** Record mic audio and encode a 24kHz mono WAV (Meta ASR transcribe format). */
-export async function recordWav(seconds = 20): Promise<{ stop: () => Promise<Blob> }> {
+/** Record mic → 24kHz mono WAV. onSilence fires after speech + 1.2s silence (VAD). */
+export async function recordWav(seconds = 20, onSilence?: () => void): Promise<{ stop: () => Promise<Blob> }> {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
   const ctx = new AudioContext({ sampleRate: 24000 })
   const src = ctx.createMediaStreamSource(stream)
   const proc = ctx.createScriptProcessor(4096, 1, 1)
+  const analyser = ctx.createAnalyser(); analyser.fftSize = 2048; src.connect(analyser)
   const chunks: Float32Array[] = []
   proc.onaudioprocess = e => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)))
   src.connect(proc); proc.connect(ctx.destination)
+  let spoke = false, silentSince = 0, vadDone = false
+  const vad = setInterval(() => {
+    const buf = new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(buf)
+    const rms = Math.sqrt(buf.reduce((a, v) => a + v * v, 0) / buf.length)
+    if (rms > 0.02) { spoke = true; silentSince = 0 } else if (spoke) { silentSince += 150; if (silentSince >= 1200 && !vadDone) { vadDone = true; onSilence?.() } }
+  }, 150)
   const done = new Promise<Blob>(resolve => {
     setTimeout(() => finish(), seconds * 1000)
     ;(window as any).__wavFinish = finish
     function finish() {
-      proc.disconnect(); src.disconnect(); stream.getTracks().forEach(t => t.stop()); ctx.close()
+      clearInterval(vad); proc.disconnect(); src.disconnect(); stream.getTracks().forEach(t => t.stop()); ctx.close()
       const total = chunks.reduce((a, c) => a + c.length, 0)
       const pcm = new Int16Array(total); let o = 0
       for (const c of chunks) { for (let i = 0; i < c.length; i++) { pcm[o++] = Math.max(-32768, Math.min(32767, Math.round(c[i] * 32767))) } }

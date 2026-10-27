@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { COLOR_PRESETS, DEFAULT_SETTINGS, SHORTCUTS, type AppSettings } from '../lib/settings'
+import { sfxMuted, sfxToggle, sfxPick } from '../lib/sfx'
 
 type Tab = 'colors' | 'ui' | 'shortcuts'
 const COLOR_FIELDS: { key: 'ai' | 'grammar' | 'sources' | 'wordChoice' | 'selection'; label: string; hint: string }[] = [
@@ -7,11 +8,11 @@ const COLOR_FIELDS: { key: 'ai' | 'grammar' | 'sources' | 'wordChoice' | 'select
   { key: 'grammar', label: 'Grammar', hint: 'Red squiggles (LanguageTool)' },
   { key: 'sources', label: 'Sources', hint: 'Blue wavy underlines, source links' },
   { key: 'wordChoice', label: 'Word choice', hint: 'Yellow underline for vocabulary / cohesion' },
-  { key: 'selection', label: 'Selection highlight', hint: 'Linked issue + active suggestion background' },
 ]
 
 export default function SettingsMenu({ settings, onChange, onClose }: { settings: AppSettings; onChange: (s: AppSettings) => void; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('colors')
+  const [muted, setMuted] = useState(sfxMuted())
   const set = (p: Partial<AppSettings>) => onChange({ ...settings, ...p })
   useEffect(() => { const f = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }; addEventListener('keydown', f); return () => removeEventListener('keydown', f) }, [onClose])
   return (
@@ -60,6 +61,8 @@ export default function SettingsMenu({ settings, onChange, onClose }: { settings
             <div className="mode-toggle" style={{ display: 'flex', maxWidth: 360 }}>
               {([['comfortable', 'Comfortable'], ['compact', 'Compact']] as const).map(([v, l]) => <button key={v} className={settings.density === v ? 'active' : ''} style={{ flex: 1 }} onClick={() => set({ density: v })}>{l}</button>)}
             </div>
+            <label className="settings-row" style={{ cursor: 'pointer' }}><span style={{ flex: 1 }}>UI sound effects (Tone.js melodic blips)</span>
+              <button role="switch" aria-checked={!muted} aria-label="UI sound effects" className={`switch ${!muted ? 'on' : ''}`} onClick={e => { e.preventDefault(); const m = sfxToggle(); setMuted(m); if (!m) sfxPick() }}><span className="knob" /></button></label>
             {([['showWordCount', 'Show word / character count'], ['showMetrics', 'Show ghost-acceptance metrics in top bar'], ['spellcheck', 'Browser spellcheck in editor'], ['reduceMotion', 'Reduce motion (disable spinner / pulse animations)']] as const).map(([k, l]) =>
               <label key={k} className="settings-row" style={{ cursor: 'pointer' }}><span style={{ flex: 1 }}>{l}</span>
                 <button role="switch" aria-checked={settings[k]} aria-label={l} className={`switch ${settings[k] ? 'on' : ''}`} onClick={e => { e.preventDefault(); set({ [k]: !settings[k] } as Partial<AppSettings>) }}><span className="knob" /></button></label>)}

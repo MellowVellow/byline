@@ -1,18 +1,33 @@
+import { useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import { BubbleMenu, FloatingMenu } from '@tiptap/react/menus'
 
 // Notion-like editing surface: formatting lives in TipTap BubbleMenu (selection),
 // block types in TipTap FloatingMenu (empty line). No hand-rolled toolbar state.
-export default function EditorMenus({ editor, onSuggest, onSentenceStarter, counts, showWordCount }: {
+export default function EditorMenus({ editor, onSuggest, onSentenceStarter, counts, showWordCount, onWizard, onExportDocx, onExportHtml, onExportDataset, exportingDocx }: {
   editor: Editor; onSuggest: () => void; onSentenceStarter: () => void
   counts: { words: number; chars: number }; showWordCount: boolean
+  onWizard: () => void; onExportDocx: () => void; onExportHtml: () => void; onExportDataset: () => void; exportingDocx?: boolean
 }) {
+  const [setupOpen, setSetupOpen] = useState(false)
   const link = () => { const url = prompt('Link URL'); if (url) editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run(); else editor.chain().focus().unsetLink().run() }
+  const act = (fn: () => void) => () => { setSetupOpen(false); fn() }
   return <>
     <div className="editor-bar">
       <button className="bar-ai" onMouseDown={e => e.preventDefault()} onClick={onSuggest} title="Request ghost completions at caret">Suggest <span className="kbd">Ctrl Space</span></button>
       <button className="bar-ai" onMouseDown={e => e.preventDefault()} onClick={onSentenceStarter} title="Insert a transition / sentence starter at caret">Sentence starter <span className="kbd">Ctrl /</span></button>
-      <span className="meta bar-hint">Select text → format · Empty line → block menu · Type <span className="kbd">/</span> hints in Settings → Shortcuts</span>
+      <div className="setup-center">
+        <button id="setup-wizard-btn" className="setup-shine" aria-haspopup="menu" aria-expanded={setupOpen} onClick={() => setSetupOpen(v => !v)}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9L12 2zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z" /></svg>
+          Setup
+        </button>
+        {setupOpen && <><div style={{ position: 'fixed', inset: 0, zIndex: -1 }} onClick={() => setSetupOpen(false)} /><div className="setup-menu" role="menu" aria-label="Setup and export">
+          <button role="menuitem" onClick={act(onWizard)}>Setup wizard</button>
+          <button role="menuitem" disabled={exportingDocx} onClick={act(onExportDocx)}>{exportingDocx ? 'Exporting…' : 'Export .docx'}</button>
+          <button role="menuitem" onClick={act(onExportHtml)}>Export HTML</button>
+          <button role="menuitem" onClick={act(onExportDataset)}>Export dataset</button>
+        </div></>}
+      </div>
       <span className="spacer" />
       {showWordCount && <span className="metric">{counts.words} words · {counts.chars} chars</span>}
     </div>
@@ -26,7 +41,7 @@ export default function EditorMenus({ editor, onSuggest, onSentenceStarter, coun
       <button className={editor.isActive('highlight') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleHighlight().run()} title="Highlight">▮</button>
       <button className={editor.isActive('code') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleCode().run()} title="Inline code">{'</>'}</button>
       <span className="tool-sep" />
-      {[1, 2, 3].map(l => <button key={l} className={editor.isActive('heading', { level: l }) ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: l as 1 | 2 | 3 }).run()}>H{l}</button>)}
+      {[1, 2, 3, 4, 5, 6].map(l => <button key={l} className={editor.isActive('heading', { level: l }) ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: l as 1 | 2 | 3 | 4 | 5 | 6 }).run()}>H{l}</button>)}
       <button className={editor.isActive('blockquote') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBlockquote().run()} title="Quote">❝</button>
       <span className="tool-sep" />
       <button className={editor.isActive('bulletList') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()} title="Bullet list">•</button>
@@ -41,7 +56,7 @@ export default function EditorMenus({ editor, onSuggest, onSentenceStarter, coun
       shouldShow={({ editor: e }) => { const { selection } = e.state; const { $anchor, empty } = selection; return empty && $anchor.parent.type.name === 'paragraph' && $anchor.parent.textContent === '' }}>
       <div className="floating-title">Add block</div>
       <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().setParagraph().run()}>¶ Text</button>
-      {[1, 2, 3].map(l => <button key={l} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: l as 1 | 2 | 3 }).run()}>H{l} Heading {l}</button>)}
+      {[1, 2, 3, 4, 5, 6].map(l => <button key={l} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: l as 1 | 2 | 3 | 4 | 5 | 6 }).run()}>H{l} Heading {l}</button>)}
       <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()}>• Bullet list</button>
       <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleOrderedList().run()}>1. Numbered list</button>
       <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBlockquote().run()}>❝ Quote</button>
