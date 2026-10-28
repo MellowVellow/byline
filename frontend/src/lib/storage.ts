@@ -9,7 +9,6 @@ export const keys = {
   configActive: 'byline.config.active',
   citeStyle: 'byline.citeStyle',
   researchAuto: 'byline.researchAuto',
-  lintEnabled: 'byline.lintEnabled',
   leftOpen: 'byline.leftOpen',
   rightOpen: 'byline.rightOpen',
   dict: 'byline.dict.v1',

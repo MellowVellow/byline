@@ -2,28 +2,28 @@
  *  Language=red (--lt), Reader=purple (--ai), Sources=blue (--blue), Suggest=grey (--grey), Lint=yellow (--yellow).
  *  Canonical hex below = COLOR_PRESETS.default; UI uses var() so preset changes recolor tabs/buttons/underlines together. */
 export const ANNOTATION_COLORS = {
-  language: '#D93025', reader: '#7C4DFF', sources: '#1A73E8', suggest: '#9AA0A6', lint: '#D99A06',
+  language: '#C0281F', reader: '#6D3BE0', sources: '#1765CC', suggest: '#626A75', lint: '#8A5F00',
 } as const
 export const TAB_THEME = {
-  language: { color: 'var(--lt, #D93025)', label: 'Language' },
-  reader: { color: 'var(--ai, #7C4DFF)', label: 'Reader' },
-  sources: { color: 'var(--blue, #1A73E8)', label: 'Sources' },
-  suggest: { color: 'var(--grey, #9AA0A6)', label: 'Suggest' },
-  lint: { color: 'var(--yellow, #D99A06)', label: 'Lint' },
+  language: { color: 'var(--lt, #C0281F)', label: 'Language' },
+  reader: { color: 'var(--ai, #6D3BE0)', label: 'Reader' },
+  sources: { color: 'var(--blue, #1765CC)', label: 'Sources' },
+  suggest: { color: 'var(--grey, #626A75)', label: 'Suggest' },
+  lint: { color: 'var(--yellow, #8A5F00)', label: 'Lint' },
 } as const
 export type RightTabKey = keyof typeof TAB_THEME
 export const RIGHT_TAB_ORDER: RightTabKey[] = ['language', 'reader', 'sources', 'suggest', 'lint']
 
 /** Language sub-types: all preset red (labels distinguish, color does not). */
 export const LANG_STYLE2: Record<string, { color: string; label: string }> = {
-  grammar: { color: 'var(--lt, #D93025)', label: 'Grammar' },
-  vocabulary: { color: 'var(--lt, #D93025)', label: 'Word choice' },
-  relevance: { color: 'var(--lt, #D93025)', label: 'Cohesion' },
+  grammar: { color: 'var(--lt, #C0281F)', label: 'Grammar' },
+  vocabulary: { color: 'var(--lt, #C0281F)', label: 'Word choice' },
+  relevance: { color: 'var(--lt, #C0281F)', label: 'Cohesion' },
 }
 
 /** Lint categories: all preset yellow (labels distinguish, color does not). */
 export const LINT_SHADES: Record<string, string> = {
-  amber: 'var(--yellow, #D99A06)', green: 'var(--yellow, #D99A06)', cyan: 'var(--yellow, #D99A06)', rose: 'var(--yellow, #D99A06)', violet: 'var(--yellow, #D99A06)',
+  amber: 'var(--yellow, #8A5F00)', green: 'var(--yellow, #8A5F00)', cyan: 'var(--yellow, #8A5F00)', rose: 'var(--yellow, #8A5F00)', violet: 'var(--yellow, #8A5F00)',
 }
 
 /** Dock items never auto-grey/delete on refresh. Enabled by default; writer double-clicks to disable (grey + no underline). */

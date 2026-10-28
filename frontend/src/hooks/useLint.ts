@@ -30,8 +30,6 @@ export function useLint(deps: LintDeps) {
   const [lintIdx, setLintIdx] = useState(0)
   const lintGroupRef = useRef<LintResult[]>([]); lintGroupRef.current = lintGroup
   const [showLibrary, setShowLibrary] = useState(false)
-  const [lintEnabled, setLintEnabled] = useState(() => { try { return localStorage.getItem(storageKeys.lintEnabled) !== '0' } catch { return true } })
-  const lintEnabledRef = useRef(false); lintEnabledRef.current = lintEnabled
   const [lintStatus, setLintStatus] = useState('')
   const lintAbortRef = useRef<AbortController | null>(null)
   const lintBusyRef = useRef(false)
@@ -52,17 +50,7 @@ export function useLint(deps: LintDeps) {
   }
   const lintResultsRef = useRef<LintResult[]>([])
 
-  function toggleLint() {
-    setLintEnabled(v => {
-      const n = !v; setStr(storageKeys.lintEnabled, n ? '1' : '0'); lintEnabledRef.current = n
-      if (!n) { lintAbortRef.current?.abort(); lintStore.results = []; lintStore.ranges = new Map(); lintStore.activeUid = null; setLintGroup([]); const ed = deps.getEditor(); if (ed) syncLint(ed) }
-      else { setLintStatus('Lint on — auto-checking…'); setTimeout(() => runLint(), 60) }
-      return n
-    })
-  }
-
   async function runLint() {
-    if (!lintEnabledRef.current) return
     if (lintBusyRef.current) return
     const editor = deps.getEditor()
     if (!editor || modeStore.mode !== 'editing') return
@@ -96,7 +84,7 @@ export function useLint(deps: LintDeps) {
     const sorted = [...group].sort((a, b) => (LINT_PRIORITY[a.color_category] ?? 9) - (LINT_PRIORITY[b.color_category] ?? 9))
     setLintGroup(sorted); lintGroupRef.current = sorted; setLintIdx(0); lintIdxRef.current = 0
     lintStore.activeUid = sorted[0]?.uid || null; syncLint(editor)
-    const c = editor.view.coordsAtPos(editor.state.selection.from); const y = c.bottom + 8
+    const c = editor.view.coordsAtPos(editor.state.selection.from); const y = c.bottom + 8 + scrollY
     deps.setPopupPos({ x: Math.max(8, Math.min(c.left, innerWidth - 380)), y, h: Math.max(170, innerHeight - y - 12) })
   }
 
@@ -131,8 +119,8 @@ export function useLint(deps: LintDeps) {
   return {
     enabledRules, setEnabledRules, customRules, setCustomRules, customInput, setCustomInput,
     lintResults, setLintResults, lintGroup, setLintGroup, lintIdx, setLintIdx, lintGroupRef, lintIdxRef,
-    showLibrary, setShowLibrary, lintEnabled, lintStatus, setLintStatus,
-    toggleLint, runLint, toggleRule, openLintGroup, handleLintKey, selectLintIdx, closeLintGroup, abortLint,
+    showLibrary, setShowLibrary, lintStatus, setLintStatus,
+    runLint, toggleRule, openLintGroup, handleLintKey, selectLintIdx, closeLintGroup, abortLint,
     lintLayerDisabled, setLintLayerDisabled, lintSelUid, setLintSelUid, lintKeyOf,
   }
 }

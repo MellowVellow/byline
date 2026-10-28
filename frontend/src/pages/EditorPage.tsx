@@ -45,6 +45,8 @@ export function sortByLayer(anchors: Anchor[]): Anchor[] {
   return [...anchors].sort((a, b) => (LAYER_ORDER[a.kind] ?? 9) - (LAYER_ORDER[b.kind] ?? 9))
 }
 
+const keyAct = (fn: () => void) => ({ tabIndex: 0, role: 'button' as const, onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn() } } })
+
 export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const docKey = storageKeys.doc(demo)
   const saved = demo ? null : getJSON<any>(docKey, null)
@@ -97,6 +99,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   useEffect(() => { saveSettings(loadSettings()) }, []) // apply persisted prefs on mount
   useEffect(() => { const f = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key === ',') { e.preventDefault(); setShowSettings(v => !v) } }; addEventListener('keydown', f); return () => removeEventListener('keydown', f) }, [])
   const [transMenu, setTransMenu] = useState<{ x: number; y: number; h: number; cat: string | null; query: string } | null>(null)
+  const [notice, setNotice] = useState('')
   const transRef = useRef<typeof transMenu>(null); transRef.current = transMenu
   const [assist, setAssist] = useState('Phrase')
   const [persona, setPersona] = useState(PERSONAS[0])
@@ -137,8 +140,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   function belowCursor() {
     if (!editor) return { x: 200, y: 200, h: 600 }
     const c = editor.view.coordsAtPos(editor.state.selection.from)
-    const y = c.bottom + 8
-    return { x: Math.max(8, Math.min(c.left, innerWidth - 380)), y, h: Math.max(170, innerHeight - y - 12) }
+    const y = c.bottom + 8 + scrollY
+    return { x: Math.max(8, Math.min(c.left, innerWidth - 380)) + scrollX, y, h: Math.max(170, innerHeight - (y - scrollY) - 12) }
   }
   const [stale, setStale] = useState(false)
   // TAB buttons: all enabled initially; double-click TAB greys TAB + disables ALL its underlines. Refresh never greys/deletes items.
@@ -262,8 +265,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
 
   const plain = useCallback(() => editor ? docToText(editor) : { text: '', map: [] as number[] }, [editor])
   const lint = useLint({ getEditor: () => editor, plain, appliedRef, setLoad, openRightTab: (tab) => openRightTab(tab), setPopupPos, writerPosRef, onSelect: (r) => setDockSel({ tab: 'lint', key: lintKeyOf(r) }) })
-  const { enabledRules, setEnabledRules, customRules, setCustomRules, customInput, setCustomInput, lintResults, lintGroup, lintIdx, lintGroupRef, lintIdxRef, showLibrary, setShowLibrary, lintEnabled, lintStatus } = lint
-  const { toggleLint, runLint, toggleRule, openLintGroup, lintSelUid } = lint
+  const { enabledRules, setEnabledRules, customRules, setCustomRules, customInput, setCustomInput, lintResults, lintGroup, lintIdx, lintGroupRef, lintIdxRef, showLibrary, setShowLibrary, lintStatus } = lint
+  const { runLint, toggleRule, openLintGroup, lintSelUid } = lint
   const syn = useSynonyms({ getEditor: () => editor, plain, appliedRef, editingRef, setLoad })
   const { synonyms, synPos, onDblClick, replaceWord } = syn
   const factsRef = useRef(facts); factsRef.current = facts
@@ -287,6 +290,10 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     syncAnchors(editor)
   }, [editor, grammar, issues, reactions, readings])
   useEffect(() => { if (editing) rebuildAnchors(); else { anchorStore.anchors = []; anchorStore.ranges = new Map(); if (editor) syncAnchors(editor) } }, [rebuildAnchors, editing]) // eslint-disable-line
+  useEffect(() => {
+    const h = (e: MouseEvent) => { const t = e.target as HTMLElement; if (t.closest('.sugg-popup,.popup')) return; if (groupRef.current.length) closePopup(); if (lintGroupRef.current?.length) lint.closeLintGroup(); if (transRef.current) { transRef.current = null; setTransMenu(null) } }
+    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
+  }, [editor])
   useEffect(() => { if (!showLibrary) return; const f = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowLibrary(false) }; addEventListener('keydown', f); return () => removeEventListener('keydown', f) }, [showLibrary])
 
   function closePopup() { setSelected(null); setPopupGroup([]); setPopupIdx(0); groupRef.current = []; pinnedRef.current = false; anchorStore.linkedId = null; if (editor) redraw(editor) }
@@ -383,7 +390,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       const t = (e.target as HTMLElement).closest?.('[data-anchor-id]') as HTMLElement | null
       if (!t) return
       const a = anchorStore.anchors.find(x => x.id === t.dataset.anchorId)
-      if (a) { const r = t.getBoundingClientRect(); openAnchor(a, r.left, r.bottom + 8) }
+      if (a) { const r = t.getBoundingClientRect(); openAnchor(a, r.left + scrollX, r.bottom + 8 + scrollY) }
     }
     const onOver = (e: MouseEvent) => {
       // hover = soft highlight ONLY; popups open on explicit click, never while writing
@@ -404,7 +411,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   useEffect(() => { api.health().then(setStatus); if (demo) setTimeout(() => { requestAnnotate(); requestReactions(); requestGrammar(); setReadings(old => old.length ? old : FALLBACK_READINGS) }, 600) }, [editor]) // eslint-disable-line
 
   // Advisory panels never mutate text — applyAnchor/applySelected removed by design. Only Suggestions (acceptGhost) insert.
-  function focusAnchor(a: Anchor) { if (!editor) return; highlightDockForAnchor(a); const tm = plain(); const r = locateQuote(tm, a.quote, a.context); if (r) anchorStore.ranges.set(a.id, r); const pos = editor.view.coordsAtPos(r?.from || editor.state.selection.from); const group = anchorsAt(a); openGroup(group, pos.left, pos.bottom + 6, Math.max(0, group.findIndex(g => g.id === a.id)), true) }
+  function focusAnchor(a: Anchor) { if (!editor) return; highlightDockForAnchor(a); const tm = plain(); const r = locateQuote(tm, a.quote, a.context); if (r) anchorStore.ranges.set(a.id, r); const pos = editor.view.coordsAtPos(r?.from || editor.state.selection.from); const group = anchorsAt(a); openGroup(group, pos.left + scrollX, pos.bottom + 6 + scrollY, Math.max(0, group.findIndex(g => g.id === a.id)), true) }
   function tocItems(): { level: number; text: string; child: number }[] {
     if (!editor) return []
     const out: { level: number; text: string; child: number }[] = []
@@ -424,7 +431,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     if (!editor) return
     setLoad('docx', true)
     try { await exportDocx(editor.getJSON(), { title: 'Untitled document', header: '', footer: '', pageNumbers: false }) }
-    catch (e) { alert(`DOCX export failed: ${e instanceof Error ? e.message : e}`) }
+    catch (e) { setNotice(`DOCX export failed: ${e instanceof Error ? e.message : e}`) }
     setLoad('docx', false)
   }
   function doExportHtml() {
@@ -435,8 +442,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     if (!editor) return
     if (transRef.current) { transRef.current = null; setTransMenu(null); return }
     clearGhost(false)
-    const c = editor.view.coordsAtPos(editor.state.selection.from); const y = c.bottom + 8
-    const m = { x: Math.max(8, Math.min(c.left, innerWidth - 380)), y, h: Math.max(170, innerHeight - y - 12), cat: null as string | null, query: '' }
+    const c = editor.view.coordsAtPos(editor.state.selection.from); const y = c.bottom + 8 + scrollY
+    const m = { x: Math.max(8, Math.min(c.left, innerWidth - 380)) + scrollX, y, h: Math.max(170, innerHeight - (y - scrollY) - 12), cat: null as string | null, query: '' }
     transRef.current = m; setTransMenu(m)
   }
   function insertTransition(tpl: string) { blip('accept')
@@ -457,7 +464,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     setLoad('research', true)
     const d = file ? await researchUpload(file, researchQ || 'Extract key facts for my writing') : await api.research({ url: researchUrl, question: researchQ || 'Extract the key facts relevant to my writing, with sources.' })
     if (d?.ok && d.facts?.length) { setFacts(old => [...d.facts, ...old].filter((f, i, a) => a.findIndex(x => x.fact === f.fact && x.url === f.url) === i).slice(0, 40)) }
-    else if (d?.error) alert(`Research failed: ${d.error}`)
+    else if (d?.error) setNotice(`Research failed: ${d.error}`)
     setLoad('research', false)
   }
   function outlineSectionHtml(o: OutlineDraft, h: number) {
@@ -521,11 +528,11 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   }
   async function exportDataset() {
     const pairs: any[] = getJSON(storageKeys.dataset, [] as any[])
-    if (!pairs.length) { alert('No accepted suggestions captured yet. Accept ghost suggestions (Tab) first.'); return }
+    if (!pairs.length) { setNotice('No accepted suggestions captured yet. Accept ghost suggestions (Tab) first.'); return }
     const d = await api.dataset(pairs)
     const blob = new Blob([pairs.map(x => JSON.stringify(x)).join('\n')], { type: 'application/json' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'byline_dataset.jsonl'; a.click()
-    alert(d?.ok ? `Dataset: ${pairs.length} pairs downloaded, server total ${d.total}. Next LoRA step: see lora/README.md` : 'Dataset downloaded locally; backend save failed.')
+    setNotice(d?.ok ? `Dataset: ${pairs.length} pairs downloaded, server total ${d.total}. Next LoRA step: see lora/README.md` : 'Dataset downloaded locally; backend save failed.')
   }
   function toggleDock(side: 'left' | 'right') { if (side === 'left') { setLeftOpen(v => { setStr(storageKeys.leftOpen, v ? '0' : '1'); return !v }) } else { setRightOpen(v => { setStr(storageKeys.rightOpen, v ? '0' : '1'); return !v }) } }
 
@@ -552,7 +559,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         <div className="top-right">
         {anyLoading && <span className="ai-loading"><Spinner /> AI working</span>}
         {appSettings.showMetrics && <button className="metric" style={{ border: 'none', background: 'none', cursor: 'pointer' }} onClick={() => setShowMetrics(true)} title="Open metrics & benchmarks">Ghost taken {acc}% ({metrics.accepted}/{metrics.offered}) · {avgMs}ms avg · {status?.model || 'offline'}</button>}
-        <span className="dot" role="img" aria-label={status?.meta_configured ? 'Backend connected' : 'Backend offline'} style={{ background: status?.meta_configured ? 'var(--success)' : 'var(--lt)' }} title={status?.meta_configured ? 'Backend connected' : 'Backend offline'} />
+        <span className="dot" role="img" aria-label={status?.meta_configured ? 'Backend connected' : 'Backend offline'} style={{ background: status?.meta_configured ? 'var(--success)' : 'var(--lt)' }} title={status?.meta_configured ? 'Backend connected' : 'Backend offline'} /><span className="meta status-text">{status?.meta_configured ? 'Connected' : 'Offline'}</span>
         <a className={`nav-btn ${location.pathname.startsWith('/app') ? 'active' : ''}`} href="/app">App</a>
         <a className={`nav-btn ${location.pathname.startsWith('/demo') ? 'active' : ''}`} href="/demo">Demo</a>
         <button className="icon-btn settings-icon" onClick={() => { blip('open'); setShowSettings(true) }} title="Settings (Ctrl+,)" aria-label="Settings"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -580,7 +587,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             </>}
             {leftTab === 'style' && <>
             <div className="dock"><h3>Tone</h3>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{TONES.map(t => { const st = tones[t]; return <button key={t} className={`tone-tag ${st || ''}`} title={`${t}: ${st === 'allow' ? 'allowed' : st === 'ban' ? 'not allowed' : 'off'} — click to cycle`} aria-label={`${t}, ${st === 'allow' ? 'allowed' : st === 'ban' ? 'not allowed' : 'off'}`} onClick={() => cycleTone(t)}>{st === 'ban' ? '✕ ' : st === 'allow' ? '✓ ' : ''}{t}</button> })}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{TONES.map(t => { const st = tones[t]; return <button key={t} className={`tone-tag ${st || ''}`} title={`${t}: ${st === 'allow' ? 'allowed' : st === 'ban' ? 'not allowed' : 'off'} — click to cycle`} aria-label={`${t}, ${st === 'allow' ? 'allowed' : st === 'ban' ? 'not allowed' : 'off'}`} onClick={() => cycleTone(t)}>{t}</button> })}</div>
             </div>
             <div className="dock"><h3>Voice</h3>
               <input style={{ width: '100%' }} list="voice-presets" value={voice} onChange={e => setVoice(e.target.value)} placeholder="Describe a voice, or pick an example…" />
@@ -621,7 +628,9 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         </aside>
 
         <main>
-          {demo && <div className="demo-steps"><strong>Demo flow:</strong><span>{metrics.accepted > 0 ? '✔︎' : '○'} 1 Drafting — accept a suggestion (Tab)</span><span>{mode === 'editing' ? '✔︎' : '○'} 2 Editing — switch mode, click a red underline</span><span>{readings.length ? '✔︎' : '○'} 3 Sources — check evidence verdicts</span><span>{lintResults.length ? '✔︎' : '○'} 4 Lint — auto yellow checks</span></div>}
+          {notice && <div className="notice-bar" role="alert"><span>{notice}</span><button onClick={() => setNotice('')}>Dismiss</button></div>}
+          {!demo && counts.words === 0 && <div className="notice-bar"><span>Start writing — suggestions appear as you type.</span><button className="primary" onClick={() => setWizardOpen(true)}>Run Setup for an outline</button></div>}
+          {demo && <div className="demo-steps"><strong>Demo flow:</strong><span>{metrics.accepted > 0 ? 'Done —' : 'Todo —'} 1 Drafting — accept a suggestion (Tab)</span><span>{mode === 'editing' ? 'Done —' : 'Todo —'} 2 Editing — switch mode, click a red underline</span><span>{readings.length ? 'Done —' : 'Todo —'} 3 Sources — check evidence verdicts</span><span>{lintResults.length ? 'Done —' : 'Todo —'} 4 Lint — auto yellow checks</span></div>}
           <EditorMenus editor={editor} counts={counts} showWordCount={appSettings.showWordCount} onSuggest={() => requestComplete()} onSentenceStarter={openTransMenu} onWizard={() => setWizardOpen(true)} onExportDocx={doExportDocx} onExportHtml={doExportHtml} onExportDataset={exportDataset} exportingDocx={!!loading.docx} />
           <div className="editor-pane-label">Main editor</div>
           <div className="paper" onDoubleClick={onDblClick}>
@@ -632,7 +641,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         </main>
 
         <aside className={`rail right-rail ${mode === 'drafting' ? 'ai-off' : ''}`} onClickCapture={e => { if ((e.target as HTMLElement).closest('button')) blip('select') }}>
-          {!rightOpen ? <div className="rail-strip"><button onClick={() => toggleDock('right')} title="Expand">‹</button>{RIGHT_TAB_ORDER.map(ic => <button key={ic} title={TAB_THEME[ic].label} aria-label={TAB_THEME[ic].label} className={disabledTabs.has(ic) ? 'tab-disabled' : ''} style={{ borderColor: TAB_THEME[ic].color, color: TAB_THEME[ic].color }} onClick={() => { openRightTab(ic as RightTab); if (!editing && ic !== 'suggest') switchMode('editing') }} onDoubleClick={e => { e.preventDefault(); e.stopPropagation(); toggleTabDisabled(ic) }}>{TAB_THEME[ic].label[0]}</button>)}</div> : <>
+          {!rightOpen ? <div className="rail-strip"><button onClick={() => toggleDock('right')} title="Expand">‹</button>{RIGHT_TAB_ORDER.map(ic => <button key={ic} title={TAB_THEME[ic].label} aria-label={TAB_THEME[ic].label} className={disabledTabs.has(ic) ? 'tab-disabled' : ''} style={{ borderColor: TAB_THEME[ic].color, color: TAB_THEME[ic].color }} onClick={() => { openRightTab(ic as RightTab); if (!editing && ic !== 'suggest') switchMode('editing') }} onDoubleClick={e => { e.preventDefault(); e.stopPropagation(); toggleTabDisabled(ic) }}>{({ language: 'La', reader: 'Rd', sources: 'So', suggest: 'Su', lint: 'Li' } as Record<string, string>)[ic]}</button>)}</div> : <>
             <div className="rail-head"><strong style={{ fontSize: 13 }}>{TAB_THEME[rightTab]?.label || 'Suggest'}</strong><button onClick={() => toggleDock('right')} title="Collapse">›</button></div>
             <div className="dock-tabs" role="tablist" aria-label="Read panels">
               {RIGHT_TAB_ORDER.map(k => {
@@ -648,9 +657,9 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             {editing && rightTab === 'language' && <><div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--lt)' }} />Language{(loading.grammar || loading.annotate) && <Spinner />}</h3>
               <div className="dock-scroll">
               <div className="meta">Double-click Language tab → disable all language underlines.</div>
-              {grammar.map((g, i) => { const key = anchorKey('grammar', g.quote || '', g.message); const sel = dockSel?.tab === 'language' && dockSel.key === key; const a = anchorStore.anchors.find(x => x.id === `g${i}-${g.from}`); const st = LANG_STYLE.grammar; return <div key={`g${i}`} className={`dock-item ${sel ? 'dock-selected' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label}</div><span className="quote-serif">{g.quote || ''}</span><div className="reason-text">{g.message}</div></div> })}
-              {issues.map(it => { const key = anchorKey(it.type === 'vocabulary' ? 'vocabulary' : 'relevance', it.quote, it.reason); const sel = dockSel?.tab === 'language' && dockSel.key === key; const a = anchorStore.anchors.find(x => x.id === it.id); const st = LANG_STYLE[it.type]; return <div key={it.id} className={`dock-item ${sel ? 'dock-selected' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label}</div><span className="quote-serif">{it.quote}</span><div className="reason-text">{it.reason}</div></div> })}
-              {!grammar.length && !issues.length && <div className="meta">—</div>}
+              {grammar.map((g, i) => { const key = anchorKey('grammar', g.quote || '', g.message); const sel = dockSel?.tab === 'language' && dockSel.key === key; const a = anchorStore.anchors.find(x => x.id === `g${i}-${g.from}`); const st = LANG_STYLE.grammar; return <div key={`g${i}`} {...keyAct(() => a && focusAnchor(a))} className={`dock-item ${sel ? 'dock-selected' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label}</div><span className="quote-serif">{g.quote || ''}</span><div className="reason-text">{g.message}</div></div> })}
+              {issues.map(it => { const key = anchorKey(it.type === 'vocabulary' ? 'vocabulary' : 'relevance', it.quote, it.reason); const sel = dockSel?.tab === 'language' && dockSel.key === key; const a = anchorStore.anchors.find(x => x.id === it.id); const st = LANG_STYLE[it.type]; return <div key={it.id} {...keyAct(() => a && focusAnchor(a))} className={`dock-item ${sel ? 'dock-selected' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label}</div><span className="quote-serif">{it.quote}</span><div className="reason-text">{it.reason}</div></div> })}
+              {!grammar.length && !issues.length && <div className="meta">No language checks yet — they appear in Editing mode.</div>}
               </div><div className="dock-foot"><span className="meta">Dictionary: {dict.spelling.length} · Ignored: {dict.ignore.length}</span>{dict.spelling.length > 0 && <button style={{ marginLeft: 8 }} onMouseDown={e => e.preventDefault()} onClick={exportAdditions}>Export additions</button>}</div>
             </div>
             </>}
@@ -661,14 +670,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               <select value={diagramKind} onChange={e => setDiagramKind(e.target.value as any)}><option value="mindmap">Mindmap</option><option value="flowchart">Flowchart</option></select>
               <button disabled={!editing} onClick={refreshDiagram}>{loading.diagram ? 'Drawing…' : 'Draw diagram'}</button></div>
               <Diagram source={diagram.mermaid} caption="" nodes={diagram.nodes} onNode={n => focusAnchor({ id: `dg:${n.label}`, kind: 'reaction', quote: n.quote, context: n.context, title: n.label, detail: n.quote })} />
-              {outline.map((o, i) => <div key={i} className="dock-item" onClick={() => focusAnchor({ id: `o${i}`, kind: 'reaction', quote: o.quote, context: o.context, title: 'Outline', detail: o.label })}>{o.label}<div className="meta">“{o.quote}”</div></div>)}
+              {outline.map((o, i) => <div key={i} {...keyAct(() => focusAnchor({ id: `o${i}`, kind: 'reaction', quote: o.quote, context: o.context, title: 'Outline', detail: o.label }))} className="dock-item" onClick={() => focusAnchor({ id: `o${i}`, kind: 'reaction', quote: o.quote, context: o.context, title: 'Outline', detail: o.label })}>{o.label}<div className="meta">“{o.quote}”</div></div>)}
               <button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={refreshOutline}>Outline</button>
             </div>
             <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--ai)' }} />Reader{loading.reactions && <Spinner />}</h3>
               <div className="dock-scroll">
               <div className="meta">Double-click Reader tab → disable all reader underlines.</div>
-              {reactions.map(r => { const key = anchorKey('reaction', r.quote, r.text); const sel = dockSel?.tab === 'reader' && dockSel.key === key; const a = anchorStore.anchors.find(x => x.id === r.id); const st = REACTION_STYLE[r.kind]; return <div key={r.id} className={`dock-item ${sel ? 'dock-selected' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label}</div><span className="quote-serif">{r.quote}</span><div className={`kind-body ${r.kind === 'question' ? 'q' : r.kind === 'critique' ? 'crit' : r.kind === 'comment' ? 'comm' : ''}`} style={r.kind === 'compliment' ? { color: st.color, fontWeight: 600 } : undefined}>“{r.text}”</div></div> })}
-              {!reactions.length && <div className="meta">—</div>}
+              {reactions.map(r => { const key = anchorKey('reaction', r.quote, r.text); const sel = dockSel?.tab === 'reader' && dockSel.key === key; const a = anchorStore.anchors.find(x => x.id === r.id); const st = REACTION_STYLE[r.kind]; return <div key={r.id} {...keyAct(() => a && focusAnchor(a))} className={`dock-item ${sel ? 'dock-selected' : ''}`} onMouseDown={e => e.preventDefault()} onMouseEnter={() => a && highlightAnchor(a)} onMouseLeave={() => highlightAnchor(null)} onClick={() => a && focusAnchor(a)}><div className="kind-label" style={{ color: st.color }}>{st.label}</div><span className="quote-serif">{r.quote}</span><div className={`kind-body ${r.kind === 'question' ? 'q' : r.kind === 'critique' ? 'crit' : r.kind === 'comment' ? 'comm' : ''}`} style={r.kind === 'compliment' ? { color: st.color, fontWeight: 600 } : undefined}>“{r.text}”</div></div> })}
+              {!reactions.length && <div className="meta">No reader reactions yet.</div>}
               </div><div className="dock-foot"><button disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={requestReactions}>Refresh</button></div>
             </div>
             </>}
@@ -695,25 +704,25 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               {facts.map((f, i) => <div key={i} className="source-card"><span className="source-badge">Fact{f.locator ? ` · ${f.locator}` : ''}</span><div className="source-why">{f.fact}</div><div className="source-excerpt"><a href={safeUrl(f.url || '#')} target="_blank" rel="noreferrer">{f.source_title || f.url}</a>{f.excerpt ? ` — “${f.excerpt}”` : ''}</div><button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={() => insertFact(f)}>Insert citation</button></div>)}
               <div className="meta">Grouped by claim · double-click Sources tab → disable all source highlights.</div>
               {groupByClaim(readings).map((grp, gi) => { const key = anchorKey('claim', grp.claim); const sel = dockSel?.tab === 'sources' && dockSel.key === key; return <div key={gi} className={`source-card claim-group ${sel ? 'dock-selected' : ''}`}><span className="source-badge">Claim · {grp.items.length} source{grp.items.length === 1 ? '' : 's'}</span><div className="source-why">“{grp.claim}”</div><div className="claim-links">{grp.items.map((r, i) => <div key={i} className="claim-link"><span className={`source-badge verdict-${(r as any).verdict || r.label}`}>{(r as any).verdict || r.label}</span> <a href={textFragmentUrl(safeUrl(r.url), r.excerpt || r.claim_quote)} target="_blank" rel="noreferrer">{r.title || r.url}</a>{(r as any).domain && <span className="meta"> · {(r as any).domain}</span>}</div>)}</div></div> })}
-              {!readings.length && !facts.length && <div className="meta">—</div>}
+              {!readings.length && !facts.length && <div className="meta">No sources yet — search a claim above.</div>}
               </div><div className="dock-foot"><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button className="primary" disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshReadings}>{loading.readings ? 'Searching claims…' : 'Search blue highlights'}</button><button onMouseDown={e => e.preventDefault()} onClick={() => setShowSources(true)}>Library ({facts.length + readings.length})</button></div></div>
             </div>
             </>}
             {(rightTab === 'suggest' || !editing) && <div className="dock dock-section suggest-dock"><h3><span className="swatch" style={{ background: 'var(--grey)' }} />Suggestions{loading.complete && <Spinner />}</h3>
               <div className="dock-scroll">
-              {suggestions.map((s, i) => <div key={`s${i}`} className={`ghost-row ${i === ghostIdx ? 'sel' : ''}`} onClick={() => acceptGhost(i)}><span className="quote-serif">{s}</span></div>)}
+              {suggestions.map((s, i) => <div key={`s${i}`} {...keyAct(() => acceptGhost(i))} className={`ghost-row ${i === ghostIdx ? 'sel' : ''}`} onClick={() => acceptGhost(i)}><span className="quote-serif">{s}</span></div>)}
               {suggHistory.map((s, i) => <div key={`h${i}`} className="ghost-row">{s}</div>)}
-              {loading.complete && !suggestions.length && <div className="meta"><LoadingDots /></div>}{!suggestions.length && !suggHistory.length && !loading.complete && <div className="meta">—</div>}
+              {loading.complete && !suggestions.length && <div className="meta"><LoadingDots /></div>}{!suggestions.length && !suggHistory.length && !loading.complete && <div className="meta">No suggestions yet — keep writing, or press Ctrl+Space.</div>}
               </div>
               {suggestions.length > 0 && <div className="dock-foot"><button onClick={() => clearGhost()}>Dismiss <span className="kbd">Esc</span></button></div>}
             </div>}
-            {editing && rightTab === 'lint' && <div className="dock dock-section" style={lintEnabled ? undefined : { opacity: .55 }}><h3><span className="swatch" style={{ background: 'var(--yellow)' }} />Lint {loading.lint && <Spinner />}<span className="spacer" /><button role="switch" aria-checked={lintEnabled} aria-label="Toggle lint" className={`switch ${lintEnabled ? 'on' : ''}`} onMouseDown={e => e.preventDefault()} onClick={toggleLint}><span className="knob" /></button></h3>
+            {editing && rightTab === 'lint' && <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--yellow)' }} />Lint {loading.lint && <Spinner />}</h3>
               <div className="dock-scroll">
               <div className="meta">Double-click Lint tab → disable all lint underlines. Advisory only — no fix/apply.</div>
-              {lintResults.map(r => { const rule = LINTER_RULE_LIBRARY.find(x => x.id === r.rule_id); const sel = r.uid === lintSelUid || (dockSel?.tab === 'lint' && dockSel.key === lintKeyOf(r)); return <div key={r.uid} className={`dock-item ${sel ? 'dock-selected' : ''}`} onMouseDown={e => e.preventDefault()} onClick={() => openLintGroup(r)}><div className="kind-label" style={{ color: 'var(--yellow)' }}>{LINT_COLORS[r.color_category]?.label || r.color_category} · {rule?.name || r.rule_id}</div><span className="quote-serif">{r.target}</span><div className="reason-text">{r.message}</div></div> })}
-              {!lintResults.length && !loading.lint && <div className="meta">{lintEnabled ? 'No results.' : 'Lint off.'}</div>}
+              {lintResults.map(r => { const rule = LINTER_RULE_LIBRARY.find(x => x.id === r.rule_id); const sel = r.uid === lintSelUid || (dockSel?.tab === 'lint' && dockSel.key === lintKeyOf(r)); return <div key={r.uid} {...keyAct(() => openLintGroup(r))} className={`dock-item ${sel ? 'dock-selected' : ''}`} onMouseDown={e => e.preventDefault()} onClick={() => openLintGroup(r)}><div className="kind-label" style={{ color: 'var(--yellow)' }}>{LINT_COLORS[r.color_category]?.label || r.color_category} · {rule?.name || r.rule_id}</div><span className="quote-serif">{r.target}</span><div className="reason-text">{r.message}</div></div> })}
+              {!lintResults.length && !loading.lint && <div className="meta">No results.</div>}
               {loading.lint && !lintResults.length && <div className="meta"><LoadingDots /></div>}
-              </div><div className="dock-foot"><div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}><button className="primary" disabled={!lintEnabled} onMouseDown={e => e.preventDefault()} onClick={runLint}>{loading.lint ? 'Linting…' : 'Re-run lint'}</button><button onMouseDown={e => e.preventDefault()} onClick={() => setShowLibrary(true)}>Rule library</button></div>{lintStatus && <div className="meta" style={{ marginTop: 6 }}>{lintStatus}</div>}</div>
+              </div><div className="dock-foot"><div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}><button className="primary" onMouseDown={e => e.preventDefault()} onClick={runLint}>{loading.lint ? 'Linting…' : 'Re-run lint'}</button><button onMouseDown={e => e.preventDefault()} onClick={() => setShowLibrary(true)}>Rule library</button></div>{lintStatus && <div className="meta" style={{ marginTop: 6 }}>{lintStatus}</div>}</div>
             </div>}
             </div>
           </>}
@@ -730,14 +739,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               {Object.entries(LINT_COLORS).map(([color, meta]) => <div key={color} style={{ marginBottom: 18 }}>
                 <div className="kind-label" style={{ color: 'var(--yellow)', fontSize: 12 }}>{meta.label} · {meta.intent}</div>
                 {LINTER_RULE_LIBRARY.filter(r => r.color === color).map(r => <div key={r.id} className="library-rule">
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><button className={`tone-tag ${enabledRules.has(r.id) ? 'allow' : ''}`} onClick={() => toggleRule(r.id)}>{enabledRules.has(r.id) ? '✓ Enabled' : 'Enable'}</button><strong>{r.name}</strong><span className="meta">{r.id}</span></div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><button className={`tone-tag ${enabledRules.has(r.id) ? 'allow' : ''}`} onClick={() => toggleRule(r.id)}>{enabledRules.has(r.id) ? 'Enabled' : 'Enable'}</button><strong>{r.name}</strong><span className="meta">{r.id}</span></div>
                   <p>{r.description}</p>
                   <p className="meta"><strong>Rule:</strong> {r.instruction}</p>
                   {r.example_violation && <div className="library-example"><div><span className="kind-label" style={{ color: 'var(--lt)' }}>Violation</span> <span className="quote-serif">“{r.example_violation}”</span></div><div><span className="kind-label" style={{ color: 'var(--yellow)' }}>Fix</span> <span className="quote-serif">“{r.example_fix}”</span></div></div>}
                 </div>)}
               </div>)}
               <div className="kind-label" style={{ color: 'var(--yellow)', fontSize: 12 }}>Custom rules · yellow</div>
-              {customRules.map((t, i) => <div key={i} className="library-rule"><span className="tone-tag allow">✓ Enabled</span> <strong>CUSTOM_{String(i + 1).padStart(2, '0')}</strong><button style={{ float: 'right' }} onClick={() => { const n = customRules.filter((_, j) => j !== i); setCustomRules(n); setJSON(storageKeys.customRules, n) }}>✕</button><p>{t}</p></div>)}
+              {customRules.map((t, i) => <div key={i} className="library-rule"><span className="tone-tag allow">Enabled</span> <strong>CUSTOM_{String(i + 1).padStart(2, '0')}</strong><button style={{ float: 'right' }} aria-label="Delete custom rule" onClick={() => { const n = customRules.filter((_, j) => j !== i); setCustomRules(n); setJSON(storageKeys.customRules, n) }}>Delete</button><p>{t}</p></div>)}
               <div style={{ display: 'flex', gap: 6, marginTop: 10 }}><input style={{ flex: 1 }} value={customInput} onChange={e => setCustomInput(e.target.value)} placeholder="Add custom rule — e.g. no passive voice in headers" onKeyDown={e => { if (e.key === 'Enter' && customInput.trim()) { const n = [...customRules, customInput.trim()]; setCustomRules(n); setJSON(storageKeys.customRules, n); setCustomInput('') } }} /><button className="primary" onClick={() => { if (!customInput.trim()) return; const n = [...customRules, customInput.trim()]; setCustomRules(n); setJSON(storageKeys.customRules, n); setCustomInput('') }}>Add rule</button></div>
             </div>
           </div>
@@ -762,7 +771,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       {lintGroup.length > 0 && (
         <div className="popup popup-stack fade" role="dialog" style={{ left: popupPos.x, top: popupPos.y, maxHeight: popupPos.h }}>
           {lintGroup.map((r, i) => { const rule = LINTER_RULE_LIBRARY.find(x => x.id === r.rule_id); const active = i === lintIdx; return (
-            <div key={r.uid} className={`stack-card ${active ? 'active' : ''}`} onMouseDown={e => e.preventDefault()} onClick={() => lint.selectLintIdx(i)}>
+            <div key={r.uid} {...keyAct(() => lint.selectLintIdx(i))} className={`stack-card ${active ? 'active' : ''}`} onMouseDown={e => e.preventDefault()} onClick={() => lint.selectLintIdx(i)}>
               <span className="chip" style={{ background: 'var(--yellow)' }}>{LINT_COLORS[r.color_category]?.label || r.color_category}</span><span className="stack-order">{i + 1}/{lintGroup.length}</span>
               <div className="quote-serif" style={{ marginTop: 6 }}>“{r.target}”</div>
               <div style={{ fontWeight: 600, marginTop: 2, fontSize: 12.5 }}>{rule?.name || r.rule_id}</div>
@@ -779,7 +788,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             const chipColor = a.kind === 'grammar' ? 'var(--lt)' : a.kind === 'claim' ? 'var(--blue)' : a.kind === 'vocabulary' || a.kind === 'relevance' ? 'var(--lt)' : 'var(--ai)'
             const chipLabel = a.kind === 'grammar' ? 'Grammar' : a.kind === 'vocabulary' ? 'Word choice' : a.kind === 'relevance' ? 'Cohesion' : a.kind === 'claim' ? 'Source' : REACTION_STYLE[a.tone || '']?.label || a.tone || 'Reader'
             return (
-              <div key={a.id} className={`stack-card ${active ? 'active' : ''}`} onMouseDown={e => e.preventDefault()} onClick={() => setActiveIdx(i)}>
+              <div key={a.id} {...keyAct(() => setActiveIdx(i))} className={`stack-card ${active ? 'active' : ''}`} onMouseDown={e => e.preventDefault()} onClick={() => setActiveIdx(i)}>
                 <span className="chip" style={{ background: chipColor }}>{chipLabel}</span>
                 <span className="stack-order">{i + 1}/{popupGroup.length}</span>
                 <div className="quote-serif" style={{ marginTop: 6 }}>“{a.quote}”</div>

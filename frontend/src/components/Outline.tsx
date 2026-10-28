@@ -41,6 +41,8 @@ export default function Outline({ editor, data, onMove }: {
             onDragEnd={() => { setDrag(null); setOver(null) }}
             onDragOver={e => { e.preventDefault(); setOver(seg) }}
             onDrop={e => { e.preventDefault(); if (drag !== null) onMove(drag, seg); setDrag(null); setOver(null) }}
+            tabIndex={0}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goto(item) } }}
             onClick={() => goto(item)}
             title={item.textContent}
           >

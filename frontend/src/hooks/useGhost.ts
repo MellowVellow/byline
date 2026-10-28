@@ -85,7 +85,7 @@ export function useGhost(deps: GhostDeps) {
     deps.record({ offered: (v: number) => v + 1, msTotal: (v: number) => v + Math.round(performance.now() - t0), msCount: (v: number) => v + 1 })
     const pos2 = editor.state.selection.from
     anchorStore.ghost = ghostInsertText(editor.state.doc.textBetween(0, pos2), sugg[0]); anchorStore.ghostPos = pos2; syncGhost(editor)
-    const c = editor.view.coordsAtPos(pos2); const y = c.bottom + 8; setSuggPos({ x: Math.max(8, Math.min(c.left, innerWidth - 380)), y, h: Math.max(170, innerHeight - y - 12) })
+    const c = editor.view.coordsAtPos(pos2); const y = c.bottom + 8 + scrollY; setSuggPos({ x: Math.max(8, Math.min(c.left, innerWidth - 380)) + scrollX, y, h: Math.max(170, innerHeight - (y - scrollY) - 12) })
     redraw(editor)
   }
   return { suggestions, ghostIdx, setGhostIdx, suggHistory, suggPos, showGhost, clearGhost, acceptGhost, requestComplete }

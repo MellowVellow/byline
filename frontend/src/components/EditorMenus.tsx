@@ -37,15 +37,15 @@ export default function EditorMenus({ editor, onSuggest, onSentenceStarter, coun
       <button className={editor.isActive('italic') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleItalic().run()} title="Italic (Ctrl I)"><em>I</em></button>
       <button className={editor.isActive('underline') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleUnderline().run()} title="Underline (Ctrl U)"><u>U</u></button>
       <button className={editor.isActive('strike') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleStrike().run()} title="Strikethrough"><s>S</s></button>
-      <button className={editor.isActive('highlight') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleHighlight().run()} title="Highlight">▮</button>
+      <button className={editor.isActive('highlight') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleHighlight().run()} title="Highlight"><span style={{ background: "var(--link)", padding: "0 4px" }}>H</span></button>
       <button className={editor.isActive('code') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleCode().run()} title="Inline code">{'</>'}</button>
       <span className="tool-sep" />
       {[1, 2, 3, 4, 5, 6].map(l => <button key={l} className={editor.isActive('heading', { level: l }) ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: l as 1 | 2 | 3 | 4 | 5 | 6 }).run()}>H{l}</button>)}
-      <button className={editor.isActive('blockquote') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBlockquote().run()} title="Quote">❝</button>
+      <button className={editor.isActive('blockquote') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBlockquote().run()} title="Quote">Quote</button>
       <span className="tool-sep" />
-      <button className={editor.isActive('bulletList') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()} title="Bullet list">•</button>
+      <button className={editor.isActive('bulletList') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()} title="Bullet list">List</button>
       <button className={editor.isActive('orderedList') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Numbered list">1.</button>
-      {(['left', 'center', 'right'] as const).map(a => <button key={a} className={editor.isActive({ textAlign: a }) ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().setTextAlign(a).run()} title={`Align ${a}`}>{a === 'left' ? '⇤' : a === 'center' ? '↔' : '⇥'}</button>)}
+      {(['left', 'center', 'right'] as const).map(a => <button key={a} className={editor.isActive({ textAlign: a }) ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().setTextAlign(a).run()} title={`Align ${a}`}>{a === 'left' ? 'Left' : a === 'center' ? 'Center' : 'Right'}</button>)}
       <span className="tool-sep" />
       <button className={editor.isActive('link') ? 'active' : ''} onMouseDown={e => e.preventDefault()} onClick={link}>Link</button>
       <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()} title="Clear formatting">Clear</button>
@@ -54,13 +54,13 @@ export default function EditorMenus({ editor, onSuggest, onSentenceStarter, coun
     <FloatingMenu editor={editor} className="floating-menu" options={{ placement: 'left-start', offset: 8 }}
       shouldShow={({ editor: e }) => { const { selection } = e.state; const { $anchor, empty } = selection; return empty && $anchor.parent.type.name === 'paragraph' && $anchor.parent.textContent === '' }}>
       <div className="floating-title">Add block</div>
-      <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().setParagraph().run()}>¶ Text</button>
+      <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().setParagraph().run()}>Text</button>
       {[1, 2, 3, 4, 5, 6].map(l => <button key={l} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: l as 1 | 2 | 3 | 4 | 5 | 6 }).run()}>H{l} Heading {l}</button>)}
-      <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()}>• Bullet list</button>
+      <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()}>Bullet list</button>
       <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleOrderedList().run()}>1. Numbered list</button>
-      <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBlockquote().run()}>❝ Quote</button>
+      <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBlockquote().run()}>Quote</button>
       <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleCodeBlock().run()}>{'</>'} Code block</button>
-      <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().setHorizontalRule().run()}>― Divider</button>
+      <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().setHorizontalRule().run()}>Divider</button>
     </FloatingMenu>
   </>
 }

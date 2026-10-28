@@ -12,7 +12,7 @@ export interface AppSettings {
 
 /** One preset drives every annotation surface: grammar=Language red, ai=Reader purple, sources=blue, wordChoice=Lint yellow, suggest=Suggest grey. */
 export const COLOR_PRESETS: Record<string, { label: string; ai: string; grammar: string; sources: string; wordChoice: string; selection: string; suggest: string }> = {
-  default: { label: 'Byline', ai: '#7C4DFF', grammar: '#D93025', sources: '#1A73E8', wordChoice: '#D99A06', selection: '#FFF3C4', suggest: '#9AA0A6' },
+  default: { label: 'Byline', ai: '#6D3BE0', grammar: '#C0281F', sources: '#1765CC', wordChoice: '#8A5F00', selection: '#F5E3B0', suggest: '#626A75' },
   ocean: { label: 'Ocean', ai: '#0E7490', grammar: '#E11D48', sources: '#2563EB', wordChoice: '#D97706', selection: '#DBEAFE', suggest: '#64748B' },
   forest: { label: 'Forest', ai: '#15803D', grammar: '#DC2626', sources: '#0369A1', wordChoice: '#CA8A04', selection: '#DCFCE7', suggest: '#6B7280' },
   sunset: { label: 'Sunset', ai: '#C026D3', grammar: '#EA580C', sources: '#4F46E5', wordChoice: '#EAB308', selection: '#FDE68A', suggest: '#78716C' },

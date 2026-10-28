@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1440">
+<title>Byline — Campus Riso Reader</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#E8DCC0;font-family:'Archivo',sans-serif;color:#23201B}
+.page{width:1440px;height:900px;overflow:hidden;margin:0 auto;position:relative;background:#F4EAD3;background-image:radial-gradient(rgba(35,32,27,.10) 1px,transparent 1.1px),radial-gradient(rgba(35,32,27,.06) 1px,transparent 1px);background-size:14px 14px,22px 22px;background-position:0 0,6px 8px;padding:26px 56px 0}
+header{display:flex;justify-content:space-between;align-items:center}
+.logo{display:flex;align-items:center;gap:12px;font-weight:900;letter-spacing:-.04em;font-size:30px}
+.dots{display:flex;gap:5px}.dots i{width:11px;height:11px;border-radius:50%;display:block;border:2px solid #23201B}
+nav{display:flex;gap:14px;align-items:center}
+.navlink{font:700 13px 'Archivo';text-decoration:none;color:#23201B;background:#FFFDF4;border:2px solid #23201B;padding:10px 16px;box-shadow:3px 3px 0 #23201B}
+.navlink.dark{background:#23201B;color:#F4EAD3;box-shadow:3px 3px 0 #D93025}
+.hero{display:grid;grid-template-columns:1.08fr .92fr;gap:56px;margin-top:54px}
+.kicker{display:inline-flex;gap:8px;align-items:center;background:#23201B;color:#F4EAD3;padding:7px 12px;font:800 11px 'Archivo';letter-spacing:.16em;text-transform:uppercase}
+.kicker b{color:#FFC107}
+h1{font-family:'Archivo Black';font-size:78px;line-height:.92;letter-spacing:-.02em;text-transform:uppercase;margin:22px 0 20px}
+h1 em{font-style:normal;color:#D93025}
+h1 .blue{color:#1A73E8}
+.sub{font-size:18px;line-height:1.55;font-weight:500;max-width:560px;color:#3A352C}
+.cta{display:inline-block;margin-top:28px;background:#23201B;color:#FFFDF4;text-decoration:none;font:800 16px 'Archivo';padding:18px 26px;border:2px solid #23201B;box-shadow:6px 6px 0 #FFFDF4,8px 8px 0 #23201B}
+.waitlist{margin-top:26px;display:flex;max-width:520px}
+.waitlist input{flex:1;border:2px solid #23201B;background:#FFFDF4;padding:14px 16px;font:600 14px 'Archivo';outline:none}
+.waitlist button{border:2px solid #23201B;border-left:0;background:#D99A06;font:900 13px 'Archivo';padding:0 18px;cursor:pointer}
+.micro{font-size:12px;font-weight:600;margin-top:10px;opacity:.7}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:30px}
+.chip{font:800 11px 'Archivo';letter-spacing:.06em;text-transform:uppercase;padding:7px 10px;border:2px solid #23201B;background:#FFFDF4;display:flex;gap:7px;align-items:center}
+.chip i{width:9px;height:9px;border-radius:50%;border:2px solid #23201B;display:block}
+.sheet-wrap{position:relative;padding-top:8px}
+.sheet{background:#FFFDF4;border:2px solid #23201B;padding:30px 30px 26px;transform:rotate(-.5deg);box-shadow:8px 8px 0 #1A73E8,11px 11px 0 #D93025,14px 14px 0 rgba(35,32,27,.9);position:relative;z-index:2}
+.sheet-top{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #23201B;padding-bottom:14px}
+.sheet-top span{font:800 10px 'Archivo';letter-spacing:.16em;text-transform:uppercase}
+.pill{background:#23201B;color:#fff;font:800 10px 'Archivo';padding:5px 9px;letter-spacing:.08em}
+.sheet h2{font-family:'Archivo Black';font-size:24px;line-height:1.05;margin:20px 0 16px}
+.draft{font-size:18px;line-height:1.85;font-weight:500}
+.w-red{text-decoration:underline wavy #D93025 2px;text-underline-offset:5px}
+.w-purple{text-decoration:underline wavy #7C4DFF 2px;text-underline-offset:5px}
+.w-yellow{text-decoration:underline wavy #D99A06 2px;text-underline-offset:5px;background:#FFF3C4}
+.w-blue{text-decoration:underline wavy #1A73E8 2px;text-underline-offset:5px}
+.popup{margin-top:22px;background:#23201B;color:#FFFDF4;padding:18px;border:2px solid #23201B;box-shadow:5px 5px 0 #D93025}
+.popup-head{display:flex;justify-content:space-between;align-items:center}
+.gchip{background:#D93025;color:#fff;font:900 10px 'Archivo';letter-spacing:.12em;text-transform:uppercase;padding:5px 8px}
+.popup-head small{font:700 11px 'Archivo';opacity:.7}
+.quote{font:800 17px 'Archivo';margin:12px 0 6px}
+.popup p{font-size:13.5px;line-height:1.5;opacity:.9}
+.popup-btns{display:flex;gap:8px;margin-top:14px}
+.popup-btns button{font:900 12px 'Archivo';padding:9px 14px;border:2px solid #FFFDF4;cursor:pointer}
+.popup-btns .next{background:#FFFDF4;color:#23201B}
+.popup-btns .close{background:transparent;color:#FFFDF4}
+.stamp{position:absolute;right:18px;top:-22px;z-index:3;background:#D93025;color:#fff;font:900 11px 'Archivo';letter-spacing:.12em;padding:9px 12px;transform:rotate(2deg);border:2px solid #23201B;box-shadow:3px 3px 0 #23201B}
+footer{margin-top:44px;display:flex;justify-content:space-between;border-top:2px solid #23201B;padding-top:14px;font:800 11px 'Archivo';letter-spacing:.1em;text-transform:uppercase}
+</style>
+</head>
+<body>
+<div class="page">
+<header>
+<div class="logo">Byline <span class="dots"><i style="background:#D93025"></i><i style="background:#7C4DFF"></i><i style="background:#1A73E8"></i><i style="background:#D99A06"></i></span></div>
+<nav><a class="navlink" href="#">Public demo</a><a class="navlink dark" href="#">Open app →</a></nav>
+</header>
+<main class="hero">
+<section>
+<div class="kicker">★ Campus Riso Reader — Issue 01</div>
+<h1>You write.<br><em>Byline</em><br>suggests.<br><span class="blue">You choose.</span></h1>
+<p class="sub">Other editors give finished text. Byline gives options — hints, phrases, questions, sentences — grounded in your context and vocabulary level. Every word stays your choice.</p>
+<a class="cta" href="#">Try demo — no signup →</a>
+<form class="waitlist" onsubmit="return false"><input value="you@example.com" aria-label="Email"><button>Join waitlist</button></form>
+<p class="micro">No signup for demo &nbsp;·&nbsp; Your draft stays yours</p>
+<div class="legend">
+<span class="chip"><i style="background:#D93025"></i>Language</span>
+<span class="chip"><i style="background:#7C4DFF"></i>Reader</span>
+<span class="chip"><i style="background:#1A73E8"></i>Sources</span>
+<span class="chip"><i style="background:#9AA0A6"></i>Suggest</span>
+<span class="chip"><i style="background:#D99A06"></i>Lint</span>
+</div>
+</section>
+<section class="sheet-wrap">
+<div class="stamp">Printed draft ✕ Not auto-fixed</div>
+<article class="sheet">
+<div class="sheet-top"><span>✎ Mini draft — Live proof</span><span class="pill">3 layers on</span></div>
+<h2>Cats or dogs: choosing a first pet</h2>
+<p class="draft"><span class="w-purple">Cats are independent, as I said.</span> <span class="w-red">Dogs needs daily walks.</span> <span class="w-yellow">A plethora of reasons</span> exist for <span class="w-blue">choosing a cat.</span></p>
+<div class="popup">
+<div class="popup-head"><span class="gchip">Grammar</span><small>Language · 1 of 3</small></div>
+<p class="quote">“Dogs needs daily walks”</p>
+<p>Subject–verb agreement: ‘Dogs need’.</p>
+<div class="popup-btns"><button class="next">Next →</button><button class="close">Close</button></div>
+</div>
+</article>
+</section>
+</main>
+<footer><span>Set in Archivo Black · Printed on paper</span><span>Hints — not replacements ●</span></footer>
+</div>
+</body>
+</html>

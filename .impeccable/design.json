@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-28T15:30:30Z",
+  "title": "Design System: Byline — Proof Desk",
+  "extensions": {
+    "colorMeta": {
+      "proof-paper": { "role": "neutral", "displayName": "Proof Paper", "canonical": "#FAF6EC", "tonalRamp": ["#2A2418", "#4A3F2A", "#6B5B3E", "#8F7D5A", "#B3A37E", "#D5C8A6", "#EDE4CC", "#FAF6EC"] },
+      "proof-paper-dark": { "role": "neutral", "displayName": "Proof Paper Dark", "canonical": "#211D17", "tonalRamp": ["#0E0C09", "#211D17", "#332C21", "#4A3F2E", "#6B5B45", "#8F7D63", "#B3A488", "#EDE4D0"] },
+      "paper": { "role": "neutral", "displayName": "Sheet Paper", "canonical": "#FFFDF4", "tonalRamp": ["#33301F", "#5A5436", "#847E55", "#ADA67E", "#CFC9A8", "#E7E2C8", "#F7F3DF", "#FFFDF4"] },
+      "paper-dark": { "role": "neutral", "displayName": "Sheet Paper Dark", "canonical": "#292219", "tonalRamp": ["#120F0A", "#292219", "#3D3325", "#574A36", "#77664C", "#9A8668", "#BEAB8E", "#EDE4D0"] },
+      "dock": { "role": "neutral", "displayName": "Dock Paper", "canonical": "#F3ECDB", "tonalRamp": ["#292415", "#4A4028", "#6F6040", "#98855E", "#BFAE85", "#D8CBA8", "#EAE0C6", "#F3ECDB"] },
+      "dock-dark": { "role": "neutral", "displayName": "Dock Paper Dark", "canonical": "#2A241B", "tonalRamp": ["#14110C", "#2A241B", "#403829", "#5A4E3A", "#7D6E52", "#A08E6E", "#C2B294", "#EDE4D0"] },
+      "warm-ink": { "role": "neutral", "displayName": "Warm Ink", "canonical": "#262019", "tonalRamp": ["#14100B", "#262019", "#3D342A", "#574C3E", "#746656", "#948673", "#B5A892", "#D9D0BE"] },
+      "ink-on-dark": { "role": "neutral", "displayName": "Ink on Dark", "canonical": "#EDE4D0", "tonalRamp": ["#2A2418", "#4A4132", "#6B5F4A", "#8F8268", "#B0A487", "#CFC3A6", "#E2D8C2", "#EDE4D0"] },
+      "warm-muted": { "role": "neutral", "displayName": "Warm Muted", "canonical": "#655842", "tonalRamp": ["#211B12", "#3A3222", "#655842", "#87755C", "#A89478", "#C4B294", "#DCD0B4", "#EFE8D4"] },
+      "muted-on-dark": { "role": "neutral", "displayName": "Muted on Dark", "canonical": "#A99B80", "tonalRamp": ["#241F16", "#3E3728", "#5F5540", "#A99B80", "#BCAF97", "#CFC3AC", "#E0D6C0", "#F0E9DA"] },
+      "border-warm": { "role": "neutral", "displayName": "Warm Border", "canonical": "#DFD3B8", "tonalRamp": ["#2E2818", "#554A30", "#7D6F4C", "#A3946E", "#C0B28C", "#D5C8A6", "#E6DCC2", "#F3ECDB"] },
+      "border-dark": { "role": "neutral", "displayName": "Border Dark", "canonical": "#4A3F2E", "tonalRamp": ["#17130D", "#2A2418", "#4A3F2E", "#675842", "#87755C", "#A99B80", "#C9BCA0", "#EDE4D0"] },
+      "proof-red": { "role": "primary", "displayName": "Proof Red", "canonical": "#A93226", "tonalRamp": ["#2B0B08", "#571610", "#7E2118", "#A93226", "#C0503F", "#D17A6C", "#E2A79E", "#F2D2CC"] },
+      "proof-red-dark": { "role": "primary", "displayName": "Proof Red Dark", "canonical": "#E88A7D", "tonalRamp": ["#2B0B08", "#571610", "#8A2A1F", "#B84A3A", "#D1705F", "#E88A7D", "#F2B3A8", "#F9DCD6"] },
+      "pencil-blue": { "role": "primary", "displayName": "Pencil Blue", "canonical": "#2B50AA", "tonalRamp": ["#0A1226", "#16264F", "#213A75", "#2B50AA", "#4A6FC0", "#7591D1", "#A3B8E3", "#D3DEF3"] },
+      "pencil-blue-dark": { "role": "primary", "displayName": "Pencil Blue Dark", "canonical": "#93AEE8", "tonalRamp": ["#0A1226", "#1C3266", "#2F4E96", "#4A6FC0", "#7591D1", "#93AEE8", "#BCCEF2", "#E0E9FA"] },
+      "focus-blue": { "role": "primary", "displayName": "Sources / Focus Blue", "canonical": "#1765CC", "tonalRamp": ["#071A36", "#0D3066", "#124A96", "#1765CC", "#3D82D9", "#6FA3E4", "#A5C6EF", "#D8E8FA"] },
+      "selection-wash": { "role": "tertiary", "displayName": "Selection Wash", "canonical": "#F5E3B0", "tonalRamp": ["#33270C", "#66501A", "#99802F", "#C2A84F", "#DCC473", "#EDD894", "#F5E3B0", "#FBF0D0"] },
+      "selection-wash-dark": { "role": "tertiary", "displayName": "Selection Wash Dark", "canonical": "#4A4120", "tonalRamp": ["#171405", "#2E2910", "#4A4120", "#6B6034", "#8F834F", "#B3A873", "#D5C99A", "#EFE8C4"] },
+      "success": { "role": "secondary", "displayName": "Success Green", "canonical": "#1E8E3E", "tonalRamp": ["#071F0E", "#0F3D1C", "#175E2C", "#1E8E3E", "#3FA85A", "#6BBE81", "#A2D6AE", "#D6F0DC"] },
+      "layer-language": { "role": "annotation", "displayName": "Language Red (La)", "canonical": "#C0281F", "tonalRamp": ["#300A08", "#5F130E", "#8F1E16", "#C0281F", "#D44A3E", "#E1786C", "#EEA79E", "#F8D7D2"] },
+      "layer-reader": { "role": "annotation", "displayName": "Reader Purple (Rd)", "canonical": "#6D3BE0", "tonalRamp": ["#1B0C36", "#35166B", "#4E26A3", "#6D3BE0", "#8A61EA", "#A98BF0", "#C6B2F6", "#E7DFFC"] },
+      "layer-sources": { "role": "annotation", "displayName": "Sources Blue (So)", "canonical": "#1765CC", "tonalRamp": ["#071A36", "#0D3066", "#124A96", "#1765CC", "#3D82D9", "#6FA3E4", "#A5C6EF", "#D8E8FA"] },
+      "layer-suggest": { "role": "annotation", "displayName": "Suggest Grey (Su)", "canonical": "#626A75", "tonalRamp": ["#14171B", "#2B3038", "#454C57", "#626A75", "#7F8792", "#A3AAB2", "#C4C8CC", "#E6E8EA"] },
+      "layer-lint": { "role": "annotation", "displayName": "Lint Yellow (Li)", "canonical": "#8A5F00", "tonalRamp": ["#241800", "#473000", "#6B4700", "#8A5F00", "#A87A1F", "#C29A45", "#DCBC7A", "#F2E2B8"] },
+      "layer-language-dark": { "role": "annotation", "displayName": "Language Red Dark", "canonical": "#FF6B6B", "tonalRamp": ["#300A08", "#6B1A14", "#A83228", "#D94A3D", "#FF6B6B", "#FF9494", "#FFBDBD", "#FFE3E3"] },
+      "layer-reader-dark": { "role": "annotation", "displayName": "Reader Purple Dark", "canonical": "#B79CFF", "tonalRamp": ["#1B0C36", "#3D1E73", "#5F37B3", "#8460D6", "#9E82F2", "#B79CFF", "#D2C2FF", "#ECE5FF"] },
+      "layer-suggest-dark": { "role": "annotation", "displayName": "Suggest Grey Dark", "canonical": "#9BA1A8", "tonalRamp": ["#14171B", "#2E3339", "#4E555E", "#737B85", "#9BA1A8", "#B8BDC3", "#D2D6DA", "#ECEEF0"] },
+      "layer-lint-dark": { "role": "annotation", "displayName": "Lint Yellow Dark", "canonical": "#E6B93D", "tonalRamp": ["#241800", "#574200", "#8A6400", "#B8890F", "#D9A72E", "#E6B93D", "#F2D07E", "#FAE8B8"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Landing thesis only." },
+      "headline": { "displayName": "Headline", "purpose": "Landing section heads, wizard title." },
+      "title": { "displayName": "Title", "purpose": "Proof-sheet draft title, editor headings." },
+      "body": { "displayName": "Body UI", "purpose": "Inter UI chrome, dock body, meta." },
+      "prose": { "displayName": "Prose", "purpose": "Editor draft text, 19px/1.65/70ch default; settings-variable." },
+      "quote": { "displayName": "Quote", "purpose": "Verbatim quotes in docks, popups, suggestion rows." },
+      "dock-query": { "displayName": "Dock Query", "purpose": "Italic serif dock headings and margin queries." },
+      "label": { "displayName": "Label / Editor's Mark", "purpose": "Uppercase letterspaced kind labels, badges, stamps." }
+    },
+    "shadows": [
+      { "name": "shadow-pop", "value": "0 4px 12px rgba(31,35,40,.08),0 16px 40px rgba(31,35,40,.14)", "purpose": "Popups, floating menus, modals, library, setup menu. Dark: 0 4px 12px rgba(0,0,0,.28),0 16px 40px rgba(0,0,0,.38)." },
+      { "name": "shadow-paper", "value": "0 1px 2px rgba(31,35,40,.05),0 12px 32px rgba(31,35,40,.07)", "purpose": "Paged .paper.paged preview only. Dark: 0 1px 2px rgba(0,0,0,.25),0 12px 32px rgba(0,0,0,.28)." },
+      { "name": "wizard-card", "value": "0 24px 70px rgba(0,0,0,.35)", "purpose": "Setup wizard modal card over scrim (setup-wizard.css) only." },
+      { "name": "mode-thumb", "value": "0 2px 8px rgba(0,0,0,.22)", "purpose": "Sliding Drafting/Editing thumb inside pill track." }
+    ],
+    "motion": [
+      { "name": "fade", "value": "fade .18s cubic-bezier(.16,1,.3,1) from translateY(3px)", "purpose": "Popup/menu entry; collapsed under reduced motion." },
+      { "name": "mode-thumb-slide", "value": "transform .32s cubic-bezier(.16,1,.3,1)", "purpose": "Drafting/Editing thumb translateX(0→100%); none under reduced motion." },
+      { "name": "state-transition", "value": "border-color .15s, background .15s, color .15s", "purpose": "Buttons, inputs, rail buttons, dock rows." },
+      { "name": "wizard-step", "value": "wzIn/wzStep .45–.5s cubic-bezier(.16,1,.3,1), glowbar width .6s", "purpose": "Wizard entry/step/progress; none under reduced motion." },
+      { "name": "reduced-motion", "value": "@media (prefers-reduced-motion: reduce){animation-duration:.01ms!important;transition-duration:.01ms!important} + [data-motion=reduce]", "purpose": "Global collapse: thumb, spinner, pulse dots, gear rotation, button translate." }
+    ],
+    "breakpoints": [
+      { "name": "metric-ellipsis", "value": "1500px" },
+      { "name": "editor-stack", "value": "1100px" },
+      { "name": "hero-stack", "value": "900px" },
+      { "name": "setup-static", "value": "760px" },
+      { "name": "compact", "value": "700px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Warm-ink primary action; Open app, accept-path CTAs.",
+      "html": "<button class=\"ds-btn-primary\">Open app</button>",
+      "css": ".ds-btn-primary{font-family:Inter,sans-serif;font-size:13px;font-weight:500;letter-spacing:-.01em;cursor:pointer;border:1px solid var(--ink,#262019);background:var(--ink,#262019);color:var(--bg,#FAF6EC);border-radius:3px;padding:6px 11px;min-height:36px;line-height:1.35;transition:border-color .15s,background .15s,color .15s}.ds-btn-primary:hover{background:#3a332a}.ds-btn-primary:active{transform:translateY(1px)}.ds-btn-primary:focus-visible{outline:2px solid var(--blue,#1765CC);outline-offset:2px;border-radius:4px}@media(prefers-reduced-motion:reduce){.ds-btn-primary:active{transform:none}}"
+    },
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "Bordered paper button for secondary desk actions.",
+      "html": "<button class=\"ds-btn\">Join waitlist</button>",
+      "css": ".ds-btn{font-family:Inter,sans-serif;font-size:13px;font-weight:500;letter-spacing:-.01em;cursor:pointer;border:1px solid var(--border,#DFD3B8);background:var(--bg,#FAF6EC);color:var(--ink,#262019);border-radius:3px;padding:6px 11px;min-height:36px;line-height:1.35;transition:border-color .15s,background .15s,color .15s}.ds-btn:hover{border-color:var(--muted,#655842);background:rgba(38,32,25,.06)}.ds-btn:focus-visible{outline:2px solid var(--blue,#1765CC);outline-offset:2px;border-radius:4px}.ds-btn:disabled{opacity:.45;cursor:not-allowed}"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Waitlist/settings field; pencil-blue focus ring.",
+      "html": "<input class=\"ds-input\" type=\"email\" placeholder=\"you@example.com\">",
+      "css": ".ds-input{font-family:Inter,sans-serif;font-size:13px;color:var(--ink,#262019);background:var(--bg,#FAF6EC);border:1px solid var(--border,#DFD3B8);border-radius:3px;padding:7px 9px;min-height:36px;line-height:1.4;transition:border-color .15s,box-shadow .15s}.ds-input::placeholder{color:var(--muted,#655842);opacity:1}.ds-input:hover{border-color:var(--muted,#655842)}.ds-input:focus{border-color:var(--blue,#1765CC);box-shadow:0 0 0 3px rgba(23,101,204,.22);outline:none}"
+    },
+    {
+      "name": "Editor Paper",
+      "kind": "card",
+      "refersTo": "paper",
+      "description": "Ruled sheet with red margin rule at 26px; prose surface.",
+      "html": "<div class=\"ds-paper\"><p class=\"ds-paper-prose\">Cats are independent, as I said.</p></div>",
+      "css": ".ds-paper{background:linear-gradient(90deg,transparent 0 26px,rgba(169,50,38,.38) 26px,rgba(169,50,38,.38) 27px,transparent 27px),var(--paper,#FFFDF4);border:1px solid var(--border,#DFD3B8);border-radius:4px;min-height:200px;padding:30px 38px}.ds-paper-prose{font-family:'Source Serif 4',Georgia,serif;font-size:19px;line-height:1.65;color:var(--ink,#262019);max-width:70ch;margin:0 auto}"
+    },
+    {
+      "name": "Proof Sheet with Stamp and Margin Query",
+      "kind": "custom",
+      "refersTo": "proof-sheet",
+      "description": "Landing signature: marked draft, margin column, verdict stamp.",
+      "html": "<div class=\"ds-proof\"><h2 class=\"ds-proof-h\">Cats or dogs: choosing a first pet</h2><div class=\"ds-proof-cols\"><p class=\"ds-proof-p\">Cats live longer than dogs<span class=\"ds-stamp\">Supports</span>, so they are clearly the better choice.</p><aside class=\"ds-proof-margin\"><div class=\"ds-mq\">mq — needs → need: agreement. <span>Language</span></div></aside></div></div>",
+      "css": ".ds-proof{background:var(--paper,#FFFDF4);border:1px solid rgba(38,32,25,.55);border-radius:3px;padding:30px 34px 24px 58px;position:relative;font-family:'Source Serif 4',Georgia,serif}.ds-proof::before{content:'';position:absolute;top:0;bottom:0;left:42px;width:1px;background:rgba(169,50,38,.45)}.ds-proof-h{font-size:24px;line-height:1.2;margin:0 0 12px;font-weight:600;color:var(--ink,#262019)}.ds-proof-cols{display:grid;grid-template-columns:minmax(0,1fr) 168px;gap:22px}.ds-proof-p{font-size:16.5px;line-height:1.65;margin:0;color:var(--ink,#262019)}.ds-proof-margin{border-left:1px solid rgba(169,50,38,.45);padding-left:14px}.ds-mq{font-style:italic;color:var(--proof,#A93226);font-size:14.5px;margin:2px 0}.ds-mq span{color:var(--muted,#655842)}.ds-stamp{display:inline-block;border:1.5px solid var(--pencil,#2B50AA);color:var(--pencil,#2B50AA);font-family:Inter,sans-serif;font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:2px 7px;transform:rotate(-3deg);border-radius:2px;margin-left:8px;vertical-align:2px}"
+    },
+    {
+      "name": "Verdict Stamp",
+      "kind": "chip",
+      "refersTo": "verdict-stamp",
+      "description": "Rotated pencil-blue editor's stamp: Supports / Qualifies / Contradicts.",
+      "html": "<span class=\"ds-stamp-only\">Supports</span>",
+      "css": ".ds-stamp-only{display:inline-block;border:1.5px solid var(--pencil,#2B50AA);color:var(--pencil,#2B50AA);background:var(--paper,#FFFDF4);font-family:Inter,sans-serif;font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:2px 7px;transform:rotate(-3deg);border-radius:2px}"
+    },
+    {
+      "name": "Dock Card with Layer Swatch",
+      "kind": "card",
+      "refersTo": "dock-card",
+      "description": "Right/left dock panel; italic serif heading, layer swatch, quoted item.",
+      "html": "<section class=\"ds-dock\"><h3 class=\"ds-dock-h\"><span class=\"ds-swatch\"></span>Language</h3><div class=\"ds-dock-item\"><div class=\"ds-kind\">Grammar</div><span class=\"ds-quote\">Dogs needs daily walks.</span><div class=\"ds-reason\">Subject–verb agreement: Dogs need.</div></div></section>",
+      "css": ".ds-dock{background:var(--dock,#F3ECDB);border:1px solid var(--border,#DFD3B8);border-radius:4px;padding:14px;font-family:Inter,sans-serif;color:var(--ink,#262019)}.ds-dock-h{font-family:'Source Serif 4',Georgia,serif;font-style:italic;font-weight:600;font-size:15px;margin:0 0 10px;display:flex;gap:8px;align-items:center}.ds-swatch{width:10px;height:10px;border-radius:3px;background:var(--lt,#C0281F);flex:none}.ds-dock-item{border-top:1px solid var(--border,#DFD3B8);padding:9px 4px;font-size:13.5px;line-height:1.5;border-radius:4px;cursor:pointer}.ds-dock-item:hover{background:rgba(38,32,25,.06)}.ds-dock-item:focus-visible{outline:2px solid var(--blue,#1765CC);outline-offset:2px}.ds-kind{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--lt,#C0281F);margin-bottom:2px}.ds-quote{font-family:'Source Serif 4',Georgia,serif;font-size:16px;line-height:1.45}.ds-reason{font-size:12.5px;color:var(--muted,#655842);line-height:1.5;margin-top:2px}"
+    },
+    {
+      "name": "Drafting / Editing Mode Switch",
+      "kind": "nav",
+      "refersTo": "mode-switch-thumb",
+      "description": "Sliding ink thumb under Drafting/Editing labels.",
+      "html": "<div class=\"ds-mode\" role=\"tablist\" aria-label=\"Mode\"><span class=\"ds-mode-thumb\"></span><button class=\"ds-mode-btn active\" role=\"tab\" aria-selected=\"true\">Drafting</button><button class=\"ds-mode-btn\" role=\"tab\" aria-selected=\"false\">Editing</button></div>",
+      "css": ".ds-mode{position:relative;display:flex;min-width:228px;height:44px;background:var(--dock,#F3ECDB);border:1px solid var(--border,#DFD3B8);border-radius:99px;padding:3px;isolation:isolate;font-family:Inter,sans-serif}.ds-mode-thumb{position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);background:var(--ink,#262019);border-radius:99px;z-index:0;transform:translateX(0);transition:transform .32s cubic-bezier(.16,1,.3,1);box-shadow:0 2px 8px rgba(0,0,0,.22)}.ds-mode-btn{position:relative;z-index:1;flex:1;border:none;background:transparent;border-radius:99px;font-size:13px;font-weight:600;color:var(--muted,#655842);cursor:pointer}.ds-mode-btn.active{color:var(--bg,#FAF6EC)}.ds-mode-btn:focus-visible{outline:2px solid var(--blue,#1765CC);outline-offset:2px}@media(prefers-reduced-motion:reduce){.ds-mode-thumb{transition:none}}"
+    },
+    {
+      "name": "Collapsed Rail Codes",
+      "kind": "nav",
+      "refersTo": "rail-code",
+      "description": "Two-letter layer codes La/Rd/So/Su/Li in layer color on 34px circles.",
+      "html": "<div class=\"ds-rail\"><button class=\"ds-rail-btn ds-rail-la\" aria-label=\"Language\">La</button><button class=\"ds-rail-btn ds-rail-rd\" aria-label=\"Reader\">Rd</button><button class=\"ds-rail-btn ds-rail-so\" aria-label=\"Sources\">So</button><button class=\"ds-rail-btn ds-rail-su\" aria-label=\"Suggest\">Su</button><button class=\"ds-rail-btn ds-rail-li\" aria-label=\"Lint\">Li</button></div>",
+      "css": ".ds-rail{display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px 0;font-family:Inter,sans-serif}.ds-rail-btn{width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:13px;font-weight:600;background:var(--bg,#FAF6EC);cursor:pointer;border:1px solid var(--border,#DFD3B8)}.ds-rail-la{border-color:var(--lt,#C0281F);color:var(--lt,#C0281F)}.ds-rail-rd{border-color:var(--ai,#6D3BE0);color:var(--ai,#6D3BE0)}.ds-rail-so{border-color:var(--blue,#1765CC);color:var(--blue,#1765CC)}.ds-rail-su{border-color:var(--grey,#626A75);color:var(--grey,#626A75)}.ds-rail-li{border-color:var(--yellow,#8A5F00);color:var(--yellow,#8A5F00)}.ds-rail-btn:hover{border-color:var(--muted,#655842)}.ds-rail-btn:focus-visible{outline:2px solid var(--blue,#1765CC);outline-offset:2px}"
+    },
+    {
+      "name": "Ink Key Chip",
+      "kind": "chip",
+      "refersTo": "button-default",
+      "description": "Landing legend: swatch plus layer name, never color alone.",
+      "html": "<span class=\"ds-ink-chip\"><span class=\"ds-ink-swatch\"></span>Language: how it is worded</span>",
+      "css": ".ds-ink-chip{display:inline-flex;align-items:center;gap:8px;font-family:Inter,sans-serif;font-size:11px;font-weight:700;letter-spacing:.02em;background:var(--dock,#F3ECDB);color:var(--ink,#262019);border:1px solid var(--border,#DFD3B8);border-radius:2px;padding:2px 7px}.ds-ink-swatch{width:10px;height:10px;border-radius:3px;background:var(--lt,#C0281F);display:inline-block;flex:none}"
+    },
+    {
+      "name": "Annotation Popup",
+      "kind": "custom",
+      "refersTo": "proof-sheet",
+      "description": "Floating advisory popup: chip, serif quote, explanation; shadow-pop only here.",
+      "html": "<div class=\"ds-popup\"><span class=\"ds-popup-chip\">Grammar</span><div class=\"ds-popup-q\">“Dogs needs daily walks”</div><div class=\"ds-popup-body\">Subject–verb agreement: “Dogs need”. Your call.</div></div>",
+      "css": ".ds-popup{width:min(330px,calc(100vw - 24px));background:var(--bg,#FAF6EC);border:1px solid var(--border,#DFD3B8);border-radius:4px;padding:14px;box-shadow:0 4px 12px rgba(31,35,40,.08),0 16px 40px rgba(31,35,40,.14);font-family:Inter,sans-serif;font-size:13.5px;line-height:1.5;color:var(--ink,#262019)}.ds-popup-chip{font-size:11px;font-weight:700;padding:2px 7px;border-radius:2px;color:#fff;letter-spacing:.02em;background:var(--lt,#C0281F)}.ds-popup-q{font-family:'Source Serif 4',Georgia,serif;font-size:16px;margin:4px 0}.ds-popup-body{color:var(--ink,#262019)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Proof Desk",
+    "overview": "Warm proof paper, warm ink, two working chrome inks — proof red and pencil blue — and five layer colors used only as annotation marks on text. Source Serif 4 carries thesis, prose, quoted draft text, and dock queries; Inter carries UI chrome, labels, counts, and controls. With copy removed, surface reads as marked manuscript on desk, not AI-editor chrome.\n\nSystem is border-led and flat at rest. Elevation reserved for popups, modals, and paged-paper preview. Corners stay square-ish (3px, 4px large). Writer chooses every word: advisory layers mark, question, and stamp; only explicit suggestion acceptance inserts text.",
+    "keyCharacteristics": [
+      "Warm proof paper ground (`#FAF6EC` light, `#211D17` dark), sheet paper (`#FFFDF4` light, `#292219` dark)",
+      "Proof red (`#A93226`) and pencil blue (`#2B50AA`) as working chrome inks; five layer colors as marks only",
+      "Source Serif 4 for thesis/prose/quotes/dock queries; Inter for UI",
+      "Red margin rule on paper and proof sheet; margin-query column beside marked prose",
+      "Letterspaced uppercase editor's marks: kind labels, verdict stamps, badges",
+      "Border-only depth; shadow tokens only for popups and paged paper",
+      "Meaning never by color alone: text labels, swatches plus names, distinct underline styles"
+    ],
+    "rules": [
+      { "name": "The Marks-Only Rule", "body": "Five layer colors appear as annotation marks, tab borders/badges, swatches, and chips with text labels — never as page chrome, hero fills, or decorative surfaces. Chrome inks are proof red and pencil blue only.", "section": "colors" },
+      { "name": "The Text-Safe Default Rule", "body": "Default layer hexes are chosen for 4.5:1 text use where color carries text (labels, badges). Preset recolors change marks together (tabs, underlines, buttons) via single CSS var per layer; never recolor one surface in isolation.", "section": "colors" },
+      { "name": "The No Color-Alone Rule", "body": "Every mark pairs color with label, underline style, or stamp text. Grammar = squiggle, vocabulary = inset bar, cohesion = solid bottom border, reader = dotted, sources = wash + wavy, lint = solid thick, suggest = grey ghost text.", "section": "colors" },
+      { "name": "The Serif-Is-The-Writer Rule", "body": "If text is writer's words, quoted words, thesis, or editor's handwritten-style query, set serif. If text operates machine (tabs, buttons, metrics, badges), set Inter.", "section": "typography" },
+      { "name": "The Letterspaced Mark Rule", "body": "Editor's marks (stamps, kind labels, badges) are uppercase Inter, letterspaced (0.07em labels, 0.14em stamps), never serif, never sentence case.", "section": "typography" },
+      { "name": "The Topology Rule", "body": "Left dock ↔ paper ↔ right rail, Drafting ↔ Editing. Do not move rails, merge docks into paper, or add fourth column.", "section": "layout" },
+      { "name": "The Margin Column Rule", "body": "Queries live in margin: landing proof sheet reserves 168px margin column with red left rule; editor reserves right rail. Never inline queries into prose flow as cards.", "section": "layout" },
+      { "name": "The Border-Only Rule", "body": "At rest, no shadow. Shadow appears only on popup, modal, paged paper, or sliding thumb. No hard offset shadows anywhere.", "section": "elevation" },
+      { "name": "The Flat Sheet Rule", "body": "Paper and proof sheet sit flat with 1px border; proof sheet border darkens to 55% ink. Do not lift sheets on hover.", "section": "elevation" },
+      { "name": "The 3px Corner Rule", "body": "Corners are 3px (4px large surfaces). Do not round cards, sheets, or buttons beyond 4px except pills/circles named above.", "section": "shapes" },
+      { "name": "The Ruled Sheet Rule", "body": "Every prose surface shows its rule: margin rule on paper/proof sheet, double rule under masthead, top rule on ledger cards, hairlines between dock items. Unruled prose containers are off-world.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do ground surfaces in proof paper `#FAF6EC` / sheet `#FFFDF4` (dark `#211D17` / `#292219`) with warm ink `#262019`.",
+      "Do use proof red `#A93226` and pencil blue `#2B50AA` as only chrome inks; double rule under masthead, red margin rule on every prose sheet.",
+      "Do set thesis/prose/quotes/dock queries in Source Serif 4, UI in Inter; uppercase letterspaced Inter for stamps/labels.",
+      "Do use five layer colors only as marks (canonical defaults: language `#C0281F`, reader `#6D3BE0`, sources `#1765CC`, suggest `#626A75`, lint `#8A5F00`), recolored together via preset vars.",
+      "Do pair every color mark with label + distinct underline style; keep defaults text-safe 4.5:1.",
+      "Do keep corners 3px (4px large), depth border-only, shadows only from `--shadow-pop` / `--shadow-paper` / wizard modal tokens.",
+      "Do preserve signatures: margin-query column, verdict stamps, ruled ledger below landing fold, sliding Drafting/Editing thumb, La/Rd/So/Su/Li rail codes.",
+      "Do honor focus-visible ring, reduced-motion collapse, keyboard operation for advisory items."
+    ],
+    "donts": [
+      "Don't use gradient text.",
+      "Don't use colored side borders thicker than 1px (margin rules are 1px rules/gradients, not accent side borders; tab inset underline is 3px bottom inset on active state only).",
+      "Don't use hard offset shadows; no shadow at rest, no lifted sheets/cards on hover.",
+      "Don't resurrect gold ceremony world: no gold palette, glow, shine sweeps, or ceremony wizard styling. Wizard is folded into Proof Desk (proof red, sheet paper, flat bars). `--gold` var aliases proof red only for legacy outline tint.",
+      "Don't use layer colors as page chrome, fills, or hero decoration; no clean sans AI-editor chrome, no generated-text magic styling.",
+      "Don't round beyond 4px except named pills/circles (toggles, badges, rail codes, switches); no pill cards.",
+      "Don't carry meaning by color alone, dim text below muted token, or remove focus outline without visible replacement.",
+      "Don't let advisory layers insert text visually as if applied; only accepted suggestions become writer's words."
+    ]
+  }
+}

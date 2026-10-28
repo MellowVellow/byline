@@ -25,7 +25,7 @@ export function useSynonyms(deps: SynonymDeps) {
     const { from, to } = editor.state.selection; const word = editor.state.doc.textBetween(from, to).trim()
     if (!word || word.includes(' ')) return
     const tm = deps.plain(); const sent = tm.text.split(/(?<=[.!?])\s/).find(s => s.includes(word)) || tm.text.slice(0, 200)
-    const cc = editor.view.coordsAtPos(from); const yy = cc.bottom + 8; setSynPos({ x: Math.max(8, Math.min(cc.left, innerWidth - 380)), y: yy, h: Math.max(170, innerHeight - yy - 12) })
+    const cc = editor.view.coordsAtPos(from); const yy = cc.bottom + 8 + scrollY; setSynPos({ x: Math.max(8, Math.min(cc.left, innerWidth - 380)) + scrollX, y: yy, h: Math.max(170, innerHeight - (yy - scrollY) - 12) })
     setSynRange({ from, to }); synRangeRef.current = { from, to }
     if (!deps.editingRef.current) return
     deps.setLoad('synonyms', true)

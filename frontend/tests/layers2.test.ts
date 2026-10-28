@@ -5,12 +5,12 @@ import { FALLBACK_ISSUES, FALLBACK_REACTIONS, FALLBACK_READINGS, SAMPLE_DOC } fr
 describe('tab order + colors', () => {
   it('order is language reader sources suggest lint', () => {
     expect(RIGHT_TAB_ORDER).toEqual(['language', 'reader', 'sources', 'suggest', 'lint'])
-    expect(ANNOTATION_COLORS).toEqual({ language: '#D93025', reader: '#7C4DFF', sources: '#1A73E8', suggest: '#9AA0A6', lint: '#D99A06' })
-    expect(TAB_THEME.language.color).toBe('var(--lt, #D93025)')
-    expect(TAB_THEME.reader.color).toBe('var(--ai, #7C4DFF)')
-    expect(TAB_THEME.sources.color).toBe('var(--blue, #1A73E8)')
-    expect(TAB_THEME.suggest.color).toBe('var(--grey, #9AA0A6)')
-    expect(TAB_THEME.lint.color).toBe('var(--yellow, #D99A06)')
+    expect(ANNOTATION_COLORS).toEqual({ language: '#C0281F', reader: '#6D3BE0', sources: '#1765CC', suggest: '#626A75', lint: '#8A5F00' })
+    expect(TAB_THEME.language.color).toBe('var(--lt, #C0281F)')
+    expect(TAB_THEME.reader.color).toBe('var(--ai, #6D3BE0)')
+    expect(TAB_THEME.sources.color).toBe('var(--blue, #1765CC)')
+    expect(TAB_THEME.suggest.color).toBe('var(--grey, #626A75)')
+    expect(TAB_THEME.lint.color).toBe('var(--yellow, #8A5F00)')
   })
 })
 describe('manual disable toggle', () => {

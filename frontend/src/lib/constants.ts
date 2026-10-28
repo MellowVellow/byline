@@ -37,16 +37,16 @@ export const digitFor = (i: number) => String((i + 1) % 10)
 
 /** Reader kinds: all preset purple (--ai); labels distinguish, color does not. */
 export const REACTION_STYLE: Record<string, { color: string; label: string }> = {
-  question: { color: 'var(--ai, #7C4DFF)', label: 'Question' },
-  critique: { color: 'var(--ai, #7C4DFF)', label: 'Critique' },
-  comment: { color: 'var(--ai, #7C4DFF)', label: 'Comment' },
-  compliment: { color: 'var(--ai, #7C4DFF)', label: 'Compliment' },
+  question: { color: 'var(--ai, #6D3BE0)', label: 'Question' },
+  critique: { color: 'var(--ai, #6D3BE0)', label: 'Critique' },
+  comment: { color: 'var(--ai, #6D3BE0)', label: 'Comment' },
+  compliment: { color: 'var(--ai, #6D3BE0)', label: 'Compliment' },
 }
 /** Language kinds: all preset red (--lt); labels distinguish, color does not. */
 export const LANG_STYLE: Record<string, { color: string; label: string }> = {
-  grammar: { color: 'var(--lt, #D93025)', label: 'Grammar' },
-  vocabulary: { color: 'var(--lt, #D93025)', label: 'Word choice' },
-  relevance: { color: 'var(--lt, #D93025)', label: 'Cohesion' },
+  grammar: { color: 'var(--lt, #C0281F)', label: 'Grammar' },
+  vocabulary: { color: 'var(--lt, #C0281F)', label: 'Word choice' },
+  relevance: { color: 'var(--lt, #C0281F)', label: 'Cohesion' },
 }
 /** Tab/stack order: red, yellow, blue, purple. */
 export const LAYER_ORDER: Record<string, number> = { grammar: 0, vocabulary: 1, claim: 2, relevance: 3, reaction: 3 }
