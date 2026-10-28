@@ -111,7 +111,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const researchAutoRef = useRef(true); researchAutoRef.current = researchAuto
   const lastResearchRef = useRef(0)
   const [wizardOpen, setWizardOpen] = useState(false)
-  const [wizardTab, setWizardTab] = useState<'survey' | 'agent' | 'outline' | 'search'>('survey')
+  const [wizardTab, setWizardTab] = useState<'survey' | 'outline'>('survey')
   const [outlineDraft, setOutlineDraft] = useState<OutlineDraft[]>([])
   const [activeConfig, setActiveConfig] = useState<SetupPayload | null>(() => { try { return JSON.parse(localStorage.getItem('byline.config.active') || 'null') } catch { return null } })
   function applySetupPayload(p: SetupPayload) {
@@ -133,6 +133,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   }
   const [sfxOn, setSfxOn] = useState(sfxEnabled())
   const [answers, setAnswers] = useState({ goal: '', doc_type: 'essay', audience: '', audience_level: 3, key_points: '', voice_note: '' })
+  const answersRef = useRef(answers); answersRef.current = answers
   const [lintEnabled, setLintEnabled] = useState(localStorage.getItem('byline.lintEnabled') === '1')
   const lintEnabledRef = useRef(false); lintEnabledRef.current = lintEnabled
   function toggleLint() {
@@ -665,6 +666,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     if (!h) return null
     return secs.find(s => { const d = s.heading.toLowerCase(); return d === h || (d && (d.includes(h) || h.includes(d))) }) || null
   }
+  function updateOutlineDraft(i: number, patch: Partial<OutlineDraft>) { setOutlineDraft(old => old.map((x, k) => k === i ? { ...x, ...patch } : x)) }
   function insertOutlineSection(i: number, mode: 'append' | 'replace') {
     if (!editor) return
     const o = outlineDraft[i]; if (!o || o.state === 'inserted') return
@@ -678,7 +680,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     if (done) { setOutlineDraft(old => old.map((x, k) => k === i ? { ...x, state: 'inserted' } : x)); sfxSuccess() }
   }
   function insertAllPendingOutline() { outlineDraft.forEach((o, i) => { if (o.state === 'pending') insertOutlineSection(i, 'append') }) }
-  async function generateFromSurvey() {
+  async function generateFromSurvey(override?: any) {
+    const answers = override || answersRef.current
     setLoad('outlinegen', true)
     const d = await api.outlineGenerate({ answers })
     setLoad('outlinegen', false)
@@ -691,6 +694,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       clause: ['Simple', 'Coordinated', 'Subordinated'].includes(d.clause) ? d.clause : clause, density: [1, 2, 3].includes(d.density) ? d.density : density,
       audText: d.audience_text || audText, audLevel: d.audience_level || audLevel,
     }
+    const choiceDiction = (answers as any).choices?.diction; if (choiceDiction && DICTIONS.includes(choiceDiction)) next0.level = choiceDiction
     setContext(summary); setLevel(next0.level); setVoice(next0.voice); setTones(tonesNext); setRhythm(next0.rhythm); setGramVoice(next0.gramVoice as any); setClause(next0.clause); setDensity(next0.density); setAudText(next0.audText); setAudLevel(next0.audLevel)
     // Review-first: stage the outline for side-by-side comparison; never write to the editor here.
     setOutlineDraft(((d.outline || []) as any[]).map(o => ({ heading: String(o.heading || 'Untitled'), purpose: String(o.purpose || ''), points: ((o.points || []) as any[]).map(String), state: 'pending' as const })))
@@ -785,7 +789,13 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             </>}
             {leftTab === 'outline' && <>
             <div className="dock"><h3>Outline</h3>
-              {outlineDraft.length ? <div>{outlineDraft.map((o, i) => { const m = matchDocSection(o.heading, docSections()); return <div key={i} className={`outline-gen-item ${m && docSections().indexOf(m) === activeOutlineIdx ? 'active' : ''} ${o.state !== 'pending' ? 'stale' : ''}`} onClick={() => { if (m) { editor.chain().focus().setTextSelection(m.from + 1).run(); editor.view.dom.querySelector('h1,h2,h3')?.scrollIntoView?.() } setActiveOutlineIdx(m ? docSections().indexOf(m) : i); if (editing) refreshReadings() }}><strong>{i + 1}. {o.heading}</strong><div className="meta">{o.purpose}</div>{(o.points || []).map((pt, j) => <div key={j} className="meta">· {pt}</div>)}<div className="meta">{o.state}{m ? ' · in draft' : ' · not in draft'}</div>{o.state === 'pending' && <button style={{ marginTop: 6 }} onClick={e => { e.stopPropagation(); insertOutlineSection(i, 'append') }}>Insert section</button>}</div> })}</div>
+              {outlineDraft.length ? <div>{outlineDraft.map((o, i) => { const secs = docSections(); const m = matchDocSection(o.heading, secs); const active = m ? secs.indexOf(m) === activeOutlineIdx : activeOutlineIdx === i; return <div key={i} className={`outline-gen-item ${active ? 'active' : ''} ${o.state !== 'pending' ? 'stale' : ''}`} onClick={() => { if (m) editor.chain().focus().setTextSelection(m.from + 1).run(); setActiveOutlineIdx(m ? secs.indexOf(m) : i); if (editing) refreshReadings() }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}><strong>{i + 1}.</strong><input style={{ flex: 1, minWidth: 0 }} value={o.heading} aria-label={`Outline heading ${i + 1}`} onClick={e => e.stopPropagation()} onChange={e => updateOutlineDraft(i, { heading: e.target.value })} /></div>
+                <textarea style={{ width: '100%', marginTop: 6 }} rows={2} value={o.purpose} placeholder="Purpose…" aria-label={`Outline purpose ${i + 1}`} onClick={e => e.stopPropagation()} onChange={e => updateOutlineDraft(i, { purpose: e.target.value })} />
+                <textarea style={{ width: '100%', marginTop: 6 }} rows={3} value={(o.points || []).join('\n')} placeholder={'One point per line…'} aria-label={`Outline points ${i + 1}`} onClick={e => e.stopPropagation()} onChange={e => updateOutlineDraft(i, { points: e.target.value.split('\n') })} />
+                <div className="meta">{o.state}{m ? ' · linked to draft section' : ' · not in draft yet'}</div>
+                {o.state === 'pending' && <span style={{ display: 'flex', gap: 6, marginTop: 6 }}><button onClick={e => { e.stopPropagation(); insertOutlineSection(i, 'append') }}>Insert section</button>{m && <button onClick={e => { e.stopPropagation(); insertOutlineSection(i, 'replace') }}>Replace draft section</button>}</span>}
+              </div> })}</div>
               : <Outline editor={editor} data={toc} onMove={moveSection} />}
             </div>
             </>}
@@ -847,28 +857,25 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               {activeConfig ? <><div className="meta">{activeConfig.configuration_id} · {activeConfig.dimensions.diction} · {activeConfig.dimensions.tone}</div>
                 <div className="meta">Rules: {activeConfig.active_preset_rules.join(', ')}{activeConfig.custom_rules.length ? ` +${activeConfig.custom_rules.length} custom` : ''}</div>
                 <div className="meta">Ghost: {activeConfig.ghost_text_filters.allowed_transitions.join(' · ')}</div></>
-                : <div className="meta">No agent config — open Setup → Goal agent.</div>}
-              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}><button onMouseDown={e => e.preventDefault()} onClick={() => setWizardOpen(true)}>Setup agent</button>
+                : <div className="meta">No config yet — open Setup.</div>}
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}><button onMouseDown={e => e.preventDefault()} onClick={() => setWizardOpen(true)}>Setup</button>
               {activeConfig && <button onMouseDown={e => e.preventDefault()} onClick={() => { localStorage.removeItem('byline.config.active'); setActiveConfig(null) }}>Clear</button>}</div>
             </div>
             <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--blue)' }} />Sources{loading.readings && <Spinner />}</h3>
               <div className="dock-scroll">
               <div style={{ display: 'grid', gap: 6, marginBottom: 10 }}>
-                <input value={researchUrl} onChange={e => setResearchUrl(e.target.value)} placeholder="Research URL — web / PDF / paper" />
-                <input value={researchQ} onChange={e => setResearchQ(e.target.value)} placeholder="Question (optional)" />
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button className="primary" disabled={!researchUrl || !!loading.research} onMouseDown={e => e.preventDefault()} onClick={() => runResearch()}>{loading.research ? 'Researching…' : 'Research URL'}</button>
-                <label className="nav-btn" style={{ cursor: 'pointer' }}>Upload file<input type="file" hidden accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.docx,.csv,.xlsx,.tsv" onChange={e => { const f = e.target.files?.[0]; if (f) runResearch(f); e.target.value = '' }} /></label></div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <select value={citeStyle} onChange={e => { setCiteStyle(e.target.value as any); localStorage.setItem('byline.citeStyle', e.target.value) }} aria-label="Citation style"><option value="apa">APA</option><option value="mla">MLA</option><option value="chicago">Chicago</option></select>
-                  <select value={citeTemplate} onChange={e => setCiteTemplate(e.target.value as any)} aria-label="Citation template"><option value="">Inline only</option><option value="support">Support</option><option value="contrast">Contrast</option><option value="stat">Stat</option><option value="define">Define</option></select>
-                  <label className="meta" style={{ display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={researchAuto} onChange={e => { setResearchAuto(e.target.checked); localStorage.setItem('byline.researchAuto', e.target.checked ? '1' : '0') }} />Auto-verify</label>
+                <div className="meta">Blue highlight = claim in your draft. Blue squiggle = related source found.</div>
+                <input value={researchUrl} onChange={e => setResearchUrl(e.target.value)} placeholder="Search other: paste URL, text, or a question…" aria-label="Search other sources" />
+                <input value={researchQ} onChange={e => setResearchQ(e.target.value)} placeholder="Focus question (optional)" aria-label="Focus question" />
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button className="primary" disabled={!!loading.research} onMouseDown={e => e.preventDefault()} onClick={() => { if (/^https?:\/\//i.test(researchUrl.trim())) runResearch(); else refreshReadings() }}>{loading.research ? 'Searching…' : 'Search other'}</button>
+                  <label className="nav-btn" style={{ cursor: 'pointer' }}>Upload file / image<input type="file" hidden accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.docx,.csv,.xlsx,.tsv" onChange={e => { const f = e.target.files?.[0]; if (f) runResearch(f); e.target.value = '' }} /></label>
                 </div>
-                <div className="meta">Agent: claim detect → query → verify → blue underline + ready citation.</div>
               </div>
-              {facts.map((f, i) => <div key={i} className="source-card"><span className="source-badge">Fact{f.locator ? ` · ${f.locator}` : ''}</span><div className="source-why">{f.fact}</div><div className="source-excerpt"><a href={safeUrl(f.url || '#')} target="_blank" rel="noreferrer">{f.source_title || f.url}</a>{f.excerpt ? ` — “${f.excerpt}”` : ''}</div><div className="meta">{formatInline(f, citeStyle)}</div><button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={() => insertFact(f)}>Insert {citeStyle.toUpperCase()} citation</button></div>)}
+              {facts.map((f, i) => <div key={i} className="source-card"><span className="source-badge">Fact{f.locator ? ` · ${f.locator}` : ''}</span><div className="source-why">{f.fact}</div><div className="source-excerpt"><a href={safeUrl(f.url || '#')} target="_blank" rel="noreferrer">{f.source_title || f.url}</a>{f.excerpt ? ` — “${f.excerpt}”` : ''}</div><button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={() => insertFact(f)}>Insert citation</button></div>)}
               {capGreyed(readings).map((r, i) => <div key={i} className={`source-card ${r.stale ? 'stale' : ''}`} style={r.stale ? { opacity: .6 } : undefined}><span className="source-badge">{r.label}</span><a className="source-title" href={textFragmentUrl(safeUrl(r.url), r.excerpt || r.claim_quote)} target="_blank" rel="noreferrer">{r.title || r.url}</a><div className="source-why">Claim: “{r.claim_quote}”</div><div className="source-why">Evidence <strong>{(r as any).verdict || r.label || 'qualifies'}</strong> this claim: {r.why}</div>{r.excerpt && r.excerpt !== r.why && <div className="source-excerpt">“{r.excerpt}”</div>}{(r as any).domain && <div className="meta">{(r as any).domain}</div>}</div>)}
               {!readings.length && !facts.length && <div className="meta">—</div>}
-              </div><div className="dock-foot"><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button className="primary" disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshReadings}>{loading.readings ? 'Searching…' : 'Search'}</button><button onMouseDown={e => e.preventDefault()} onClick={() => setShowSources(true)}>Library ({facts.length + readings.length})</button><button onMouseDown={e => e.preventDefault()} onClick={copyBibliography}>Copy bibliography</button></div></div>
+              </div><div className="dock-foot"><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button className="primary" disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshReadings}>{loading.readings ? 'Searching claims…' : 'Search blue highlights'}</button><button onMouseDown={e => e.preventDefault()} onClick={() => setShowSources(true)}>Library ({facts.length + readings.length})</button></div></div>
             </div>
             </>}
             {(rightTab === 'suggest' || !editing) && <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--grey)' }} />Suggestions{loading.complete && <Spinner />}</h3>
@@ -914,10 +921,9 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           </div>
         </div>
       )}
-      {showSources && <SourcesLibrary facts={facts} readings={readings} onClose={() => setShowSources(false)} onDeleteFact={f => setFacts(old => old.filter(x => !(x.fact === f.fact && x.url === f.url)))} onDeleteReading={r => setReadings(old => old.filter(x => !(x.url === r.url && x.claim_quote === r.claim_quote)))} onClear={() => { setFacts([]); setReadings([]) }} onInsertFact={f => { insertFact(f); setShowSources(false) }} />}
-      {wizardOpen && <SetupWizard answers={answers} setAnswers={f => setAnswers(f as any)} onClose={() => setWizardOpen(false)} onGenerate={generateFromSurvey} generating={!!loading.outlinegen} onApplySetup={applySetupPayload} tab={wizardTab} setTab={setWizardTab}
-        outline={{ draft: outlineDraft, sections: docSections(), onInsert: insertOutlineSection, onInsertAll: insertAllPendingOutline, onSkip: (i) => setOutlineDraft(old => old.map((x, k) => k === i ? { ...x, state: 'skipped' } : x)), onRegenerate: generateFromSurvey, generating: !!loading.outlinegen }}
-        search={{ url: researchUrl, setUrl: setResearchUrl, question: researchQ, setQuestion: setResearchQ, onSearch: () => runResearch(), onUpload: (f) => runResearch(f), searching: !!loading.research, facts, readings, onInsertFact: insertFact }} />}
+      {showSources && <SourcesLibrary citeStyle={citeStyle} setCiteStyle={(v: any) => { setCiteStyle(v); localStorage.setItem('byline.citeStyle', v) }} citeTemplate={citeTemplate} setCiteTemplate={setCiteTemplate} researchAuto={researchAuto} setResearchAuto={(v: boolean) => { setResearchAuto(v); localStorage.setItem('byline.researchAuto', v ? '1' : '0') }} onCopyBibliography={copyBibliography} formatFact={(f: Fact) => formatInline(f, citeStyle)} facts={facts} readings={readings} onClose={() => setShowSources(false)} onDeleteFact={f => setFacts(old => old.filter(x => !(x.fact === f.fact && x.url === f.url)))} onDeleteReading={r => setReadings(old => old.filter(x => !(x.url === r.url && x.claim_quote === r.claim_quote)))} onClear={() => { setFacts([]); setReadings([]) }} onInsertFact={f => { insertFact(f); setShowSources(false) }} />}
+      {wizardOpen && <SetupWizard answers={answers} setAnswers={f => setAnswers(f as any)} onClose={() => setWizardOpen(false)} onGenerate={generateFromSurvey} generating={!!loading.outlinegen} tab={wizardTab} setTab={setWizardTab}
+        outline={{ draft: outlineDraft, sections: docSections(), onInsert: insertOutlineSection, onInsertAll: insertAllPendingOutline, onSkip: (i) => setOutlineDraft(old => old.map((x, k) => k === i ? { ...x, state: 'skipped' } : x)), onRegenerate: () => generateFromSurvey(), generating: !!loading.outlinegen, onUpdate: updateOutlineDraft }} />}
       {transMenu && (
         <div className="sugg-popup fade" style={{ left: transMenu.x, top: transMenu.y, maxHeight: transMenu.h, overflowY: 'auto' }} role="menu" aria-label="Transitions">
           <div className="trans-query">{transMenu.cat ? `${transMenu.cat} — ` : ''}Type to filter{transMenu.query ? `: ${transMenu.query}` : ''}<span className="trans-caret">▌</span></div>

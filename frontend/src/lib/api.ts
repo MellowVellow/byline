@@ -35,6 +35,7 @@ export const api = {
   diagram: (b: unknown) => postRaw('/api/diagram', b),
   outlineGenerate: (b: unknown) => postRaw('/api/outline-generate', b),
   setupAgent: (b: unknown) => postRaw('/api/setup-agent', b),
+  setupQuestions: (b: unknown) => postRaw('/api/setup-questions', b),
   dataset: (pairs: unknown[]) => postRaw('/api/dataset', { pairs }),
   waitlist: (email: string, note = '') => post('/api/waitlist', { email, note }),
 }
@@ -42,5 +43,3 @@ export const api = {
 export async function researchUpload(file: File, question: string): Promise<any> {
   try { const fd = new FormData(); fd.append('file', file); const r = await fetch(`${BASE}/api/research/upload?question=${encodeURIComponent(question)}`, { method: 'POST', body: fd }); return await r.json() } catch { return { ok: false, error: 'network' } }
 }
-export async function transcribeWav(blob: Blob): Promise<string> {
-  try { const fd = new FormData(); fd.append('file', blob, 'audio.wav'); const r = await fetch(`${BASE}/api/transcribe`, { method: 'POST', body: fd }); const d = await r.json(); return d?.ok ? (d.transcript || '') : '' } catch { return '' } }

@@ -47,6 +47,9 @@ class OutlineGenIn(BaseModel):
 class DatasetIn(BaseModel):
     pairs: list[dict] = Field(default_factory=list, max_length=200)
 
+class SetupQuestionsIn(BaseModel):
+    goal: str = S(2000); context: str = S(4000)
+
 class SetupAgentIn(BaseModel):
     raw_goal: str = S(4000); transcript: str = S(4000); answers: dict = Field(default_factory=dict)
 

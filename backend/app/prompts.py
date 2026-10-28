@@ -116,6 +116,7 @@ def outline_generate_prompt(answers_json):
     system = "Writing coach. JSON only. Turn survey answers into a context summary, a generative outline, and every Write/Syntax setting for a document that does not exist yet."
     user = (f"SURVEY ANSWERS (JSON):\n{answers_json}\n"
             f'DICTION (pick exactly one): {DICTIONS}. TONES ALLOWED (pick 0-3 exactly): {TONES}. CLAUSE (pick exactly one): {CLAUSES}.\n'
+            'CHOICES RULE: if SURVEY ANSWERS contains "choices" (follow-up answers), obey them exactly for diction/tone/voice/audience/rhythm/clause/density and reflect them in outline structure. '
             'TASK: {"context_summary":"<2-3 sentence North-Star context>","audience_text":"","audience_level":3,"diction":"General","tones":["Serious"],"voice":"<voice/style in one phrase, from voice_note>","rhythm":2,"gram_voice":"passive","clause":"Subordinated","density":2,"outline":[{"heading":"...","purpose":"...","points":["..."]}]} - rhythm/density/audience_level are ints (rhythm,density 1-3; audience 1-5), gram_voice is "active"|"passive". 4-7 headings, each with purpose + 2-4 bullet points.')
     return system, user
 
@@ -136,3 +137,13 @@ def setup_agent_prompt(raw_goal: str, rules_json: str) -> tuple[str, str]:
     return system, user
 
 FACTS_SYSTEM = "Researcher agent. Extract only facts actually supported by the provided source/search results. Every fact needs a source title, URL, locator (page/section), and a short excerpt copied from the source. Never invent facts or URLs."
+
+
+def setup_questions_prompt(goal: str, context: str) -> tuple[str, str]:
+    system = "Setup interviewer like a coding assistant. JSON only. Ask fast follow-up questions that configure a writing app."
+    user = (f"WHAT THEY WANT TO WRITE:\n{fence('GOAL', goal)}\nCONTEXT:\n{fence('CONTEXT', context)}\n"
+            "TASK: Generate 5-7 follow-up questions, preferably multiple-choice (3-4 short options each), a few seconds to answer. "
+            "Every question MUST map to one app setting via maps_to: diction|tone|voice|audience|audience_level|rhythm|clause|density|doc_type|outline_focus. "
+            "Questions must be specific to the goal+context (name its topic/audience/stakes), never generic filler. One open question max (options may be empty). "
+            'JSON: {"questions":[{"id":"q1","question":"...","maps_to":"diction","options":["...","..."]}]}')
+    return system, user

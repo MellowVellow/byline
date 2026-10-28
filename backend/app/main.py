@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from . import llm, prompts
 from .security import rate_ok, is_safe_public_url
 from .config import settings, cors_list, ROOT
-from .models import CompleteIn, TextIn, SynonymIn, GrammarIn, WaitlistIn, ClaimIn, LintIn, ResearchIn, DiagramIn, OutlineGenIn, DatasetIn, SetupAgentIn, CiteIn, BiblioIn
+from .models import CompleteIn, TextIn, SynonymIn, GrammarIn, WaitlistIn, ClaimIn, LintIn, ResearchIn, DiagramIn, OutlineGenIn, DatasetIn, SetupAgentIn, SetupQuestionsIn, CiteIn, BiblioIn
 from . import citations
 from .quote import filter_anchored
 from .grammar_filter import filter_matches
@@ -391,6 +391,35 @@ async def bibliography(body: BiblioIn):
         entries = [citations.format_bibliography(i.source_title, i.url, i.locator, body.style, i.author, i.year) for i in body.items[:50]]
         return ok(entries=entries, style=body.style.lower(), count=len(entries))
     except Exception as e: return err(e)
+
+MAPS_TO = {"diction","tone","voice","audience","audience_level","rhythm","clause","density","doc_type","outline_focus"}
+def fallback_questions(goal: str, context: str):
+    topic = (goal or "this piece").strip()[:60]
+    return [
+        {"id":"q_diction","question":f"Register for {topic}?","maps_to":"diction","options":["General","Formal","Academic","Casual","Technical"]},
+        {"id":"q_tone","question":"Tone readers should feel?","maps_to":"tone","options":["Serious","Objective","Humorous","Emotional"]},
+        {"id":"q_audience","question":"Who reads this first?","maps_to":"audience","options":["Beginners","General readers","Practitioners","Experts"]},
+        {"id":"q_voice","question":"Voice closest to yours?","maps_to":"voice","options":["Direct and plain","Warm and personal","Analytical and precise","Bold and opinionated"]},
+        {"id":"q_rhythm","question":"Sentence rhythm?","maps_to":"rhythm","options":["Staccato","Varied","Flowing"]},
+        {"id":"q_outline","question":"Outline should prioritise?","maps_to":"outline_focus","options":["Argument first","Story/chronology","Problem → solution","Comparison"]},
+    ]
+
+@app.post("/api/setup-questions")
+async def setup_questions(body: SetupQuestionsIn):
+    if not body.goal.strip() and not body.context.strip(): return fail(error="empty")
+    try:
+        s, u = prompts.setup_questions_prompt(body.goal, body.context)
+        data, usage, model = await llm.json_call(s, u, max_tokens=1100, temperature=0.4)
+        qs = []
+        for q in (data.get("questions") or [])[:7]:
+            if not isinstance(q, dict) or not q.get("question"): continue
+            qs.append({"id": str(q.get("id") or f"q{len(qs)+1}")[:40], "question": str(q["question"])[:240],
+                       "maps_to": q.get("maps_to") if q.get("maps_to") in MAPS_TO else "outline_focus",
+                       "options": [str(o)[:80] for o in (q.get("options") or []) if isinstance(o, (str, int))][:5]})
+        if len(qs) >= 3: return ok(questions=qs, model=model, usage=usage, meta=meta("setup-questions", s, u, usage, model, 0, 0.4, 1100))
+        raise ValueError("too few questions")
+    except Exception:
+        return ok(questions=fallback_questions(body.goal, body.context), model="fallback", usage={})
 
 @app.post("/api/setup-agent")
 async def setup_agent(body: SetupAgentIn):

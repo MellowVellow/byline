@@ -81,7 +81,7 @@
    Grammar = SVG squiggle background (text-decoration rendered as thick slab on merged spans). */
 .anch-grammar{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='4' viewBox='0 0 6 4'%3E%3Cpath d='M0 3 Q1.5 0.5 3 3 T6 3' fill='none' stroke='%23F0442E' stroke-width='1.4'/%3E%3C/svg%3E");background-repeat:repeat-x;background-position:0 100%;background-size:6px 4px;cursor:pointer}
 .anch-vocabulary{box-shadow:inset 0 -3px 0 rgba(217,48,37,.85);cursor:pointer}
-.anch-claim{text-decoration-line:underline;text-decoration-style:wavy;text-decoration-color:rgba(66,148,255,.9);text-decoration-thickness:1.5px;text-underline-offset:4px;cursor:pointer}
+.anch-claim{background:rgba(66,148,255,.20);border-radius:3px;text-decoration-line:underline;text-decoration-style:wavy;text-decoration-color:rgba(66,148,255,.95);text-decoration-thickness:1.5px;text-underline-offset:4px;cursor:pointer}
 :root[data-theme="dark"] .anch-claim{text-decoration-color:rgba(120,180,255,.95)}
 .anch-relevance{border-bottom:2px solid rgba(227,93,106,.75);cursor:pointer}
 .anch-reaction,.anch-reaction.tone-question,.anch-reaction.tone-critique,.anch-reaction.tone-comment,.anch-reaction.tone-compliment{border-bottom:2px dotted rgba(149,106,255,.6);cursor:pointer}
@@ -248,3 +248,11 @@ input[type=range]{accent-color:var(--ink);padding:0;border:none;background:trans
 .outline-gen-item{border:1px solid var(--border);border-left:4px solid var(--border);border-radius:6px;padding:8px;margin-top:8px;cursor:pointer}
 .outline-gen-item.active{border-left-color:var(--ai);background:rgba(124,77,255,.08)}
 .demo-steps{border:1px solid var(--blue);border-radius:8px;padding:10px 12px;margin-bottom:12px;display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px}
+
+/* right-dock buttons: hover lift */
+.right-rail button{transition:transform .13s ease, box-shadow .13s ease, border-color .13s ease, background .13s ease}
+.right-rail button:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.13);border-color:var(--muted)}
+.right-rail .dock-tabs button:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.15)}
+.rail-strip button{transition:transform .13s ease, box-shadow .13s ease}
+.rail-strip button:hover{transform:translateY(-1px) scale(1.06);box-shadow:0 4px 14px rgba(0,0,0,.16)}
+@media (prefers-reduced-motion: reduce){.right-rail button:hover,.rail-strip button:hover{transform:none}}
