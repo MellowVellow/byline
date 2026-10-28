@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { sfxStep, sfxBack, sfxPick, sfxToggle, sfxMuted } from '../lib/sfx'
 import { recordWav } from '../lib/wav'
-import { transcribeWav } from '../lib/api'
+import { transcribeWav, api } from '../lib/api'
+import { textFragmentUrl } from '../lib/link'
+import type { Fact, Reading, OutlineDraft, DocSection } from '../lib/types'
 import '../styles/setup-wizard.css'
+
+export type SetupPayload = { configuration_id: string; dimensions: { diction: string; tone: string; voice: string; style: string }; active_preset_rules: string[]; custom_rules: { id: string; category: string; rule: string }[]; ghost_text_filters: { starter_categories: string[]; allowed_transitions: string[] }; followup_question?: string }
 
 export type Answers = { goal: string; doc_type: string; audience: string; audience_level: number; key_points: string; voice_note: string }
 const DOCS = ['essay', 'report', 'proposal', 'email', 'blog']
@@ -18,11 +22,17 @@ const STEPS: { key: keyof Answers | 'welcome'; title: string; gold?: string; ph?
 ]
 type VState = 'idle' | 'listening' | 'transcribing' | 'error'
 
-export default function SetupWizard({ answers, setAnswers, onClose, onGenerate, generating }: {
-  answers: Answers; setAnswers: (f: (a: Answers) => Answers) => void; onClose: () => void; onGenerate: () => Promise<boolean>; generating: boolean
+export type WizardTab = 'survey' | 'agent' | 'outline' | 'search'
+export type OutlineReview = { draft: OutlineDraft[]; sections: DocSection[]; onInsert: (i: number, mode: 'append' | 'replace') => void; onInsertAll: () => void; onSkip: (i: number) => void; onRegenerate: () => Promise<boolean>; generating: boolean }
+export type SearchReview = { url: string; setUrl: (v: string) => void; question: string; setQuestion: (v: string) => void; onSearch: () => void; onUpload: (f: File) => void; searching: boolean; facts: Fact[]; readings: Reading[]; onInsertFact: (f: Fact) => void }
+
+export default function SetupWizard({ answers, setAnswers, onClose, onGenerate, generating, onApplySetup, tab, setTab, outline, search }: {
+  answers: Answers; setAnswers: (f: (a: Answers) => Answers) => void; onClose: () => void; onGenerate: () => Promise<boolean>; generating: boolean; onApplySetup?: (p: SetupPayload) => void
+  tab: WizardTab; setTab: (t: WizardTab) => void; outline?: OutlineReview; search?: SearchReview
 }) {
   const [i, setI] = useState(0), [muted, setMuted] = useState(sfxMuted()), [mode, setMode] = useState<'type' | 'speak'>('type')
   const [vState, setVState] = useState<VState>('idle'), [vErr, setVErr] = useState(''), [genErr, setGenErr] = useState(false)
+  const [rawGoal, setRawGoal] = useState(''), [payload, setPayload] = useState<SetupPayload | null>(null), [compiling, setCompiling] = useState(false), [convo, setConvo] = useState<{ q: string; a: string }[]>([])
   const cardRef = useRef<HTMLDivElement>(null), titleRef = useRef<HTMLHeadingElement>(null), recRef = useRef<{ stop: () => Promise<Blob> } | null>(null)
   const cancelRef = useRef(false), finishRef = useRef(false)
   const step = STEPS[i], last = i === STEPS.length - 1, isText = TEXT_KEYS.includes(step.key as string)
@@ -66,6 +76,22 @@ export default function SetupWizard({ answers, setAnswers, onClose, onGenerate, 
     if (last) { setGenErr(false); const ok = await onGenerate(); if (!ok) setGenErr(true) } else go(i + 1)
   }
   const pickMode = (m: 'type' | 'speak') => { setMode(m); sfxPick(); setI(1); sfxStep(1) }
+  async function compileAgent() {
+    if (!rawGoal.trim() || compiling) return
+    setCompiling(true); setPayload(null)
+    const d = await api.setupAgent({ raw_goal: rawGoal, answers })
+    setCompiling(false)
+    if (d?.ok) { setPayload(d as SetupPayload); sfxPick();
+      if (d.followup_question) setConvo(c => [...c.slice(-2), { q: d.followup_question, a: '' }]) }
+  }
+  async function voiceDump() {
+    try { const rec = await recordWav(25); setVState('listening')
+      const blob = await rec.stop().catch(() => null); setVState('idle')
+      if (!blob) return; setVState('transcribing')
+      const text = await transcribeWav(blob); setVState('idle')
+      if (text) setRawGoal(g => (g ? g + ' ' : '') + text)
+    } catch { setVState('idle') }
+  }
 
   return (
     <div className="wz-back" onMouseDown={close}>
@@ -79,6 +105,71 @@ export default function SetupWizard({ answers, setAnswers, onClose, onGenerate, 
           </span>
         </div>
         <div className="wz-glowline" role="progressbar" aria-label="Wizard progress" aria-valuemin={0} aria-valuemax={STEPS.length - 1} aria-valuenow={i}><div className="wz-glowbar" style={{ width: `${(i / (STEPS.length - 1)) * 100}%` }} /></div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <button className={`wz-chip ${tab === 'survey' ? 'on' : ''}`} onClick={() => setTab('survey')}>Survey</button>
+          <button className={`wz-chip ${tab === 'agent' ? 'on' : ''}`} onClick={() => setTab('agent')}>Goal agent</button>
+          <button className={`wz-chip ${tab === 'outline' ? 'on' : ''}`} onClick={() => setTab('outline')}>Outline{outline && outline.draft.some(d => d.state === 'pending') && ` (${outline.draft.filter(d => d.state === 'pending').length})`}</button>
+          <button className={`wz-chip ${tab === 'search' ? 'on' : ''}`} onClick={() => setTab('search')}>Search</button>
+        </div>
+        {tab === 'agent' && <div style={{ display: 'grid', gap: 10 }}>
+          <textarea className="wz-input" rows={4} value={rawGoal} onChange={e => setRawGoal(e.target.value)} placeholder="Paste raw goal — e.g. B2B SaaS pitch for conservative investors, zero hype, security + unit economics…" aria-label="Raw goal" />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="wz-chip" onClick={() => void voiceDump()}>{vState === 'transcribing' ? 'Transcribing…' : vState === 'listening' ? 'Listening…' : '🎙 Voice dump'}</button>
+            <button className="wz-cta" disabled={!rawGoal.trim() || compiling} onClick={() => void compileAgent()}>{compiling ? 'Compiling…' : 'Compile payload →'}</button>
+          </div>
+          {convo.map((t, k) => <div key={k} className="meta" style={{ fontStyle: 'italic' }}>Agent: {t.q}<input className="wz-input" value={t.a} onChange={e => { const n = [...convo]; n[k] = { ...n[k], a: e.target.value }; setConvo(n) }} placeholder="Your answer…" onBlur={() => setRawGoal(g => g + ' ' + (convo[k]?.a || ''))} /></div>)}
+          {payload && <div className="library-rule" style={{ maxHeight: 220, overflowY: 'auto' }}>
+            <div className="kind-label">{payload.configuration_id} · {payload.dimensions.diction} · {payload.dimensions.tone}</div>
+            <p><strong>Voice:</strong> {payload.dimensions.voice}</p>
+            <p><strong>Style:</strong> {payload.dimensions.style}</p>
+            <p><strong>Rules:</strong> {payload.active_preset_rules.join(', ')}</p>
+            {payload.custom_rules.map(c => <p key={c.id}><strong>{c.id}:</strong> {c.rule}</p>)}
+            <p className="meta">Ghost: {payload.ghost_text_filters.allowed_transitions.join(' · ')}</p>
+            <button className="wz-cta" onClick={() => { onApplySetup?.(payload); onClose() }}>Apply to editor ✓</button>
+          </div>}
+        </div>}
+        {tab === 'outline' && <div style={{ display: 'grid', gap: 10 }}>
+          <div className="meta">Review-first: the outline never writes to the editor by itself. Compare each section against your draft, then insert or replace section by section.</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="wz-chip" disabled={generating} onClick={() => void outline?.onRegenerate()}>{generating ? 'Generating…' : '↻ Regenerate'}</button>
+            <button className="wz-chip" disabled={!outline?.draft.some(d => d.state === 'pending')} onClick={() => outline?.onInsertAll()}>Insert all pending</button>
+          </div>
+          {!outline?.draft.length && <div className="meta">No outline yet — finish the survey and press Generate outline.</div>}
+          {outline?.draft.map((o, k) => {
+            const h = o.heading.trim().toLowerCase()
+            const m = h ? outline.sections.find(s => { const d = s.heading.toLowerCase(); return d === h || (d && (d.includes(h) || h.includes(d))) }) : undefined
+            return <div key={k} className="library-rule">
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <strong>{k + 1}. {o.heading}</strong><span className="spacer" />
+                <span className="kind-label">{o.state === 'pending' ? (m ? 'differs · in draft' : 'new · not in draft') : o.state}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 6 }}>
+                <div><div className="kind-label">Outline</div><p style={{ fontStyle: 'italic' }}>{o.purpose}</p>{o.points.map((p, j) => <p key={j}>· {p}</p>)}</div>
+                <div><div className="kind-label">In draft now</div>{m ? <><p><strong>{m.heading}</strong></p><p className="meta">{m.preview || '—'}</p></> : <p className="meta">No matching section.</p>}</div>
+              </div>
+              {o.state === 'pending' && <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                <button className="wz-chip" onClick={() => outline.onInsert(k, 'append')}>Insert as new section</button>
+                {m && <button className="wz-chip" onClick={() => outline.onInsert(k, 'replace')}>Replace “{m.heading}”</button>}
+                <button className="wz-chip" onClick={() => outline.onSkip(k)}>Skip</button>
+              </div>}
+            </div>
+          })}
+        </div>}
+        {tab === 'search' && search && <div style={{ display: 'grid', gap: 10 }}>
+          <div className="meta">Research without leaving the wizard. Results land in Sources too — insert citations from either place.</div>
+          <input className="wz-input" value={search.url} onChange={e => search.setUrl(e.target.value)} placeholder="Research URL — web / PDF / paper" aria-label="Research URL" />
+          <input className="wz-input" value={search.question} onChange={e => search.setQuestion(e.target.value)} placeholder="Question (optional)" aria-label="Research question" />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="wz-cta" disabled={!search.url || search.searching} onClick={() => search.onSearch()}>{search.searching ? 'Researching…' : 'Research URL'}</button>
+            <label className="wz-chip" style={{ cursor: 'pointer' }}>Upload file<input type="file" hidden accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.docx,.csv,.xlsx,.tsv" onChange={e => { const f = e.target.files?.[0]; if (f) search.onUpload(f); e.target.value = '' }} /></label>
+          </div>
+          <div style={{ maxHeight: 260, overflowY: 'auto', display: 'grid', gap: 8 }}>
+            {search.facts.map((f, k) => <div key={k} className="library-rule"><div className="kind-label">Fact{f.locator ? ` · ${f.locator}` : ''}</div><p>{f.fact}</p><p className="meta">{f.source_title || f.url}{f.excerpt ? ` — “${f.excerpt}”` : ''}</p><button className="wz-chip" onClick={() => search.onInsertFact(f)}>Insert citation</button></div>)}
+            {search.readings.map((r, k) => <div key={k} className="library-rule"><a href={textFragmentUrl(r.url, r.excerpt || r.claim_quote)} target="_blank" rel="noreferrer">{r.title || r.url}</a><p className="meta">vs “{r.claim_quote}” — {r.why}</p></div>)}
+            {!search.facts.length && !search.readings.length && <div className="meta">No results yet.</div>}
+          </div>
+        </div>}
+        {tab === 'survey' && <>
         <div className="wz-step" key={i} aria-live="polite">
           <h2 ref={titleRef} tabIndex={-1} id="wz-title" className="wz-title" style={{ outline: 'none' }}>{step.title} {step.gold && <span className="gold">{step.gold}</span>}</h2>
           <div style={{ marginTop: 26, minHeight: 92 }}>
@@ -101,6 +192,7 @@ export default function SetupWizard({ answers, setAnswers, onClose, onGenerate, 
             ? <button className="wz-cta" disabled={generating} aria-busy={generating} onClick={() => void advance()}>{generating ? 'Generating…' : 'Generate outline'}</button>
             : <button className="wz-cta" disabled={!valid || vState === 'transcribing'} onClick={() => void advance()}>{step.key === 'voice_note' && !answers.voice_note.trim() ? 'Skip →' : 'Continue →'}</button>)}
         </div>
+        </>}
       </div>
     </div>
   )

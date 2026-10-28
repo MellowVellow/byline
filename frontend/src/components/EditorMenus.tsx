@@ -15,7 +15,6 @@ export default function EditorMenus({ editor, onSuggest, onSentenceStarter, coun
   return <>
     <div className="editor-bar">
       <button className="bar-ai" onMouseDown={e => e.preventDefault()} onClick={onSuggest} title="Request ghost completions at caret">Suggest <span className="kbd">Ctrl Space</span></button>
-      <button className="bar-ai" onMouseDown={e => e.preventDefault()} onClick={onSentenceStarter} title="Insert a transition / sentence starter at caret">Sentence starter <span className="kbd">Ctrl /</span></button>
       <div className="setup-center">
         <button id="setup-wizard-btn" className="setup-shine" aria-haspopup="menu" aria-expanded={setupOpen} onClick={() => setSetupOpen(v => !v)}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9L12 2zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z" /></svg>
@@ -29,7 +28,7 @@ export default function EditorMenus({ editor, onSuggest, onSentenceStarter, coun
         </div></>}
       </div>
       <span className="spacer" />
-      {showWordCount && <span className="metric">{counts.words} words · {counts.chars} chars</span>}
+      <button className="bar-ai" onMouseDown={e => e.preventDefault()} onClick={onSentenceStarter} title="Insert a transition / sentence starter at caret">Sentence starters <span className="kbd">Ctrl /</span></button>
     </div>
 
     <BubbleMenu editor={editor} className="bubble-menu" options={{ placement: 'top', offset: 8 }}

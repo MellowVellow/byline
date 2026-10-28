@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { Editor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import { docToText, locateQuote } from '../src/lib/locate'
-import { AnchorDecorations, anchorStore, syncAnchors } from '../src/editor/decorations'
+import { AnchorDecorations, anchorStore, syncAnchors, modeStore } from '../src/editor/decorations'
 
 function make(content: string) {
   const el = document.createElement('div'); document.body.appendChild(el)
@@ -19,7 +19,7 @@ describe('quote anchoring', () => {
     expect(ed.state.doc.textBetween(r!.from, r!.to)).toBe('plethora')
     ed.destroy()
   })
-  it('renders layered anchor classes in DOM', () => {
+  it('renders layered anchor classes in DOM', () => { modeStore.mode = 'editing'
     const ed = make('<p>A plethora of reasons exist.</p>')
     const tm = docToText(ed as any)
     const r = locateQuote(tm, 'plethora', tm.text)!

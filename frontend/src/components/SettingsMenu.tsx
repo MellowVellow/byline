@@ -4,13 +4,13 @@ import { sfxMuted, sfxToggle, sfxPick, blip } from '../lib/sfx'
 
 type Tab = 'colors' | 'ui' | 'shortcuts'
 const COLOR_FIELDS: { key: 'ai' | 'grammar' | 'sources' | 'wordChoice' | 'selection'; label: string; hint: string }[] = [
-  { key: 'ai', label: 'AI / reader accent', hint: 'Purple underlines, AI badges, reader panel' },
+  { key: 'ai', label: 'Reader accent', hint: 'Purple underlines, reader panel' },
   { key: 'grammar', label: 'Grammar', hint: 'Red squiggles (LanguageTool)' },
   { key: 'sources', label: 'Sources', hint: 'Blue wavy underlines, source links' },
-  { key: 'wordChoice', label: 'Word choice', hint: 'Yellow underline for vocabulary / cohesion' },
+  { key: 'wordChoice', label: 'Lint', hint: 'Yellow underline family for lint (language uses red shades)' },
 ]
 
-export default function SettingsMenu({ settings, onChange, onClose }: { settings: AppSettings; onChange: (s: AppSettings) => void; onClose: () => void }) {
+export default function SettingsMenu({ settings, onChange, onClose, onClearGreyed }: { settings: AppSettings; onChange: (s: AppSettings) => void; onClose: () => void; onClearGreyed?: () => void }) {
   const [tab, setTab] = useState<Tab>('colors')
   const [muted, setMuted] = useState(sfxMuted())
   const set = (p: Partial<AppSettings>) => { blip('select'); onChange({ ...settings, ...p }) }
@@ -19,6 +19,7 @@ export default function SettingsMenu({ settings, onChange, onClose }: { settings
     <div className="library-backdrop" onMouseDown={onClose}>
       <div className="library-modal fade settings-modal" role="dialog" aria-label="Settings" onMouseDown={e => e.stopPropagation()}>
         <div className="library-head"><strong>Settings</strong><span className="meta">General app usage</span><span className="spacer" />
+          <button onClick={() => onClearGreyed?.()}>Clear all greyed-out</button>
           <button onClick={() => onChange({ ...DEFAULT_SETTINGS })}>Reset defaults</button>
           <button onClick={onClose}>Close <span className="kbd">Esc</span></button></div>
         <div className="dock-tabs" style={{ padding: '12px 16px 0' }} role="tablist" aria-label="Settings sections">

@@ -42,7 +42,7 @@ def post(path, body):
         d = json.load(r)
     ms = round((time.perf_counter() - t) * 1000)
     u = d.get("usage") or {}
-    return {"path": path, "ms": ms, "ok": d.get("ok"), "in": u.get("prompt_tokens", 0), "out": u.get("completion_tokens", 0),
+    return {"path": path, "ms": ms, "ok": d.get("ok"), "prompt": body, "params": {"model": d.get("model","")}, "in": u.get("prompt_tokens", 0), "out": u.get("completion_tokens", 0),
             "reasoning": (u.get("completion_tokens_details") or {}).get("reasoning_tokens", 0), "model": d.get("model", "")}
 
 def cycle(mode, text):

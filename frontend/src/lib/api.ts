@@ -34,6 +34,7 @@ export const api = {
   bibliography: (style: string, items: unknown[]) => postRaw('/api/cite/bibliography', { style, items }),
   diagram: (b: unknown) => postRaw('/api/diagram', b),
   outlineGenerate: (b: unknown) => postRaw('/api/outline-generate', b),
+  setupAgent: (b: unknown) => postRaw('/api/setup-agent', b),
   dataset: (pairs: unknown[]) => postRaw('/api/dataset', { pairs }),
   waitlist: (email: string, note = '') => post('/api/waitlist', { email, note }),
 }

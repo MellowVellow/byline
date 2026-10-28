@@ -1,13 +1,21 @@
-import type { Issue, Reaction } from './types'
+import type { Issue, Reaction, Reading } from './types'
 /** Canned demo data when backend unreachable (Vercel static demo). Anchored by exact quotes from sample. */
-export const SAMPLE_DOC = `<p>Cats are independent, as I said. Dogs needs daily walks. A plethora of reasons exist for choosing a cat.</p><p>Cats are quiet. Dogs bark. Cats live longer than dogs. Finally, cats are just cute.</p>`
+export const SAMPLE_DOC = `<h1>Cats or dogs: choosing a first pet</h1><p>Cats are independent, as I said. Dogs needs daily walks. A plethora of reasons exist for choosing a cat. Cats live longer than dogs, so they are clearly the better long-term choice.</p><p>Cats are quiet. Dogs bark. Studies show that dog owners are always happier than cat owners. The utilisation of a litter box facilitates a paradigm shift in home hygiene. Finally, cats are just cute.</p><p>In order to make a decision, you should think about your schedule. Dogs needs at least two hours of exercise every day without exception. Cats can be left alone for a weekend, and this proves they need no attention at all. Because cats sleep most of the day, therefore they are the perfect pet for everyone.</p>`
 export const SAMPLE_CONTEXT = 'Argue which animal is better, cats or dogs, with at least 2 arguments. Audience: undecided first-time pet owners.'
 export const FALLBACK_ISSUES: Issue[] = [
-  { quote: 'plethora', context: 'A plethora of reasons exist', type: 'vocabulary', reason: 'Word above General level.', replacement: 'many' },
+  { quote: 'plethora', context: 'A plethora of reasons exist for choosing a cat.', type: 'vocabulary', reason: 'Word above General level.', replacement: 'many' },
   { quote: 'as I said', context: 'Cats are independent, as I said.', type: 'relevance', reason: 'Refers back to something not yet said.', replacement: '' },
+  { quote: 'utilisation of a litter box facilitates a paradigm shift', context: 'The utilisation of a litter box facilitates a paradigm shift in home hygiene.', type: 'vocabulary', reason: 'Buzzword-heavy and far above General level.', replacement: 'using a litter box changes home hygiene' },
+  { quote: 'this proves they need no attention at all', context: 'Cats can be left alone for a weekend, and this proves they need no attention at all.', type: 'relevance', reason: 'Overclaims from one example; absolute conclusion does not follow.', replacement: '' },
 ]
 export const FALLBACK_REACTIONS: Reaction[] = [
   { quote: 'as I said', context: 'Cats are independent, as I said.', kind: 'question', text: 'You already mentioned this — where?' },
   { quote: 'Finally, cats are just cute.', context: 'Finally, cats are just cute.', kind: 'critique', text: 'This lands as feeling, not an argument. A reader may not be convinced.' },
+  { quote: 'Studies show that dog owners are always happier than cat owners.', context: 'Studies show that dog owners are always happier than cat owners.', kind: 'question', text: 'Which studies? “Always” is a very strong claim with no source.' },
+  { quote: 'they are the perfect pet for everyone', context: 'therefore they are the perfect pet for everyone.', kind: 'critique', text: 'Everyone? Allergies, housing, and time differ — this overreaches.' },
+]
+export const FALLBACK_READINGS: Reading[] = [
+  { title: 'How far to walk a dog? — Vital Pet Club', url: 'https://www.vitalpetclub.co.uk', label: 'supports', verdict: 'supports', domain: 'vitalpetclub.co.uk', why: 'Evidence supports the claim as a general guideline: veterinary advice states healthy dogs should have at least one walk a day, preferably two.', excerpt: 'Healthy dogs of all breeds should have at least one walk a day, preferably two.', claim_quote: 'Dogs needs daily walks.', claim_context: 'Cats are independent, as I said. Dogs needs daily walks.' },
+  { title: 'Do Cats Live Longer Than Dogs? — PetMD', url: 'https://www.petmd.com', label: 'qualifies', verdict: 'qualifies', domain: 'petmd.com', why: 'Evidence qualifies the claim: indoor cats often outlive dogs on average, but lifespan varies widely by breed, size, and care.', excerpt: 'Cats tend to live longer than dogs on average, especially indoor cats.', claim_quote: 'Cats live longer than dogs', claim_context: 'Cats live longer than dogs, so they are clearly the better long-term choice.' },
 ]
 export const FALLBACK_SUGGESTIONS = ['cost of care', 'Dogs, by comparison, need daily attention', 'A cat can be left alone for a weekend.']

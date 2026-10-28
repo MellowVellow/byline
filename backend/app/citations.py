@@ -69,6 +69,8 @@ def extract_doc_text(filename: str, content: bytes) -> str:
             import zipfile
             import xml.etree.ElementTree as ET
             with zipfile.ZipFile(__import__("io").BytesIO(content)) as z:
+                infos = z.infolist()
+                if len(infos) > 200 or sum(i.file_size for i in infos) > 5_000_000: return ""
                 xml = z.read("word/document.xml")
             ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
             paras = []

@@ -2,6 +2,14 @@
   "installCommand": "npm --prefix frontend install --include=dev",
   "buildCommand": "npm --prefix frontend run build",
   "outputDirectory": "frontend/dist",
+  "headers": [
+    { "source": "/(.*)", "headers": [
+      { "key": "X-Content-Type-Options", "value": "nosniff" },
+      { "key": "Referrer-Policy", "value": "no-referrer" },
+      { "key": "X-Frame-Options", "value": "DENY" },
+      { "key": "Content-Security-Policy", "value": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https:; script-src 'self'" }
+    ] }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "https://api.trybyline.dev/api/$1" },
     { "source": "/((?!assets/).*)", "destination": "/index.html" }

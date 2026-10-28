@@ -6,7 +6,7 @@ import type { Anchor } from '../lib/types'
 export const anchorStore: { anchors: Anchor[]; ranges: Map<string, { from: number; to: number }>; ghost: string; ghostPos: number; linkedId: string | null } =
   { anchors: [], ranges: new Map(), ghost: '', ghostPos: 0, linkedId: null }
 export type EditorMode = 'drafting' | 'editing'
-export const modeStore: { mode: EditorMode } = { mode: 'editing' }
+export const modeStore: { mode: EditorMode } = { mode: 'drafting' }
 export const lintStore: { results: any[]; ranges: Map<string, { from: number; to: number }>; activeUid: string | null } =
   { results: [], ranges: new Map(), activeUid: null }
 const lintKey = new PluginKey('byline-lint')

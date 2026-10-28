@@ -3,11 +3,13 @@ from __future__ import annotations
 import json, logging, re
 from pathlib import Path
 import httpx
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from . import llm, prompts
+from .security import rate_ok, is_safe_public_url
 from .config import settings, cors_list, ROOT
-from .models import CompleteIn, TextIn, SynonymIn, GrammarIn, WaitlistIn, ClaimIn, LintIn, ResearchIn, DiagramIn, OutlineGenIn, DatasetIn, CiteIn, BiblioIn
+from .models import CompleteIn, TextIn, SynonymIn, GrammarIn, WaitlistIn, ClaimIn, LintIn, ResearchIn, DiagramIn, OutlineGenIn, DatasetIn, SetupAgentIn, CiteIn, BiblioIn
 from . import citations
 from .quote import filter_anchored
 from .grammar_filter import filter_matches
@@ -15,12 +17,38 @@ from .swapcheck import swap_ok, match_case
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="Byline v2")
-app.add_middleware(CORSMiddleware, allow_origins=cors_list() or ["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=cors_list() or ["http://localhost:5173"], allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
+
+log = logging.getLogger("byline.api")
+
+@app.middleware("http")
+async def guard(request: Request, call_next):
+    if request.url.path.startswith("/api/") and request.url.path != "/api/health":
+        ip = request.client.host if request.client else "unknown"
+        if not rate_ok(f"{ip}:{request.url.path}", limit=120, window=60.0):
+            return JSONResponse({"ok": False, "error": "rate_limited"}, status_code=429)
+        clen = request.headers.get("content-length")
+        if clen and clen.isdigit() and int(clen) > 22 * 1024 * 1024:
+            return JSONResponse({"ok": False, "error": "payload_too_large"}, status_code=413)
+    resp = await call_next(request)
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Referrer-Policy", "no-referrer")
+    return resp
 
 CAPS = {"Hint": 5, "Phrase": 8, "Sentence": 25, "Question": 12}
+ASSIST_TOKENS = {"Hint": 120, "Phrase": 220, "Sentence": 400, "Question": 220}
 
 def ok(**kw): return {"ok": True, **kw}
 def fail(**kw): return {"ok": False, **kw}
+def err(e: Exception):
+    log.warning("endpoint error: %s: %s", type(e).__name__, str(e)[:300])
+    return fail(error="upstream_error")
+def meta(endpoint, system, user, usage, model, ms=0, temperature=0, max_tokens=0):
+    return {"endpoint": endpoint, "model": model or "", "ms": int(ms or 0),
+            "usage": {"in": (usage or {}).get("prompt_tokens", 0), "out": (usage or {}).get("completion_tokens", 0),
+                      "reasoning": ((usage or {}).get("completion_tokens_details") or {}).get("reasoning_tokens", 0)},
+            "params": {"temperature": temperature, "max_tokens": max_tokens, "reasoning_effort": "minimal"},
+            "prompt": {"system": (system or "")[:20000], "user": (user or "")[:20000]}}
 
 _SENT_END = re.compile(r"""[.!?]["'”’)\]]*\s*$""")
 
@@ -51,14 +79,12 @@ async def health():
             r = await cl.get(settings.languagetool_url.replace("/v2/check", "/v2/languages"))
             lt = r.status_code == 200
     except Exception: pass
-    return ok(meta_configured=bool(settings.meta_api_key), model=settings.meta_model,
-              fallback_configured=bool(settings.openrouter_api_key), languagetool=lt,
-              web_search=bool(settings.meta_api_key), supabase=bool(settings.supabase_url))
+    return ok(meta_configured=bool(settings.meta_api_key), model=settings.meta_model, languagetool=lt)
 
 @app.post("/api/complete")
 async def complete(body: CompleteIn):
     try:
-        s, u = prompts.complete_prompt(body.context, body.level, body.before, body.after, body.assist_level, body.voice, body.style)
+        s, u = prompts.complete_prompt(body.context, body.level, body.before, body.after, body.assist_level, body.voice, body.style, body.facts, body.last_two)
         try:
             t0 = __import__('time').perf_counter(); local_raw = await llm.local_text(s, u); dt = __import__('time').perf_counter() - t0
             sugg = [sentence_case(body.before, x) for x in parse_options(local_raw, body.assist_level)]
@@ -66,10 +92,10 @@ async def complete(body: CompleteIn):
             raise ValueError("local empty")
         except Exception:
             pass
-        raw, usage, model, dt = await llm.timed_text(s, u, max_tokens=650, temperature=0.8)
+        raw, usage, model, dt = await llm.timed_text(s, u, max_tokens=ASSIST_TOKENS.get(body.assist_level, 220), temperature=0.8)
         sugg = [sentence_case(body.before, x) for x in parse_options(raw, body.assist_level)]
-        return ok(suggestions=sugg, version=body.version, model=model, ms=round(dt * 1000), usage=usage) if sugg else fail(version=body.version)
-    except Exception as e: return fail(error=str(e)[:200], version=body.version)
+        return ok(suggestions=sugg, version=body.version, model=model, ms=round(dt * 1000), usage=usage, meta=meta("complete", s, u, usage, model, dt*1000, 0.8, ASSIST_TOKENS.get(body.assist_level, 220))) if sugg else fail(version=body.version)
+    except Exception as e: return err(e)
 
 ZIPF_THRESHOLDS = {"Simple": 4.6, "Casual": 4.4, "Slang": 4.4, "General": 4.0, "Formal": 3.6, "Technical": 3.2, "Academic": 3.2, "Expert": 2.8, "Buzzwords": 4.2, "Bullshitting": 4.2}
 
@@ -118,16 +144,16 @@ async def annotate(body: TextIn):
                     pass
             it["alternatives"] = valid
             it["replacement"] = valid[0]["text"] if valid else "" 
-        return ok(issues=issues, model=model, usage=usage)
-    except Exception as e: return fail(error=str(e)[:200])
+        return ok(issues=issues, model=model, usage=usage, meta=meta("annotate", s, u, usage, model, 0, 0.4, 1000))
+    except Exception as e: return err(e)
 
 @app.post("/api/reactions")
 async def reactions(body: TextIn):
     try:
         s, u = prompts.reactions_prompt(body.context, body.level, body.text, body.persona, body.style)
         data, usage, model = await llm.json_call(s, u, max_tokens=1100, temperature=0.6)
-        return ok(reactions=filter_anchored(data.get("reactions", []), body.text), model=model, usage=usage)
-    except Exception as e: return fail(error=str(e)[:200])
+        return ok(reactions=filter_anchored(data.get("reactions", []), body.text), model=model, usage=usage, meta=meta("reactions", s, u, usage, model, 0, 0.6, 1100))
+    except Exception as e: return err(e)
 
 @app.post("/api/main-idea")
 async def main_idea(body: TextIn):
@@ -135,16 +161,16 @@ async def main_idea(body: TextIn):
         s, u = prompts.main_idea_prompt(body.context, body.level, body.text, body.style)
         raw, usage, model, dt = await llm.timed_text(s, u, max_tokens=350, temperature=0.4)
         idea = raw.strip().splitlines()[0] if raw.strip() else ""
-        return ok(main_idea=idea, model=model, ms=round(dt * 1000), usage=usage) if idea else fail()
-    except Exception as e: return fail(error=str(e)[:200])
+        return ok(main_idea=idea, model=model, ms=round(dt * 1000), usage=usage, meta=meta("main-idea", s, u, usage, model, dt*1000, 0.4, 350)) if idea else fail()
+    except Exception as e: return err(e)
 
 @app.post("/api/outline")
 async def outline(body: TextIn):
     try:
         s, u = prompts.outline_prompt(body.text)
         data, usage, model = await llm.json_call(s, u, max_tokens=800, temperature=0.3)
-        return ok(outline=filter_anchored(data.get("outline", []), body.text), model=model, usage=usage)
-    except Exception as e: return fail(error=str(e)[:200])
+        return ok(outline=filter_anchored(data.get("outline", []), body.text), model=model, usage=usage, meta=meta("outline", s, u, usage, model, 0, 0.3, 800))
+    except Exception as e: return err(e)
 
 @app.post("/api/synonyms")
 async def synonyms(body: SynonymIn):
@@ -159,8 +185,8 @@ async def synonyms(body: SynonymIn):
                 if w.lower() != body.word.lower() and await swap_ok(body.sentence, body.word, w, cache):
                     kept.append(w)
             words = kept
-        return ok(synonyms=words, model=model, usage=usage)
-    except Exception as e: return fail(error=str(e)[:200])
+        return ok(synonyms=words, model=model, usage=usage, meta=meta("synonyms", s, u, usage, model, 0, 0.5, 600))
+    except Exception as e: return err(e)
 
 @app.post("/api/grammar")
 async def grammar(body: GrammarIn):
@@ -171,8 +197,17 @@ async def grammar(body: GrammarIn):
         matches = [{"from": m["offset"], "to": m["offset"] + m["length"], "message": m.get("message", ""),
                     "replacements": [x["value"] for x in m.get("replacements", [])[:3]],
                     "rule": (m.get("rule") or {}).get("id", "")} for m in d.get("matches", [])]
-        return ok(matches=filter_matches(body.text, matches))
-    except Exception as e: return fail(error=str(e)[:120])
+        return ok(matches=filter_matches(body.text, matches), meta={"endpoint":"grammar","model":"LanguageTool","ms":0,"usage":{"in":0,"out":0,"reasoning":0},"params":{"temperature":0,"max_tokens":0,"reasoning_effort":""},"prompt":{"system":"LanguageTool /v2/check level=picky","user":body.text[:20000]}})
+    except Exception as e: return err(e)
+
+def parse_verdict(answer: str):
+    low = answer.lower()
+    verdict = "qualifies"
+    if low.startswith("evidence supports") or "supports the claim" in low[:120] or "evidence **supports**" in low[:160]: verdict = "supports"
+    elif "contradict" in low[:160]: verdict = "contradicts"
+    first = answer.strip().strip("*# ").split(". ")[0]
+    summary = (first[:280] + ("." if first and not first.endswith(".") else "")).strip()
+    return verdict, summary
 
 @app.post("/api/readings")
 async def readings(body: TextIn):
@@ -190,29 +225,28 @@ async def readings(body: TextIn):
             except Exception:
                 continue
             answer = (r.get("text") or "").strip()
+            verdict, summary = parse_verdict(answer)
             seen = set()
-            for res in (r.get("search_results") or [])[:3]:
+            srcs = [{"title": x.get("title", ""), "url": x.get("url", "")} for x in (r.get("search_results") or [])[:3]]
+            if not srcs:
+                srcs = [{"title": a.get("title", ""), "url": a.get("url", "")} for a in (r.get("annotations") or [])[:2]]
+            for res in srcs:
                 url = res.get("url", "")
-                if not url or url in seen: continue
+                if not url or url in seen or not url.startswith(("http://", "https://")): continue
                 seen.add(url)
-                out.append({"title": res.get("title", "") or url, "url": url, "label": "grounded", "why": answer[:240], "excerpt": answer[:240],
-                            "claim_quote": c["quote"], "claim_context": c["context"]})
-            if not seen and answer:
-                for a in (r.get("annotations") or [])[:2]:
-                    url = a.get("url", "")
-                    if url and url not in seen:
-                        seen.add(url)
-                        out.append({"title": a.get("title", "") or url, "url": url, "label": "grounded", "why": answer[:240], "excerpt": answer[:240],
-                                    "claim_quote": c["quote"], "claim_context": c["context"]})
-        return ok(readings=out, claims=claims, model=model)
-    except Exception as e: return fail(error=str(e)[:200])
+                from urllib.parse import urlparse as _up
+                out.append({"title": res.get("title", "") or url, "url": url, "label": verdict, "verdict": verdict,
+                            "why": summary, "summary": summary, "excerpt": summary,
+                            "domain": _up(url).netloc, "claim_quote": c["quote"], "claim_context": c["context"]})
+        return ok(readings=out, claims=claims, model=model, meta=meta("readings", s, u, {}, model, 0, 0.3, 800))
+    except Exception as e: return err(e)
 
 FACT_SCHEMA = {"type": "object", "properties": {"facts": {"type": "array", "items": {"type": "object", "properties": {"fact": {"type": "string"}, "source_title": {"type": "string"}, "url": {"type": "string"}, "locator": {"type": "string"}, "excerpt": {"type": "string"}}, "required": ["fact", "source_title", "url", "locator", "excerpt"], "additionalProperties": False}}}, "required": ["facts"], "additionalProperties": False}
 
 @app.post("/api/research")
 async def research(body: ResearchIn):
     url = body.url.strip()
-    if not url.startswith(("http://", "https://")): return fail(error="url must be http(s)")
+    if not is_safe_public_url(url): return fail(error="url_blocked")
     try:
         if url.lower().split("?")[0].endswith(".pdf"):
             r = await llm.responses_call([{"role": "user", "content": [
@@ -228,7 +262,7 @@ async def research(body: ResearchIn):
                 facts = [{"fact": r["text"][:400], "source_title": url, "url": url, "locator": "web", "excerpt": r["text"][:240]}]
         for f in facts: f.setdefault("url", url)
         return ok(facts=facts[:12], model=r.get("model", ""), usage=r.get("usage"))
-    except Exception as e: return fail(error=str(e)[:240])
+    except Exception as e: return err(e)
 
 @app.post("/api/research/upload")
 async def research_upload(file: UploadFile = File(...), question: str = "Extract the key facts relevant to my writing, with sources."):
@@ -262,7 +296,7 @@ async def research_upload(file: UploadFile = File(...), question: str = "Extract
         facts = llm.extract_json(r["text"]).get("facts", []) if r.get("text") else []
         for f in facts: f.setdefault("source_title", file.filename or "upload")
         return ok(facts=facts[:12], file_id=fid, model=r.get("model", ""))
-    except Exception as e: return fail(error=str(e)[:240])
+    except Exception as e: return err(e)
 
 @app.post("/api/diagram")
 async def diagram(body: DiagramIn):
@@ -273,7 +307,7 @@ async def diagram(body: DiagramIn):
         if not mermaid or not (mermaid.startswith("mindmap") or mermaid.startswith("flowchart") or mermaid.startswith("graph")): return fail(error="bad mermaid")
         nodes = [n for n in data.get("nodes", []) if isinstance(n, dict) and (n.get("quote", "") in body.text)]
         return ok(mermaid=mermaid, caption=data.get("caption", ""), nodes=nodes, model=model, usage=usage)
-    except Exception as e: return fail(error=str(e)[:200])
+    except Exception as e: return err(e)
 
 @app.post("/api/outline-generate")
 async def outline_generate(body: OutlineGenIn):
@@ -290,7 +324,7 @@ async def outline_generate(body: OutlineGenIn):
                   clause=data.get("clause") if data.get("clause") in prompts.CLAUSES else "Subordinated",
                   density=clamp(data.get("density"), 1, 3, 2),
                   outline=data.get("outline", []), model=model, usage=usage)
-    except Exception as e: return fail(error=str(e)[:200])
+    except Exception as e: return err(e)
 
 @app.post("/api/transcribe")
 async def transcribe(file: UploadFile = File(...)):
@@ -303,7 +337,7 @@ async def transcribe(file: UploadFile = File(...)):
                               data={"request": req}, files={"audio": (file.filename or "audio.wav", content, "audio/wav")})
             r.raise_for_status(); d = r.json()
         return ok(transcript=d.get("transcript", ""), turns=d.get("turns", []))
-    except Exception as e: return fail(error=str(e)[:240])
+    except Exception as e: return err(e)
 
 @app.post("/api/lint")
 async def lint(body: LintIn):
@@ -336,9 +370,9 @@ async def lint(body: LintIn):
                 continue
             out.append({"rule_id": rid, "color_category": rule_map[rid], "target": tgt, "context": ctx,
                         "message": it.get("message", ""), "suggestion": it.get("suggestion", "")})
-        return ok(lint_results=out[:12], model=model, usage=usage)
+        return ok(lint_results=out[:12], model=model, usage=usage, meta=meta("lint", s, u, usage, model, 0, 0.3, 1800))
     except Exception as e:
-        return fail(error=str(e)[:200])
+        return err(e)
 
 @app.post("/api/cite")
 async def cite(body: CiteIn):
@@ -349,14 +383,89 @@ async def cite(body: CiteIn):
         if body.template:
             out["sentence"] = citations.apply_template(body.template, inline, body.claim, body.excerpt, body.stat, body.term or body.claim)
         return out
-    except Exception as e: return fail(error=str(e)[:160])
+    except Exception as e: return err(e)
 
 @app.post("/api/cite/bibliography")
 async def bibliography(body: BiblioIn):
     try:
         entries = [citations.format_bibliography(i.source_title, i.url, i.locator, body.style, i.author, i.year) for i in body.items[:50]]
         return ok(entries=entries, style=body.style.lower(), count=len(entries))
-    except Exception as e: return fail(error=str(e)[:160])
+    except Exception as e: return err(e)
+
+@app.post("/api/setup-agent")
+async def setup_agent(body: SetupAgentIn):
+    import hashlib as _hl
+    raw = (body.raw_goal or body.transcript or json.dumps(body.answers)[:2000] or "").strip()
+    if not raw: return fail(error="empty goal")
+    gl = raw.lower()
+    # deterministic hybrid base: keyword -> preset rules
+    base: list[str] = ["R_AMB_01"]
+    def add(rid: str):
+        if rid not in base: base.append(rid)
+    if any(k in gl for k in ("hype", "buzzword", "marketing", "generic", "revolutionary", "game-chang")): add("R_VIO_02"); add("R_VIO_04")
+    if any(k in gl for k in ("metric", "data", "evidence", "investor", "security", "enterprise", "cac", "nrr", "unit economic", "benchmark", "study")): add("R_RSE_02"); add("R_RSE_01")
+    if any(k in gl for k in ("therefore", "consequently", "cause", "risk", "mitigat")): add("R_AMB_03")
+    if any(k in gl for k in ("passive", "blame", "actor", "concise", "wordy", "fluff")): add("R_GRN_04"); add("R_GRN_01")
+    if any(k in gl for k in ("flow", "transition", "abrupt", "jarring")): add("R_CYN_02")
+    if any(k in gl for k in ("hedg", "authoritative", "confident")): add("R_VIO_01")
+    base = base[:6]
+    # diction heuristic
+    diction = "General"
+    if any(k in gl for k in ("technical", "saas", "security", "enterprise", "api", "b2b")): diction = "Technical"
+    elif any(k in gl for k in ("academic", "scholarly", "paper", "thesis")): diction = "Academic"
+    elif any(k in gl for k in ("casual", "blog", "gen-z", "gen z")): diction = "Casual"
+    elif any(k in gl for k in ("formal", "investor", "conservative", "pitch")): diction = "Formal"
+    tone = "Authoritative, Objective, Risk-Aware" if any(k in gl for k in ("investor", "enterprise", "authoritative", "conservative")) else "Serious, Objective"
+    payload = {
+        "configuration_id": "cfg_" + _hl.md5(raw.encode()).hexdigest()[:8],
+        "dimensions": {"diction": diction, "tone": tone,
+            "voice": "Direct, Metrics-Driven Technical Founder" if "investor" in gl or "enterprise" in gl else "Clear domain writer",
+            "style": "Staccato sentences. Maximum 18 words per sentence. Zero passive voice." if any(k in gl for k in ("staccato", "enterprise", "investor", "technical")) else "Varied sentences. Active voice preferred."},
+        "active_preset_rules": base,
+        "custom_rules": [],
+        "ghost_text_filters": {"starter_categories": ["Evidence & Corroboration", "Action & Directive"],
+            "allowed_transitions": ["Consequently", "Therefore", "Specifically", "In fact"]},
+        "followup_question": "" if len(raw.split()) > 12 else "Who reads this and what must they believe after paragraph one?",
+    }
+    # LLM synthesis: refine dims + customs (presets intersected with base)
+    try:
+        lib = [{"id": i, "name": n, "rule": r} for i, n, r in [
+            ("R_AMB_01","BLUF","Main takeaway first"),("R_AMB_02","Premise Contradiction","No contradicting premises"),
+            ("R_AMB_03","Unsupported Causal Jump","No therefore without entailment"),("R_AMB_04","Scope Alignment","No absolute generalizations"),
+            ("R_AMB_05","False Dilemma","No forced binary"),("R_GRN_01","Nominalization","Active verbs over zombie nouns"),
+            ("R_GRN_02","Redundant Pairs","No tautologies"),("R_GRN_03","Prepositional Stack","Max 2 prepositional phrases"),
+            ("R_GRN_04","Passive Blame","No actor-hiding passive"),("R_GRN_05","Vague Pronoun","No ambiguous this/it"),
+            ("R_CYN_01","Opener Monotony","Vary openers"),("R_CYN_02","Abrupt Shift","Bridge topic shifts"),
+            ("R_CYN_03","Stress Position","End on key terms"),("R_CYN_04","Parallelism","Parallel list forms"),
+            ("R_RSE_01","Unanchored Jargon","Define jargon first use"),("R_RSE_02","Unsubstantiated Claim","Numbers+source for empirical claims"),
+            ("R_RSE_03","Abstract Without Instance","Concrete example per abstraction"),("R_RSE_04","No-tradeoff Absolute","State trade-offs"),
+            ("R_VIO_01","Hedging","No weak qualifiers"),("R_VIO_02","Buzzword Saturation","No generic buzzwords"),
+            ("R_VIO_03","Stacked Adverbs","Strong word over very+weak"),("R_VIO_04","Forced Enthusiasm","No exclamation/cheerleading")]]
+        s, u = prompts.setup_agent_prompt(raw, json.dumps(lib))
+        data, usage, model = await llm.json_call(s, u, max_tokens=1200, temperature=0.3)
+        valid = {x["id"] for x in lib}
+        llm_rules = [r for r in (data.get("active_preset_rules") or []) if r in valid]
+        if llm_rules: payload["active_preset_rules"] = list(dict.fromkeys(base + llm_rules))[:6]
+        dims = data.get("dimensions") or {}
+        for k in ("diction", "tone", "voice", "style"):
+            if isinstance(dims.get(k), str) and dims[k].strip(): payload["dimensions"][k] = dims[k].strip()[:300]
+        if payload["dimensions"]["diction"] not in prompts.DICTIONS: payload["dimensions"]["diction"] = diction
+        customs = []
+        for i, c in enumerate((data.get("custom_rules") or [])[:3]):
+            if isinstance(c, dict) and c.get("rule"):
+                customs.append({"id": c.get("id") or f"CUSTOM_ENT_{i+1:02d}",
+                    "category": c.get("category") if c.get("category") in ("amber","green","cyan","rose","violet") else "violet",
+                    "rule": str(c["rule"])[:400]})
+        if customs: payload["custom_rules"] = customs
+        gf = data.get("ghost_text_filters") or {}
+        if isinstance(gf.get("allowed_transitions"), list) and gf["allowed_transitions"]:
+            payload["ghost_text_filters"]["allowed_transitions"] = [str(t)[:24] for t in gf["allowed_transitions"] if isinstance(t, str)][:6]
+        if isinstance(gf.get("starter_categories"), list) and gf["starter_categories"]:
+            payload["ghost_text_filters"]["starter_categories"] = [str(t)[:40] for t in gf["starter_categories"] if isinstance(t, str)][:5]
+        if isinstance(data.get("followup_question"), str): payload["followup_question"] = data["followup_question"][:240]
+        return ok(model=model, usage=usage, **payload)
+    except Exception:
+        return ok(model="deterministic", usage={}, **payload)
 
 @app.post("/api/dataset")
 async def dataset(body: DatasetIn):
@@ -369,11 +478,12 @@ async def dataset(body: DatasetIn):
                     f.write(json.dumps({"context": pair.get("context", ""), "before": pair["before"], "accepted": pair["accepted"], "assist": pair.get("assist", ""), "ts": pair.get("ts", 0)}) + "\n"); n += 1
         total = sum(1 for _ in p.open()) if p.exists() else 0
         return ok(added=n, total=total)
-    except Exception as e: return fail(error=str(e)[:160])
+    except Exception as e: return err(e)
 
 @app.post("/api/waitlist")
 async def waitlist(body: WaitlistIn):
     email = body.email.strip().lower()
+    if body.company: return ok(store="supabase")
     if "@" not in email: return fail(error="invalid email")
     if settings.supabase_url and settings.supabase_key:
         try:
@@ -387,7 +497,7 @@ async def waitlist(body: WaitlistIn):
         p = ROOT / "data" / "waitlist.jsonl"; p.parent.mkdir(exist_ok=True)
         with p.open("a") as f: f.write(json.dumps({"email": email, "note": body.note}) + "\n")
         return ok(store="local-file")
-    except Exception as e: return fail(error=str(e)[:120])
+    except Exception as e: return err(e)
 
 @app.get("/")
 async def root(): return ok(service="byline-v2", model=settings.meta_model)
