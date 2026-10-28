@@ -1,8 +1,8 @@
-/** Tone.js melodic UI blips. Lazy-loaded, off until enabled, low volume, throttled. */
+/** Tone.js melodic UI blips. Lazy-loaded, on unless muted, low volume, throttled. */
 let tone: any = null
 let synth: any = null
 let lastPlay = 0
-export function sfxEnabled(): boolean { return localStorage.getItem('byline.sfx') === '1' }
+export function sfxEnabled(): boolean { return localStorage.getItem('byline.sfx') !== '0' }
 export function setSfxEnabled(on: boolean) { localStorage.setItem('byline.sfx', on ? '1' : '0'); if (!on && synth) { try { synth.releaseAll?.() } catch { /* noop */ } } }
 
 async function ensure() {
