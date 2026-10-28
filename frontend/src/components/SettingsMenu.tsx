@@ -3,14 +3,15 @@ import { COLOR_PRESETS, DEFAULT_SETTINGS, SHORTCUTS, type AppSettings } from '..
 import { sfxMuted, sfxToggle, sfxPick, blip } from '../lib/sfx'
 
 type Tab = 'colors' | 'ui' | 'shortcuts'
-const COLOR_FIELDS: { key: 'ai' | 'grammar' | 'sources' | 'wordChoice' | 'selection'; label: string; hint: string }[] = [
-  { key: 'ai', label: 'Reader accent', hint: 'Purple underlines, reader panel' },
-  { key: 'grammar', label: 'Grammar', hint: 'Red squiggles (LanguageTool)' },
-  { key: 'sources', label: 'Sources', hint: 'Blue wavy underlines, source links' },
-  { key: 'wordChoice', label: 'Lint', hint: 'Yellow underline family for lint (language uses red shades)' },
+const COLOR_FIELDS: { key: 'ai' | 'grammar' | 'sources' | 'wordChoice' | 'suggest'; label: string; hint: string }[] = [
+  { key: 'grammar', label: 'Language', hint: 'Red — grammar, word choice, cohesion underlines + buttons' },
+  { key: 'ai', label: 'Reader', hint: 'Purple — reader underlines + buttons' },
+  { key: 'sources', label: 'Sources', hint: 'Blue — claim highlights, source links + buttons' },
+  { key: 'suggest', label: 'Suggest', hint: 'Grey — ghost suggestions + buttons' },
+  { key: 'wordChoice', label: 'Lint', hint: 'Yellow — all lint categories + buttons' },
 ]
 
-export default function SettingsMenu({ settings, onChange, onClose, onClearGreyed }: { settings: AppSettings; onChange: (s: AppSettings) => void; onClose: () => void; onClearGreyed?: () => void }) {
+export default function SettingsMenu({ settings, onChange, onClose }: { settings: AppSettings; onChange: (s: AppSettings) => void; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('colors')
   const [muted, setMuted] = useState(sfxMuted())
   const set = (p: Partial<AppSettings>) => { blip('select'); onChange({ ...settings, ...p }) }
@@ -19,7 +20,6 @@ export default function SettingsMenu({ settings, onChange, onClose, onClearGreye
     <div className="library-backdrop" onMouseDown={onClose}>
       <div className="library-modal fade settings-modal" role="dialog" aria-label="Settings" onMouseDown={e => e.stopPropagation()}>
         <div className="library-head"><strong>Settings</strong><span className="meta">General app usage</span><span className="spacer" />
-          <button onClick={() => onClearGreyed?.()}>Clear all greyed-out</button>
           <button onClick={() => onChange({ ...DEFAULT_SETTINGS })}>Reset defaults</button>
           <button onClick={onClose}>Close <span className="kbd">Esc</span></button></div>
         <div className="dock-tabs" style={{ padding: '12px 16px 0' }} role="tablist" aria-label="Settings sections">
@@ -34,8 +34,8 @@ export default function SettingsMenu({ settings, onChange, onClose, onClearGreye
             </div>
             <label>Color preset</label>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {Object.entries(COLOR_PRESETS).map(([k, p]) => <button key={k} onClick={() => set({ ai: p.ai, grammar: p.grammar, sources: p.sources, wordChoice: p.wordChoice, selection: p.selection })} title={p.label}>
-                <span style={{ display: 'inline-flex', gap: 3, marginRight: 6 }}>{[p.ai, p.grammar, p.sources, p.wordChoice].map(c => <span key={c} className="swatch" style={{ background: c }} />)}</span>{p.label}</button>)}
+              {Object.entries(COLOR_PRESETS).map(([k, p]) => <button key={k} onClick={() => set({ ai: p.ai, grammar: p.grammar, sources: p.sources, wordChoice: p.wordChoice, selection: p.selection, suggest: p.suggest })} title={p.label}>
+                <span style={{ display: 'inline-flex', gap: 3, marginRight: 6 }}>{[p.grammar, p.ai, p.sources, p.suggest, p.wordChoice].map(c => <span key={c} className="swatch" style={{ background: c }} />)}</span>{p.label}</button>)}
             </div>
             <label>Annotation colors</label>
             {COLOR_FIELDS.map(f => <div key={f.key} className="settings-row">

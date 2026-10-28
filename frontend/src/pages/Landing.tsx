@@ -21,27 +21,30 @@ export default function Landing() {
   }
   return (
     <div>
-      <header className="topbar"><Logo /><div className="spacer" /><ThemeToggle /><a href="/demo"><button>Public demo</button></a><a href="/app"><button className="primary">Open app</button></a></header>
+      <header className="topbar"><Logo /><div className="spacer" /><ThemeToggle /><a className="btn" href="/demo">Public demo</a><a className="btn primary" href="/app">Open app</a></header>
+      <main>
       <section className="hero">
         <div style={{ display: 'flex', justifyContent: 'center' }}><Logo height={72} /></div>
         <h1>You write.<br />Byline suggests.<br />You choose.</h1>
         <p>Other editors give finished text. Byline gives options — hints, phrases, questions, sentences — grounded in your context and vocabulary level. Then it reads your draft like a stranger, and shows what sources say. Every word stays your choice.</p>
         <form className="waitlist" onSubmit={join}>
-          <input type="email" required placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} />
+          <label className="sr-only" htmlFor="waitlist-email">Email address</label>
+          <input id="waitlist-email" type="email" autoComplete="email" inputMode="email" required placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} />
           <button className="primary" type="submit">Join waitlist</button>
-          <a href="/demo"><button type="button">Try demo — no signup</button></a>
+          <a className="btn" href="/demo">Try demo — no signup</a>
         </form>
-        {msg && <p className="fade">{msg}</p>}
+        {msg && <p className="fade" role="status" aria-live="polite">{msg}</p>}
       </section>
-      <div className="grid4">{CARDS.map(c => (
-        <div className="card" key={c.title}><h3 style={{ marginTop: 0 }}><span className="swatch" style={{ background: c.color }} /> {c.title}</h3>
-          {c.items.map(([q, m], i) => <div key={i} style={{ borderTop: '1px solid var(--border)', padding: '8px 0' }}><div className="quote-serif">{q}</div>{m && <div className="meta" style={{ color: 'var(--muted)', fontSize: 12 }}>{m}</div>}</div>)}
-        </div>))}
-      </div>
+      <section className="grid4" aria-label="How Byline marks your draft">{CARDS.map(c => (
+        <article className="card" key={c.title}><h3><span className="swatch" style={{ background: c.color }} aria-hidden="true" /> {c.title}</h3>
+          <ul>{c.items.map(([q, m], i) => <li key={i}><div className="quote-serif">{q}</div>{m && <div className="meta">{m}</div>}</li>)}</ul>
+        </article>))}
+      </section>
       <section className="section"><h2>Demo moment</h2><p>Demo opens in Drafting. Guided flow: accept a ghost suggestion, switch to Editing and fix a red underline, open Sources for claim verdicts, run Lint for yellow rule checks. Setup wizard generates an outline that replaces the table-of-contents list, stays linked to the editor, and activates the sources agent per section. Click the top-bar metrics pill for live latency / tokens / full prompts plus benchmark tables.</p>
         <h2>Intent gap</h2><p>You write what you mean in context box. Byline shows what reader perceives. Sentences causing gap get highlighted — red for wording, purple for landing, blue for outside world, gray for proposals.</p>
         <h2>Benchmarked, not guessed</h2><p>Ghost text runs Meta Muse Spark 1.3 (<code>reasoning_effort=minimal</code>), quote-anchored — no ID tags, no offset guessing. Verbatim-quote validation: 100% across Muse 1.1–1.3, Wonder 1.0, Gemini 2.5 Flash Lite. Full table in <code>BENCHMARK.md</code>.</p>
       </section>
+      </main>
       <footer className="section" style={{ color: 'var(--muted)', fontSize: 13 }}>Byline — challenge whole notion of AI writing. No login. Docs stay in browser.</footer>
     </div>
   )

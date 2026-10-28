@@ -1,30 +1,59 @@
 :root{
-  --bg:#FAFAF7; --ink:#1F2328; --dock:#F2F2EE; --border:#E0E0DA; --muted:#68707A;
-  --lt:#D93025; --ai:#7C4DFF; --blue:#1A73E8; --grey:#9AA0A6; --old:#C4C7CC; --link:#FFF3C4; --yellow:#D99A06;
-  --radius:8px;
+  --bg:#FAFAF7; --ink:#1F2328; --dock:#F2F2EE; --border:#E0E0DA; --muted:#5C6570;
+  --lt:#D93025; --ai:#7C4DFF; --blue:#1A73E8; --grey:#767D86; --old:#C4C7CC; --link:#FFF3C4; --yellow:#8A5F00;
+  --gold:#C5A059; --gold-ink:#8A5F00; --success:#1E8E3E; --hover:rgba(31,35,40,.06);
+  --radius:8px; --radius-lg:12px;
+  --shadow-pop:0 4px 12px rgba(31,35,40,.08),0 16px 40px rgba(31,35,40,.14);
+  --shadow-paper:0 1px 2px rgba(31,35,40,.05),0 12px 32px rgba(31,35,40,.07);
   color-scheme: light;
 }
 :root[data-theme="dark"]{
   --bg:#232427; --ink:#E6E6E6; --dock:#26272B; --border:#3A3B40; --muted:#9BA1A8;
-  --lt:#FF6B6B; --ai:#B79CFF; --grey:#6B7280; --old:#4A4D52; --link:#4A4120; --yellow:#E6B93D;
+  --lt:#FF6B6B; --ai:#B79CFF; --grey:#9BA1A8; --old:#4A4D52; --link:#4A4120; --yellow:#E6B93D;
+  --gold-ink:#E9C979; --hover:rgba(230,230,230,.08);
+  --shadow-pop:0 4px 12px rgba(0,0,0,.28),0 16px 40px rgba(0,0,0,.38);
+  --shadow-paper:0 1px 2px rgba(0,0,0,.25),0 12px 32px rgba(0,0,0,.28);
   color-scheme: dark;
 }
 *{box-sizing:border-box}
-html{scrollbar-color:var(--border) transparent}
+html{scrollbar-color:var(--border) transparent;scrollbar-width:thin}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px;border:3px solid var(--bg)}
+::-webkit-scrollbar-track{background:transparent}
+::selection{background:var(--link);color:var(--ink)}
 body{
   margin:0;background:var(--bg);color:var(--ink);
   font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   font-size:14px;line-height:1.5;letter-spacing:-.011em;
   -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
   font-feature-settings:"cv02","cv03","cv04","ss01";
+  caret-color:var(--ai);
 }
-a{color:inherit}
-button{font:inherit;font-size:13px;font-weight:500;letter-spacing:-.01em;cursor:pointer;border:1px solid var(--border);background:var(--bg);color:var(--ink);border-radius:var(--radius);padding:6px 11px;line-height:1.35;transition:border-color .15s,background .15s}
-button:hover{border-color:var(--muted)}
+a{color:inherit;text-underline-offset:3px}
+a:hover{text-decoration-thickness:2px}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:4px}
+button{font:inherit;font-size:13px;font-weight:500;letter-spacing:-.01em;cursor:pointer;border:1px solid var(--border);background:var(--bg);color:var(--ink);border-radius:var(--radius);padding:6px 11px;min-height:36px;line-height:1.35;transition:border-color .15s,background .15s,color .15s}
+button:hover{border-color:var(--muted);background:var(--hover)}
 button.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-button.icon-btn{padding:5px 7px;display:inline-flex;align-items:center;justify-content:center}
-select,input,textarea{font:inherit;font-size:13px;color:var(--ink);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:7px 9px;line-height:1.4}
+button.primary:hover{background:color-mix(in srgb,var(--ink) 88%,var(--bg));border-color:transparent}
+button:active{transform:translateY(1px)}
+button:disabled{opacity:.45;cursor:not-allowed;transform:none}
+button.icon-btn{padding:5px 7px;min-width:36px;display:inline-flex;align-items:center;justify-content:center}
+.btn{font-size:13px;font-weight:500;letter-spacing:-.01em;border:1px solid var(--border);background:var(--bg);color:var(--ink);border-radius:var(--radius);padding:6px 11px;min-height:36px;line-height:1.35;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;transition:border-color .15s,background .15s,color .15s}
+.btn:hover{border-color:var(--muted);background:var(--hover);text-decoration:none}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.primary:hover{background:color-mix(in srgb,var(--ink) 88%,var(--bg))}
+select,input,textarea{font:inherit;font-size:13px;color:var(--ink);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:7px 9px;min-height:36px;line-height:1.4;transition:border-color .15s,box-shadow .15s}
+select:hover,input:hover,textarea:hover{border-color:var(--muted)}
+select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 22%,transparent);outline:none}
+::placeholder{color:var(--muted);opacity:1}
 select{font-weight:500}
 label{font-size:12px;font-weight:600;color:var(--muted);display:block;margin:10px 0 4px}
-.fade{animation:fade .15s ease-in}
-@keyframes fade{from{opacity:0}to{opacity:1}}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.fade{animation:fade .18s cubic-bezier(.16,1,.3,1)}
+@keyframes fade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+  button:active{transform:none}
+}

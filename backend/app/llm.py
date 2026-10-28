@@ -7,6 +7,14 @@ from .config import settings
 
 log = logging.getLogger("byline.llm")
 
+_CLIENT: httpx.AsyncClient | None = None
+
+def _client() -> httpx.AsyncClient:
+    global _CLIENT
+    if _CLIENT is None or _CLIENT.is_closed:
+        _CLIENT = httpx.AsyncClient(timeout=settings.request_timeout)
+    return _CLIENT
+
 class LLMError(RuntimeError): pass
 
 _FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
@@ -34,10 +42,9 @@ async def _call(url: str, key: str, model: str, system: str, user: str, max_toke
     if meta: body["reasoning_effort"] = "minimal"  # bench: without this reasoning tokens eat output
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     if not meta: headers["X-Title"] = "Byline"
-    async with httpx.AsyncClient(timeout=settings.request_timeout) as cl:
-        r = await cl.post(url, json=body, headers=headers)
-        r.raise_for_status()
-        d = r.json()
+    r = await _client().post(url, json=body, headers=headers)
+    r.raise_for_status()
+    d = r.json()
     content = (d["choices"][0]["message"].get("content") or "") if d.get("choices") else ""
     return content, d.get("usage") or {}
 
@@ -80,9 +87,8 @@ async def responses_call(input_data, *, instructions: str = "", tools=None, incl
     if tools: body["tools"] = tools
     if include: body["include"] = include
     if text_format: body["text"] = {"format": text_format}
-    async with httpx.AsyncClient(timeout=settings.request_timeout) as cl:
-        r = await cl.post(f"{settings.meta_base_url}/responses", json=body, headers={"Authorization": f"Bearer {settings.meta_api_key}", "Content-Type": "application/json"})
-        r.raise_for_status(); d = r.json()
+    r = await _client().post(f"{settings.meta_base_url}/responses", json=body, headers={"Authorization": f"Bearer {settings.meta_api_key}", "Content-Type": "application/json"})
+    r.raise_for_status(); d = r.json()
     texts, annotations, results = [], [], []
     for item in d.get("output", []) or []:
         if item.get("type") == "message":
@@ -102,9 +108,8 @@ async def schema_call(system: str, user: str, schema: dict, name: str, *, max_to
     body = {"model": settings.meta_model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "max_tokens": max_tokens, "temperature": 0.4, "reasoning_effort": "minimal",
             "response_format": {"type": "json_schema", "json_schema": {"name": name, "schema": schema}}}
-    async with httpx.AsyncClient(timeout=settings.request_timeout) as cl:
-        r = await cl.post(f"{settings.meta_base_url}/chat/completions", json=body, headers={"Authorization": f"Bearer {settings.meta_api_key}", "Content-Type": "application/json"})
-        r.raise_for_status(); d = r.json()
+    r = await _client().post(f"{settings.meta_base_url}/chat/completions", json=body, headers={"Authorization": f"Bearer {settings.meta_api_key}", "Content-Type": "application/json"})
+    r.raise_for_status(); d = r.json()
     content = (d["choices"][0]["message"].get("content") or "") if d.get("choices") else ""
     return extract_json(content), d.get("usage") or {}, settings.meta_model
 

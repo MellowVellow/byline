@@ -18,6 +18,7 @@
     "@tiptap/pm": "^3.0.0",
     "@tiptap/react": "^3.0.0",
     "@tiptap/starter-kit": "^3.0.0",
+    "@vercel/analytics": "^2.0.1",
     "docx": "^9.15.0",
     "dompurify": "^3.4.17",
     "mermaid": "^12.2.0",

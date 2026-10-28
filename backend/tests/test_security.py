@@ -2,7 +2,8 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.security import is_safe_public_url, rate_ok, fence
-from app.main import parse_verdict, fallback_questions, MAPS_TO
+from app.routers.research import parse_verdict
+from app.services.setup_service import fallback_questions, MAPS_TO
 from app.models import CompleteIn, TextIn
 
 def test_ssrf_blocks_private():
