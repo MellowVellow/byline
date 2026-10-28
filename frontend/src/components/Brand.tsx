@@ -17,6 +17,6 @@ export function ThemeToggle() {
     document.documentElement.dataset.theme = n; localStorage.setItem('byline.theme', n); setT(n); dispatchEvent(new Event('byline-theme'))
   }
   return <button className="icon-btn" onClick={toggle} title={t === 'dark' ? 'Switch to light' : 'Switch to dark'} aria-label="Toggle theme">
-    <img src={t === 'dark' ? '/icon-dark.png' : '/icon-light.png'} alt="" style={{ width: 20, height: 24, objectFit: 'contain', display: 'block' }} />
+    <img src={t === 'dark' ? '/icon-dark.png' : '/icon-light.png'} alt="" style={{ width: 22, height: 22, objectFit: 'cover', borderRadius: 5, display: 'block' }} />
   </button>
 }

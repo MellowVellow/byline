@@ -35,7 +35,7 @@ import type { Fact } from '../lib/types'
 import { formatInline, insertCitationText } from '../lib/citations'
 import { TAB_THEME, RIGHT_TAB_ORDER, anchorKey, toggled, groupByClaim, safeUrl } from '../lib/layers'
 import MetricsPopup from '../components/MetricsPopup'
-import { blip, sfxEnabled, setSfxEnabled } from '../lib/sfx'
+import { blip, sfxEnabled, setSfxEnabled, sfxActivate, sfxDeactivate } from '../lib/sfx'
 
 let uid = 0
 const nid = () => `a${++uid}`
@@ -163,7 +163,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   useEffect(() => { modeStore.mode = mode }, [mode])
   const editing = mode === 'editing'
   const editingRef = useRef(true); editingRef.current = editing
-  function switchMode(m: Mode) { blip('mode')
+  function switchMode(m: Mode) { if (m === 'editing') sfxActivate(); else sfxDeactivate()
     setMode(m); modeStore.mode = m
     if (m === 'drafting') setRightTab('suggest')
     if (m !== 'editing') lint.abortLint()

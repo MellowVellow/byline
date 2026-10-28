@@ -61,6 +61,12 @@ function buildAnchors(doc: any): Decoration[] {
   for (const a of ordered) {
     const r = anchorStore.ranges.get(a.id)
     if (!r || r.to > doc.content.size) continue
+    // Guard: an overlong located quote (e.g. backend returns a whole sentence as a
+    // "grammar" quote) would paint the squiggle across the entire text. Word-level
+    // layers cap at 90 chars; no layer may cover more than 60% of the document.
+    const span = r.to - r.from
+    if ((a.kind === 'grammar' || a.kind === 'vocabulary') && span > 90) continue
+    if (span > doc.textContent.length * 0.6) continue
     for (const seg of subtractRange(r, taken)) {
       decos.push(Decoration.inline(seg.from, seg.to, { class: `anch anch-${a.kind}${a.tone ? ` tone-${a.tone}` : ''}${anchorStore.linkedId === a.id ? ' anch-linked' : ''}`, 'data-anchor-id': a.id }))
     }

@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import type { Editor } from '@tiptap/react'
-import { BubbleMenu, FloatingMenu } from '@tiptap/react/menus'
+import { BubbleMenu } from '@tiptap/react/menus'
 
 // Notion-like editing surface: formatting lives in TipTap BubbleMenu (selection),
-// block types in TipTap FloatingMenu (empty line). No hand-rolled toolbar state.
+// No add-block popup on empty lines (removed by request); formatting lives in the BubbleMenu.
 export default function EditorMenus({ editor, onSuggest, onSentenceStarter, counts, showWordCount, onWizard, onExportDocx, onExportHtml, onExportDataset, exportingDocx }: {
   editor: Editor; onSuggest: () => void; onSentenceStarter: () => void
   counts: { words: number; chars: number }; showWordCount: boolean
@@ -51,16 +51,5 @@ export default function EditorMenus({ editor, onSuggest, onSentenceStarter, coun
       <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()} title="Clear formatting">Clear</button>
     </BubbleMenu>
 
-    <FloatingMenu editor={editor} className="floating-menu" options={{ placement: 'left-start', offset: 8 }}
-      shouldShow={({ editor: e }) => { const { selection } = e.state; const { $anchor, empty } = selection; return empty && $anchor.parent.type.name === 'paragraph' && $anchor.parent.textContent === '' }}>
-      <div className="floating-title">Add block</div>
-      <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().setParagraph().run()}>Text</button>
-      {[1, 2, 3, 4, 5, 6].map(l => <button key={l} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: l as 1 | 2 | 3 | 4 | 5 | 6 }).run()}>H{l} Heading {l}</button>)}
-      <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()}>Bullet list</button>
-      <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleOrderedList().run()}>1. Numbered list</button>
-      <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleBlockquote().run()}>Quote</button>
-      <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().toggleCodeBlock().run()}>{'</>'} Code block</button>
-      <button onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().setHorizontalRule().run()}>Divider</button>
-    </FloatingMenu>
   </>
 }
