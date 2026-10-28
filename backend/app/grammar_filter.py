@@ -12,6 +12,29 @@ _DEF_SPAN = re.compile(r"[A-Za-z][\w'’-]*(?:[\s\-–—]+[A-Za-z][\w'’-]*){0
 _PAREN_ACRO = re.compile(r"\(([A-Z][A-Z0-9]{1,9})\)")
 SPELL_RULES = ("MORFOLOGIK", "SPELLER", "HUNSPELL")
 
+def _us_normalized(w: str) -> str:
+    """Collapse regional spelling variants (GB/AU -> US) for comparison."""
+    w = w.lower()
+    w = re.sub(r"isation$", "ization", w)
+    w = re.sub(r"ising$", "izing", w)
+    w = re.sub(r"ised$", "ized", w)
+    w = re.sub(r"ise$", "ize", w)
+    w = re.sub(r"our$", "or", w)
+    w = re.sub(r"tre$", "ter", w)
+    w = re.sub(r"ogue$", "og", w)
+    w = re.sub(r"lled$", "led", w)
+    w = re.sub(r"lling$", "ling", w)
+    return w
+
+
+def is_regional_variant(word: str, replacements: list) -> bool:
+    """True when a replacement is the same word in another English locale
+    (utilisation<->utilization, colour<->color): never a spelling error."""
+    if not replacements:
+        return False
+    return any(_us_normalized(str(r)) == _us_normalized(word) for r in replacements)
+
+
 def defined_acronyms(text: str) -> set[str]:
     return {m.group(1) for m in _PAREN_ACRO.finditer(text)}
 
@@ -32,6 +55,8 @@ def filter_matches(text: str, matches: list[dict]) -> list[dict]:
         is_spelling = any(r in rule for r in SPELL_RULES) or "spelling" in str(m.get("message", "")).lower()
         if word in acros:
             continue  # defined acronym, any occurrence
+        if is_spelling and is_regional_variant(word, m.get("replacements") or []):
+            continue  # regional spelling variant (GB/AU/US), not an error
         if is_spelling and len(word) >= 2 and word.isupper():
             continue  # all-caps token: treat as acronym/abbreviation, not typo
         if _in_spans(frm, to, spans):
