@@ -41,3 +41,11 @@ class OutlineGenIn(BaseModel):
 
 class DatasetIn(BaseModel):
     pairs: list[dict] = []
+
+class CiteIn(BaseModel):
+    source_title: str = ""; url: str = ""; locator: str = ""
+    style: str = "apa"; author: str = ""; year: str = ""
+    template: str = ""; claim: str = ""; excerpt: str = ""; stat: str = ""; term: str = ""
+
+class BiblioIn(BaseModel):
+    style: str = "apa"; items: list[CiteIn] = []

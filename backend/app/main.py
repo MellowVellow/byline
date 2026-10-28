@@ -7,7 +7,8 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from . import llm, prompts
 from .config import settings, cors_list, ROOT
-from .models import CompleteIn, TextIn, SynonymIn, GrammarIn, WaitlistIn, ClaimIn, LintIn, ResearchIn, DiagramIn, OutlineGenIn, DatasetIn
+from .models import CompleteIn, TextIn, SynonymIn, GrammarIn, WaitlistIn, ClaimIn, LintIn, ResearchIn, DiagramIn, OutlineGenIn, DatasetIn, CiteIn, BiblioIn
+from . import citations
 from .quote import filter_anchored
 from .grammar_filter import filter_matches
 from .swapcheck import swap_ok, match_case
@@ -234,6 +235,21 @@ async def research_upload(file: UploadFile = File(...), question: str = "Extract
     try:
         content = await file.read()
         if len(content) > 20 * 1024 * 1024: return fail(error="file >20MB")
+        # Local parse first: docx/csv/xlsx/txt/md → text fallback when Meta Files rejects binary
+        local_text = citations.extract_doc_text(file.filename or "", content)
+        if local_text:
+            try:
+                s, u = prompts.complete_prompt("", "General", local_text[:8000], "", "Phrase", "", "")
+                data, usage, model = await llm.json_call(
+                    prompts.FACTS_SYSTEM,
+                    f"SOURCE: {file.filename}\nEXCERPT:\n{local_text[:8000]}\nQ: {question}\nReturn {{\"facts\":[...]}}.",
+                    max_tokens=1800, temperature=0.3)
+                facts = data.get("facts", []) if isinstance(data, dict) else []
+                for f in facts:
+                    f.setdefault("source_title", file.filename or "upload")
+                    f.setdefault("url", file.filename or "upload")
+                if facts: return ok(facts=facts[:12], model=model, usage=usage, parsed="local-text")
+            except Exception: pass  # fall through to Meta Files path
         async with httpx.AsyncClient(timeout=60) as cl:
             up = await cl.post(f"{settings.meta_base_url}/files", headers={"Authorization": f"Bearer {settings.meta_api_key}"},
                                data={"purpose": "user_data"}, files={"file": (file.filename or "upload", content, file.content_type or "application/octet-stream")})
@@ -323,6 +339,24 @@ async def lint(body: LintIn):
         return ok(lint_results=out[:12], model=model, usage=usage)
     except Exception as e:
         return fail(error=str(e)[:200])
+
+@app.post("/api/cite")
+async def cite(body: CiteIn):
+    try:
+        inline = citations.format_inline(body.source_title, body.url, body.locator, body.style, body.year)
+        entry = citations.format_bibliography(body.source_title, body.url, body.locator, body.style, body.author, body.year)
+        out = {"ok": True, "inline": inline, "entry": entry, "style": body.style.lower()}
+        if body.template:
+            out["sentence"] = citations.apply_template(body.template, inline, body.claim, body.excerpt, body.stat, body.term or body.claim)
+        return out
+    except Exception as e: return fail(error=str(e)[:160])
+
+@app.post("/api/cite/bibliography")
+async def bibliography(body: BiblioIn):
+    try:
+        entries = [citations.format_bibliography(i.source_title, i.url, i.locator, body.style, i.author, i.year) for i in body.items[:50]]
+        return ok(entries=entries, style=body.style.lower(), count=len(entries))
+    except Exception as e: return fail(error=str(e)[:160])
 
 @app.post("/api/dataset")
 async def dataset(body: DatasetIn):

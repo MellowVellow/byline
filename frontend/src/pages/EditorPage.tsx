@@ -26,6 +26,7 @@ import { PageBreak, Footnote, collectFootnotes } from '../editor/extensions'
 import { exportDocx } from '../lib/docx-export'
 import { researchUpload } from '../lib/api'
 import type { Fact } from '../lib/types'
+import { formatInline, insertCitationText } from '../lib/citations'
 import { blip, sfxEnabled, setSfxEnabled } from '../lib/sfx'
 
 const DICTIONS = ['Formal', 'Casual', 'Slang', 'Simple', 'General', 'Academic', 'Technical', 'Buzzwords', 'Bullshitting']
@@ -101,6 +102,11 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [facts, setFacts] = useState<Fact[]>(() => { try { return JSON.parse(localStorage.getItem(demo ? 'byline.facts.demo' : 'byline.facts.app') || '[]') } catch { return [] } })
   const [researchUrl, setResearchUrl] = useState('')
   const [researchQ, setResearchQ] = useState('')
+  const [citeStyle, setCiteStyle] = useState<'apa' | 'mla' | 'chicago'>(() => (localStorage.getItem('byline.citeStyle') as any) || 'apa')
+  const [citeTemplate, setCiteTemplate] = useState<'' | 'support' | 'contrast' | 'stat' | 'define'>('')
+  const [researchAuto, setResearchAuto] = useState(localStorage.getItem('byline.researchAuto') !== '0')
+  const researchAutoRef = useRef(true); researchAutoRef.current = researchAuto
+  const lastResearchRef = useRef(0)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [sfxOn, setSfxOn] = useState(sfxEnabled())
   const [answers, setAnswers] = useState({ goal: '', doc_type: 'essay', audience: '', audience_level: 3, key_points: '', voice_note: '' })
@@ -318,10 +324,12 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       refs.current.version++; refs.current.abort?.abort(); setStale(true)
       localStorage.setItem(docKey, JSON.stringify({ html: editor.getHTML(), context, level }))
       const t = refs.current.timers
-      clearTimeout(t.c); clearTimeout(t.g); clearTimeout(t.s)
+      clearTimeout(t.c); clearTimeout(t.g); clearTimeout(t.s); clearTimeout(t.r)
       t.c = setTimeout(() => refs.current.fns.complete?.(true), 500)
       t.g = setTimeout(() => refs.current.fns.grammar?.(), 900)
       t.s = setTimeout(() => { refs.current.fns.annotate?.(); refs.current.fns.reactions?.() }, 1400)
+      // researcher agent: autonomous claim-check loop, throttled (perception → query → verify → blue underline)
+      t.r = setTimeout(() => refs.current.fns.researchAuto?.(), 9000)
       // lint: manual only — Run lint button press, never on edit/mode/toggle
     },
   })
@@ -429,10 +437,24 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     } catch { /* noop */ } setIssues(old => [...fresh, ...old.filter(o => !fresh.some(f => f.quote === o.quote && f.type === o.type)).map(o => ({ ...o, stale: true }))].slice(0, 40)); setStale(false) }
   async function requestReactions() { if (!editingRef.current || !editor) return; const tm = plain(); if (tm.text.trim().length < 20) return; setLoad('reactions', true); const d = await api.reactions({ context: appliedRef.current.context, level: appliedRef.current.level, text: tm.text, persona: appliedRef.current.persona, style: buildStyle(appliedRef.current) }); setLoad('reactions', false); const fresh: Reaction[] = d?.reactions ? d.reactions.map((r: Reaction) => ({ ...r, id: nid() })) : (demo ? FALLBACK_REACTIONS.map(r => ({ ...r, id: nid() })) : []); setReactions(old => [...fresh, ...old.filter(o => !fresh.some(f => f.quote === o.quote && f.kind === o.kind)).map(o => ({ ...o, stale: true }))].slice(0, 40)) }
   async function refreshMainIdea() { if (!editingRef.current || !editor) return; setLoad('main', true); const d = await api.mainIdea({ context: appliedRef.current.context, level: appliedRef.current.level, text: plain().text, style: buildStyle(appliedRef.current) }); if (d?.main_idea) setMainIdea(d.main_idea); setLoad('main', false) }
-  async function refreshReadings() { if (!editingRef.current || !editor) return; setLoad('readings', true); const d = await api.readings({ context: appliedRef.current.context, level: appliedRef.current.level, text: plain().text }); if (d?.readings) setReadings(old => [...d.readings, ...old.map(o => ({ ...o, stale: true }))].slice(0, 40)); setLoad('readings', false) }
+  async function refreshReadings() { if (!editingRef.current || !editor) return; setLoad('readings', true); const d = await api.readings({ context: appliedRef.current.context, level: appliedRef.current.level, text: plain().text }); if (d?.readings) setReadings(old => [...d.readings, ...old.map(o => ({ ...o, stale: true }))].slice(0, 40)); setLoad('readings', false); lastResearchRef.current = Date.now() }
+  async function researchAutoRun() {
+    if (!researchAutoRef.current || !editingRef.current || !editor || loading.readings) return
+    const txt = plain().text
+    // perception: empirical claim / stat / entity trigger, throttled 60s
+    if (txt.trim().length < 60 || Date.now() - lastResearchRef.current < 60000) return
+    if (!/\d|%|study|research|algorithm|report|according to/i.test(txt)) return
+    await refreshReadings()
+  }
+  async function copyBibliography() {
+    const d = await api.bibliography(citeStyle, [...facts.map(f => ({ source_title: f.source_title, url: f.url, locator: f.locator })), ...readings.map(r => ({ source_title: r.title, url: r.url, locator: '' }))])
+    const entries: string[] = d?.entries || [...facts.map(f => formatInline(f, citeStyle))]
+    try { await navigator.clipboard.writeText(entries.join('\n')) } catch { /* clipboard blocked */ }
+  }
+  function insertFact(f: Fact) { editor?.chain().focus().insertContent(insertCitationText(f, citeStyle, citeTemplate)).run() }
   async function refreshOutline() { if (!editingRef.current || !editor) return; setLoad('outline', true); const d = await api.outline({ text: plain().text }); if (d?.outline) setOutline(d.outline); setLoad('outline', false) }
   function rerunAll() { requestComplete(); requestGrammar(); requestAnnotate(); requestReactions(); refreshMainIdea(); refreshOutline() }
-  refs.current.fns = { complete: requestComplete, grammar: requestGrammar, annotate: requestAnnotate, reactions: requestReactions, accept: acceptGhost, clearGhost, showGhost, closePopup }
+  refs.current.fns = { complete: requestComplete, grammar: requestGrammar, annotate: requestAnnotate, reactions: requestReactions, accept: acceptGhost, clearGhost, showGhost, closePopup, researchAuto: researchAutoRun }
 
   // capture-phase keyboard + click: survives ProseMirror defaults, no stale closures via refs
   useEffect(() => {
@@ -760,15 +782,21 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--blue)' }} />Sources{loading.readings && <Spinner />}</h3>
               <div className="dock-scroll">
               <div style={{ display: 'grid', gap: 6, marginBottom: 10 }}>
-                <input value={researchUrl} onChange={e => setResearchUrl(e.target.value)} placeholder="Research URL — web page or PDF" />
+                <input value={researchUrl} onChange={e => setResearchUrl(e.target.value)} placeholder="Research URL — web / PDF / paper" />
                 <input value={researchQ} onChange={e => setResearchQ(e.target.value)} placeholder="Question (optional)" />
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button className="primary" disabled={!researchUrl || !!loading.research} onMouseDown={e => e.preventDefault()} onClick={() => runResearch()}>{loading.research ? 'Researching…' : 'Research URL'}</button>
-                <label className="nav-btn" style={{ cursor: 'pointer' }}>Upload file<input type="file" hidden accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.docx,.csv" onChange={e => { const f = e.target.files?.[0]; if (f) runResearch(f); e.target.value = '' }} /></label></div>
+                <label className="nav-btn" style={{ cursor: 'pointer' }}>Upload file<input type="file" hidden accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.docx,.csv,.xlsx,.tsv" onChange={e => { const f = e.target.files?.[0]; if (f) runResearch(f); e.target.value = '' }} /></label></div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <select value={citeStyle} onChange={e => { setCiteStyle(e.target.value as any); localStorage.setItem('byline.citeStyle', e.target.value) }} aria-label="Citation style"><option value="apa">APA</option><option value="mla">MLA</option><option value="chicago">Chicago</option></select>
+                  <select value={citeTemplate} onChange={e => setCiteTemplate(e.target.value as any)} aria-label="Citation template"><option value="">Inline only</option><option value="support">Support</option><option value="contrast">Contrast</option><option value="stat">Stat</option><option value="define">Define</option></select>
+                  <label className="meta" style={{ display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={researchAuto} onChange={e => { setResearchAuto(e.target.checked); localStorage.setItem('byline.researchAuto', e.target.checked ? '1' : '0') }} />Auto-verify</label>
+                </div>
+                <div className="meta">Agent: claim detect → query → verify → blue underline + ready citation.</div>
               </div>
-              {facts.map((f, i) => <div key={i} className="source-card"><span className="source-badge">Fact{f.locator ? ` · ${f.locator}` : ''}</span><div className="source-why">{f.fact}</div><div className="source-excerpt"><a href={f.url || '#'} target="_blank" rel="noreferrer">{f.source_title || f.url}</a>{f.excerpt ? ` — “${f.excerpt}”` : ''}</div><button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={() => editor.chain().focus().insertContent(` (${f.source_title || 'source'}${f.locator ? `, ${f.locator}` : ''}: ${f.url})`).run()}>Insert citation</button></div>)}
+              {facts.map((f, i) => <div key={i} className="source-card"><span className="source-badge">Fact{f.locator ? ` · ${f.locator}` : ''}</span><div className="source-why">{f.fact}</div><div className="source-excerpt"><a href={f.url || '#'} target="_blank" rel="noreferrer">{f.source_title || f.url}</a>{f.excerpt ? ` — “${f.excerpt}”` : ''}</div><div className="meta">{formatInline(f, citeStyle)}</div><button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={() => insertFact(f)}>Insert {citeStyle.toUpperCase()} citation</button></div>)}
               {readings.map((r, i) => <div key={i} className={`source-card ${r.stale ? 'stale' : ''}`} style={r.stale ? { opacity: .6 } : undefined}><span className="source-badge">{r.label}</span><a className="source-title" href={textFragmentUrl(r.url, r.excerpt || r.claim_quote)} target="_blank" rel="noreferrer">{r.title || r.url}</a><div className="source-why">vs “{r.claim_quote}” — {r.why}</div>{r.excerpt && r.excerpt !== r.why && <div className="source-excerpt">“{r.excerpt}”</div>}</div>)}
               {!readings.length && !facts.length && <div className="meta">—</div>}
-              </div><div className="dock-foot"><div style={{ display: 'flex', gap: 6 }}><button className="primary" disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshReadings}>{loading.readings ? 'Searching…' : 'Search'}</button><button onMouseDown={e => e.preventDefault()} onClick={() => setShowSources(true)}>Library ({facts.length + readings.length})</button></div></div>
+              </div><div className="dock-foot"><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button className="primary" disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshReadings}>{loading.readings ? 'Searching…' : 'Search'}</button><button onMouseDown={e => e.preventDefault()} onClick={() => setShowSources(true)}>Library ({facts.length + readings.length})</button><button onMouseDown={e => e.preventDefault()} onClick={copyBibliography}>Copy bibliography</button></div></div>
             </div>
             </>}
             {(rightTab === 'suggest' || !editing) && <div className="dock dock-section"><h3><span className="swatch" style={{ background: 'var(--grey)' }} />Suggestions{loading.complete && <Spinner />}</h3>
@@ -813,7 +841,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           </div>
         </div>
       )}
-      {showSources && <SourcesLibrary facts={facts} readings={readings} onClose={() => setShowSources(false)} onDeleteFact={f => setFacts(old => old.filter(x => !(x.fact === f.fact && x.url === f.url)))} onDeleteReading={r => setReadings(old => old.filter(x => !(x.url === r.url && x.claim_quote === r.claim_quote)))} onClear={() => { setFacts([]); setReadings([]) }} onInsertFact={f => { editor.chain().focus().insertContent(` (${f.source_title || 'source'}${f.locator ? `, ${f.locator}` : ''}: ${f.url})`).run(); setShowSources(false) }} />}
+      {showSources && <SourcesLibrary facts={facts} readings={readings} onClose={() => setShowSources(false)} onDeleteFact={f => setFacts(old => old.filter(x => !(x.fact === f.fact && x.url === f.url)))} onDeleteReading={r => setReadings(old => old.filter(x => !(x.url === r.url && x.claim_quote === r.claim_quote)))} onClear={() => { setFacts([]); setReadings([]) }} onInsertFact={f => { insertFact(f); setShowSources(false) }} />}
       {wizardOpen && <SetupWizard answers={answers} setAnswers={f => setAnswers(f as any)} onClose={() => setWizardOpen(false)} onGenerate={generateFromSurvey} generating={!!loading.outlinegen} />}
       {transMenu && (
         <div className="sugg-popup fade" style={{ left: transMenu.x, top: transMenu.y, maxHeight: transMenu.h, overflowY: 'auto' }} role="menu" aria-label="Transitions">
