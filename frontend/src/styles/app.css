@@ -395,3 +395,6 @@ footer.section{padding-top:20px;border-top:1px solid var(--border)}
 .waitlist .btn.primary{flex:none}
 
 @media(max-width:1500px){.editor-topbar .metric{max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+
+.alt-btn{position:absolute;z-index:75;background:var(--ink);color:var(--bg);border:1px solid var(--ink);border-radius:99px;padding:5px 13px;min-height:32px;font-size:12.5px;font-weight:600;box-shadow:var(--shadow-pop);cursor:pointer}
+.alt-btn:hover{background:color-mix(in srgb,var(--ink) 88%,var(--bg))}

@@ -85,9 +85,9 @@ def outline_prompt(text):
     return system, user
 
 def synonyms_prompt(context, level, word, sentence, style=""):
-    system = "Thesaurus. JSON only. Single-word synonyms fitting exact sentence meaning, simpler to advanced. No phrases, no original word."
+    system = "Thesaurus. JSON only. Alternatives for the selected WORD or FRAGMENT fitting exact sentence meaning and grammar slot, simpler to advanced. Candidates may be single words or short phrases of similar length; each must carry the fragment's full content (keep adverbs, negations, objects) — never just swap its head word and drop the rest. No original text among candidates."
     user = (f"CONTEXT: {context or '(none)'}\n{_lvl(level)}{_style(style)}\nSENTENCE: {sentence}\nWORD: {word}\n"
-            'TASK: Up to 8. JSON: {"synonyms":["..."]}')
+            'TASK: Up to 8 alternatives for WORD (a word or short fragment). JSON: {"synonyms":["..."]}')
     return system, user
 
 def claims_prompt(text):

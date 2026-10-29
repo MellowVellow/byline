@@ -228,7 +228,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     editorProps: { attributes: { spellcheck: 'false', autocorrect: 'off', autocapitalize: 'off' } },
     onCreate: ({ editor }) => { try { setCounts({ words: (editor.storage as any).characterCount.words(), chars: (editor.storage as any).characterCount.characters() }) } catch { /* noop */ } },
     content: demo ? SAMPLE_DOC : (saved?.html || '<p></p>'),
-    onSelectionUpdate: ({ editor }) => { setTick(t => t + 1); try { const secs = docSections(); const pos = editor.state.selection.from; const idx = secs.findIndex((s, k) => pos >= s.from && pos < s.to); if (idx >= 0) setActiveOutlineIdx(idx) } catch { /* noop */ } const pos = editor.state.selection.from; const movedBack = pos < prevPosRef.current; prevPosRef.current = pos; if (movedBack) (refs.current as any).suppressAuto = true; if (movedBack) { if (groupRef.current.length) refs.current.fns.closePopup?.(); if (anchorStore.ghost) refs.current.fns.clearGhost?.() } else if (anchorStore.ghost && pos !== anchorStore.ghostPos) refs.current.fns.clearGhost?.() },
+    onSelectionUpdate: ({ editor }) => { syn2?.onSelection(editor); setTick(t => t + 1); try { const secs = docSections(); const pos = editor.state.selection.from; const idx = secs.findIndex((s, k) => pos >= s.from && pos < s.to); if (idx >= 0) setActiveOutlineIdx(idx) } catch { /* noop */ } const pos = editor.state.selection.from; const movedBack = pos < prevPosRef.current; prevPosRef.current = pos; if (movedBack) (refs.current as any).suppressAuto = true; if (movedBack) { if (groupRef.current.length) refs.current.fns.closePopup?.(); if (anchorStore.ghost) refs.current.fns.clearGhost?.() } else if (anchorStore.ghost && pos !== anchorStore.ghostPos) refs.current.fns.clearGhost?.() },
     onUpdate: ({ editor }) => {
       if (groupRef.current.length) refs.current.fns.closePopup?.()
       try { setCounts({ words: (editor.storage as any).characterCount.words(), chars: (editor.storage as any).characterCount.characters() }) } catch { /* noop */ }
@@ -264,11 +264,12 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   })
 
   const plain = useCallback(() => editor ? docToText(editor) : { text: '', map: [] as number[] }, [editor])
+  let syn2: ReturnType<typeof useSynonyms> | null = null
   const lint = useLint({ getEditor: () => editor, plain, appliedRef, setLoad, openRightTab: (tab) => openRightTab(tab), setPopupPos, writerPosRef, onSelect: (r) => setDockSel({ tab: 'lint', key: lintKeyOf(r) }) })
   const { enabledRules, setEnabledRules, customRules, setCustomRules, customInput, setCustomInput, lintResults, lintGroup, lintIdx, lintGroupRef, lintIdxRef, showLibrary, setShowLibrary, lintStatus } = lint
   const { runLint, toggleRule, openLintGroup, lintSelUid } = lint
-  const syn = useSynonyms({ getEditor: () => editor, plain, appliedRef, editingRef, setLoad })
-  const { synonyms, synPos, onDblClick, replaceWord } = syn
+  const syn = useSynonyms({ getEditor: () => editor, plain, appliedRef, editingRef, setLoad }); syn2 = syn
+  const { synonyms, synPos, altBtn, requestAlternatives, replaceWord } = syn
   const factsRef = useRef(facts); factsRef.current = facts
   const ghost = useGhost({ getEditor: () => editor, editorReady: !!editor, appliedRef, refs, setLoad, record, demo, getFacts: () => factsRef.current, isMenuOpen: () => !!transRef.current, isSuggestDisabled: () => disabledTabsRef.current.has('suggest') })
   const { suggestions, ghostIdx, setGhostIdx, suggHistory, suggPos, showGhost, clearGhost, acceptGhost, requestComplete } = ghost
@@ -291,7 +292,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   }, [editor, grammar, issues, reactions, readings])
   useEffect(() => { if (editing) rebuildAnchors(); else { anchorStore.anchors = []; anchorStore.ranges = new Map(); if (editor) syncAnchors(editor) } }, [rebuildAnchors, editing]) // eslint-disable-line
   useEffect(() => {
-    const h = (e: MouseEvent) => { const t = e.target as HTMLElement; if (t.closest('.sugg-popup,.popup')) return; if (groupRef.current.length) closePopup(); if (lintGroupRef.current?.length) lint.closeLintGroup(); if (transRef.current) { transRef.current = null; setTransMenu(null) } }
+    const h = (e: MouseEvent) => { const t = e.target as HTMLElement; if (t.closest('.sugg-popup,.popup,.alt-btn')) return; syn.clearAlt(); if (groupRef.current.length) closePopup(); if (lintGroupRef.current?.length) lint.closeLintGroup(); if (transRef.current) { transRef.current = null; setTransMenu(null) } }
     document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
   }, [editor])
   useEffect(() => { if (!showLibrary) return; const f = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowLibrary(false) }; addEventListener('keydown', f); return () => removeEventListener('keydown', f) }, [showLibrary])
@@ -633,7 +634,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           {demo && <div className="demo-steps"><strong>Demo flow:</strong><span>{metrics.accepted > 0 ? 'Done —' : 'Todo —'} 1 Drafting — accept a suggestion (Tab)</span><span>{mode === 'editing' ? 'Done —' : 'Todo —'} 2 Editing — switch mode, click a red underline</span><span>{readings.length ? 'Done —' : 'Todo —'} 3 Sources — check evidence verdicts</span><span>{lintResults.length ? 'Done —' : 'Todo —'} 4 Lint — auto yellow checks</span></div>}
           <EditorMenus editor={editor} counts={counts} showWordCount={appSettings.showWordCount} onSuggest={() => requestComplete()} onSentenceStarter={openTransMenu} onWizard={() => setWizardOpen(true)} onExportDocx={doExportDocx} onExportHtml={doExportHtml} onExportDataset={exportDataset} exportingDocx={!!loading.docx} />
           <div className="editor-pane-label">Main editor</div>
-          <div className="paper" onDoubleClick={onDblClick}>
+          <div className="paper">
             <EditorContent editor={editor} />
             {collectFootnotes(editor.getJSON()).length > 0 && <div className="footnotes"><hr />{collectFootnotes(editor.getJSON()).map(n => <div key={n.id} className="footnote-item"><sup>{n.label}</sup> {n.content}</div>)}</div>}
           </div>
@@ -803,6 +804,9 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           })}
           <button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={closePopup}>Close <span className="kbd">Esc</span></button>
         </div>
+      )}
+      {altBtn && !synonyms.length && (
+        <button className="alt-btn fade" style={{ left: altBtn.x, top: altBtn.y }} onMouseDown={e => { e.preventDefault(); requestAlternatives() }} title={`Alternatives for “${altBtn.text}”`}>Alternative</button>
       )}
       {loading.synonyms && synonyms.length === 0 && (
         <div className="sugg-popup fade" style={{ left: synPos.x, top: synPos.y }}><div className="sugg-row"><Spinner /> Finding synonyms</div></div>

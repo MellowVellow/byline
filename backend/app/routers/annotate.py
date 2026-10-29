@@ -64,7 +64,7 @@ async def synonyms(body: SynonymIn):
     try:
         s, u = prompts.synonyms_prompt(body.context, body.level, body.word, body.sentence, body.style)
         data, usage, model = await llm.json_call(s, u, max_tokens=600, temperature=0.5)
-        words = [w for w in data.get("synonyms", []) if isinstance(w, str) and " " not in w][:8]
+        words = [w for w in data.get("synonyms", []) if isinstance(w, str) and w.strip()][:8]
         if body.sentence and body.word:
             cache: dict = {}
             kept = []
