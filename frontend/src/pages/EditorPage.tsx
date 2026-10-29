@@ -169,7 +169,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     if (m !== 'editing') lint.abortLint()
     if (m === 'drafting') {
       // ghost only: kill editing-AI timers/popups/underlines, keep suggestions alive
-      refs.current.abort?.abort(); clearTimeout(refs.current.timers.g); clearTimeout(refs.current.timers.s)
+      refs.current.abort?.abort()
       anchorStore.anchors = []; anchorStore.ranges = new Map(); anchorStore.linkedId = null
       setPopupGroup([]); setSelected(null)
       if (editor) { syncAnchors(editor); redraw(editor) }
@@ -214,7 +214,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [, setTick] = useState(0)
   const selectedRef = useRef<Anchor | null>(null); selectedRef.current = selected
 
-  const refs = useRef({ version: 0, abort: null as AbortController | null, sugg: [] as string[], idx: 0, acceptedVersion: -1, timers: {} as any, fns: {} as any })
+  const refs = useRef({ version: 0, abort: null as AbortController | null, sugg: [] as string[], idx: 0, acceptedVersion: -1, fns: {} as any })
 
   const record = (patch: any) => setMetrics((m: any) => { const n = { ...m }; for (const k in patch) n[k] = typeof patch[k] === 'function' ? patch[k](m[k] || 0) : patch[k]; setJSON(storageKeys.metrics, n); return n })
 
@@ -234,15 +234,6 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       try { setCounts({ words: (editor.storage as any).characterCount.words(), chars: (editor.storage as any).characterCount.characters() }) } catch { /* noop */ }
       refs.current.version++; refs.current.abort?.abort(); setStale(true)
       setJSON(docKey, { html: editor.getHTML(), context, level })
-      const t = refs.current.timers
-      clearTimeout(t.c); clearTimeout(t.g); clearTimeout(t.s); clearTimeout(t.r); clearTimeout(t.l)
-      t.c = setTimeout(() => refs.current.fns.complete?.(true), 500)
-      t.g = setTimeout(() => refs.current.fns.grammar?.(), 900)
-      t.s = setTimeout(() => { refs.current.fns.annotate?.(); refs.current.fns.reactions?.() }, 1400)
-      // sources: auto claim-check, debounced (perception → query → verify → blue underline), throttled inside
-      t.r = setTimeout(() => refs.current.fns.researchAuto?.(), 2500)
-      // lint: auto-run debounced when enabled (Run lint button = manual re-run)
-      t.l = setTimeout(() => refs.current.fns.lintAuto?.(), 1800)
     },
   })
 

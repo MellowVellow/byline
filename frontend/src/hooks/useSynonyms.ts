@@ -15,7 +15,7 @@ export interface SynonymDeps {
 export interface AltBtn { x: number; y: number; from: number; to: number; text: string }
 
 /**
- * Select (drag over) a fragment -> floating "Alternative" button above it ->
+ * Select (drag over) a fragment -> floating "Alternative" button below it ->
  * 3 alternatives for the whole fragment; click / Tab / 1-3 replaces in place,
  * Esc dismisses. Replaces the old double-click single-word synonym flow.
  */
@@ -36,8 +36,9 @@ export function useSynonyms(deps: SynonymDeps) {
     const text = editor.state.doc.textBetween(from, to).trim()
     if (text.length < 2 || text.length > 80 || text.includes('\n') || text.split(/\s+/).length > 8) { if (altRef.current) setAltBtn(null); return }
     const c = editor.view.coordsAtPos(from)
+    const e = editor.view.coordsAtPos(to)
     const x = Math.max(8, Math.min(c.left, innerWidth - 150)) + scrollX
-    const y = Math.max(8 + scrollY, c.top - 88 + scrollY) // above the BubbleMenu formatting bar
+    const y = e.bottom + 10 + scrollY // below the selection, clear of the BubbleMenu above
     const cur = altRef.current
     if (!cur || cur.from !== from || cur.to !== to) setAltBtn({ x, y, from, to, text })
   }
