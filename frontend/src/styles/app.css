@@ -8,7 +8,7 @@
 @media(max-width:1100px){
   .layout{display:block}
   .layout>main{padding-bottom:64px}
-  .layout>.rail:first-child{position:sticky;top:182px;z-index:40;background:var(--bg);max-height:48vh;overflow-y:auto;width:100%;padding:4px 0}
+  .layout>.rail:first-child{position:sticky;top:178px;z-index:40;background:var(--bg);max-height:48vh;overflow-y:auto;width:100%;padding:4px 0}
   .layout .editor-bar{top:112px}
   .layout>.rail:first-child .rail-strip{flex-direction:row;justify-content:flex-start;padding:4px 2px}
   .rail.right-rail{order:3;position:fixed;left:0;right:0;bottom:0;top:auto;z-index:45;background:var(--bg);border-top:1px solid var(--border);max-height:54vh;overflow-y:auto;width:100%;padding:4px 10px calc(4px + env(safe-area-inset-bottom))}
@@ -19,10 +19,11 @@
   .dock-tabs button{padding:9px 6px}
 }
 @media(max-width:760px){
-  .layout>.rail:first-child{top:224px}
+  .layout>.rail:first-child{top:174px}
   .editor-topbar .ai-loading{display:none}
   .top-left a img{height:24px!important}
-  .editor-bar{flex-wrap:wrap;row-gap:6px}
+  .editor-bar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .editor-bar .bar-ai{flex:none}
   .editor-bar .kbd{display:none}
   .editor-bar .bar-ai{flex:1 1 auto;justify-content:center}
   .demo-steps{font-size:12px;padding:8px 10px;line-height:1.4}
@@ -234,7 +235,7 @@ input[type=range]{accent-color:var(--ink);padding:0;border:none;background:trans
 :root{--lint-amber:var(--yellow);--lint-green:var(--yellow);--lint-cyan:var(--yellow);--lint-rose:var(--yellow);--lint-violet:var(--yellow)}
 .rule-row{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;font-weight:500;color:var(--ink);margin:6px 0;cursor:pointer}
 .rule-row input{margin-top:2px}
-.editor-topbar{position:relative;display:flex;align-items:center;gap:12px;min-height:58px}
+.editor-topbar{position:sticky;top:0;z-index:50;background:var(--bg);display:flex;align-items:center;gap:12px;min-height:58px}
 .editor-topbar .mode-toggle{position:absolute;left:50%;transform:translateX(-50%);z-index:5}
 .top-left{display:flex;align-items:center;gap:10px;min-width:0}
 .top-right{margin-left:auto;display:flex;align-items:center;gap:9px}
@@ -400,3 +401,10 @@ footer.section{padding-top:20px;border-top:1px solid var(--border)}
 
 .alt-btn{position:absolute;z-index:75;background:var(--ink);color:var(--bg);border:1px solid var(--ink);border-radius:99px;padding:5px 13px;min-height:32px;font-size:12.5px;font-weight:600;box-shadow:var(--shadow-pop);cursor:pointer}
 .alt-btn:hover{background:color-mix(in srgb,var(--ink) 88%,var(--bg))}
+
+/* Sticky stack (final, wins by order): topbar -> setup bar -> left dock, flush at top */
+@media(max-width:1100px){
+  .layout .editor-bar{flex-wrap:nowrap;overflow-x:auto;top:var(--tbh,112px)}
+  .layout .editor-bar .bar-ai{flex:none}
+  .layout>.rail:first-child{top:calc(var(--tbh,112px) + var(--barh,66px))}
+}

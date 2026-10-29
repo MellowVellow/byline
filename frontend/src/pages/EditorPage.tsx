@@ -529,6 +529,15 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   function toggleDock(side: 'left' | 'right') { if (side === 'left') { setLeftOpen(v => { setStr(storageKeys.leftOpen, v ? '0' : '1'); return !v }) } else { setRightOpen(v => { setStr(storageKeys.rightOpen, v ? '0' : '1'); return !v }) } }
 
   useEffect(() => { editor?.view.dom.setAttribute('spellcheck', appSettings.spellcheck ? 'true' : 'false') }, [editor, appSettings.spellcheck])
+  // Mobile sticky stack: measure topbar + setup-bar heights so the setup bar
+  // docks under the topbar and the left dock docks flush below the setup bar
+  // on any device (no hard-coded pixel offsets).
+  useEffect(() => {
+    const tb = document.querySelector('.editor-topbar'); const bar = document.querySelector('.editor-bar')
+    if (!tb || !bar) return
+    const set = () => { document.documentElement.style.setProperty('--tbh', `${(tb as HTMLElement).offsetHeight}px`); document.documentElement.style.setProperty('--barh', `${(bar as HTMLElement).offsetHeight}px`) }
+    set(); const ro = new ResizeObserver(set); ro.observe(tb); ro.observe(bar); return () => ro.disconnect()
+  }, [editor])
   if (!editor) return null
   const acc = metrics.offered ? Math.round(100 * metrics.accepted / metrics.offered) : 0
   const avgMs = metrics.msCount ? Math.round(metrics.msTotal / metrics.msCount) : 0
