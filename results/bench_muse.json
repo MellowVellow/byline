@@ -1,301 +1,121 @@
 {
   "rows": [
     {
-      "provider": "meta",
-      "model": "muse-wonder-1.0",
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
       "case": "complete_phrase_anxiety",
       "sample": 0,
-      "ms": 2333,
-      "in": 96,
-      "out": 159,
-      "reasoning": 128,
+      "ms": 1164,
+      "in": 97,
+      "out": 19,
+      "reasoning": 0,
       "ok": true,
       "detail": ""
     },
     {
-      "provider": "meta",
-      "model": "muse-wonder-1.0",
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "complete_phrase_anxiety",
+      "sample": 1,
+      "ms": 1084,
+      "in": 97,
+      "out": 19,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
       "case": "complete_phrase_cooking",
       "sample": 0,
-      "ms": 2515,
+      "ms": 915,
+      "in": 104,
+      "out": 21,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "complete_phrase_cooking",
+      "sample": 1,
+      "ms": 938,
+      "in": 104,
+      "out": 22,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "annotate_quote",
+      "sample": 0,
+      "ms": 3546,
+      "in": 198,
+      "out": 164,
+      "reasoning": 0,
+      "ok": true,
+      "detail": "quotes 2/2 verbatim"
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "annotate_quote",
+      "sample": 1,
+      "ms": 3379,
+      "in": 198,
+      "out": 166,
+      "reasoning": 0,
+      "ok": true,
+      "detail": "quotes 2/2 verbatim"
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "main_idea",
+      "sample": 0,
+      "ms": 670,
       "in": 102,
+      "out": 20,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "main_idea",
+      "sample": 1,
+      "ms": 989,
+      "in": 102,
+      "out": 20,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "reactions",
+      "sample": 0,
+      "ms": 3799,
+      "in": 170,
       "out": 192,
-      "reasoning": 161,
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "provider": "meta",
-      "model": "muse-wonder-1.0",
-      "case": "annotate_quote",
-      "sample": 0,
-      "ms": 3563,
-      "in": 176,
-      "out": 352,
-      "reasoning": 224,
-      "ok": true,
-      "detail": "quotes 2/2 verbatim"
-    },
-    {
-      "provider": "meta",
-      "model": "muse-wonder-1.0",
-      "case": "main_idea",
-      "sample": 0,
-      "ms": 1978,
-      "in": 78,
-      "out": 111,
-      "reasoning": 83,
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "provider": "meta",
-      "model": "muse-wonder-1.0",
-      "case": "reactions",
-      "sample": 0,
-      "ms": 3111,
-      "in": 145,
-      "out": 347,
-      "reasoning": 137,
-      "ok": true,
-      "detail": "quotes 3/3 verbatim"
-    },
-    {
-      "provider": "meta",
-      "model": "muse-spark-1.3",
-      "case": "complete_phrase_anxiety",
-      "sample": 0,
-      "ms": 1617,
-      "in": 96,
-      "out": 133,
-      "reasoning": 105,
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "provider": "meta",
-      "model": "muse-spark-1.3",
-      "case": "complete_phrase_cooking",
-      "sample": 0,
-      "ms": 1982,
-      "in": 102,
-      "out": 298,
-      "reasoning": 266,
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "provider": "meta",
-      "model": "muse-spark-1.3",
-      "case": "annotate_quote",
-      "sample": 0,
-      "ms": 1983,
-      "in": 176,
-      "out": 499,
-      "reasoning": 386,
-      "ok": true,
-      "detail": "quotes 2/2 verbatim"
-    },
-    {
-      "provider": "meta",
-      "model": "muse-spark-1.3",
-      "case": "main_idea",
-      "sample": 0,
-      "ms": 1213,
-      "in": 78,
-      "out": 108,
-      "reasoning": 90,
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "provider": "meta",
-      "model": "muse-spark-1.3",
-      "case": "reactions",
-      "sample": 0,
-      "ms": 2933,
-      "in": 145,
-      "out": 490,
-      "reasoning": 303,
-      "ok": true,
-      "detail": "quotes 3/3 verbatim"
-    },
-    {
-      "provider": "meta",
-      "model": "muse-spark-1.2",
-      "case": "complete_phrase_anxiety",
-      "sample": 0,
-      "ms": 2277,
-      "in": 96,
-      "out": 265,
-      "reasoning": 234,
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "provider": "meta",
-      "model": "muse-spark-1.2",
-      "case": "complete_phrase_cooking",
-      "sample": 0,
-      "ms": 2473,
-      "in": 102,
-      "out": 345,
-      "reasoning": 310,
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "provider": "meta",
-      "model": "muse-spark-1.2",
-      "case": "annotate_quote",
-      "sample": 0,
-      "ms": 2872,
-      "in": 176,
-      "out": 570,
-      "reasoning": 433,
-      "ok": true,
-      "detail": "quotes 2/2 verbatim"
-    },
-    {
-      "provider": "meta",
-      "model": "muse-spark-1.2",
-      "case": "main_idea",
-      "sample": 0,
-      "ms": 3402,
-      "in": 78,
-      "out": 122,
-      "reasoning": 86,
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "provider": "meta",
-      "model": "muse-spark-1.2",
-      "case": "reactions",
-      "sample": 0,
-      "ms": 5053,
-      "in": 145,
-      "out": 622,
-      "reasoning": 410,
-      "ok": true,
-      "detail": "quotes 3/3 verbatim"
-    },
-    {
-      "provider": "meta",
-      "model": "muse-spark-1.1",
-      "case": "complete_phrase_anxiety",
-      "sample": 0,
-      "ms": 3651,
-      "in": 96,
-      "out": 474,
-      "reasoning": 443,
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "provider": "meta",
-      "model": "muse-spark-1.1",
-      "case": "complete_phrase_cooking",
-      "sample": 0,
-      "ms": 3126,
-      "in": 102,
-      "out": 440,
-      "reasoning": 410,
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "provider": "meta",
-      "model": "muse-spark-1.1",
-      "case": "annotate_quote",
-      "sample": 0,
-      "ms": 2523,
-      "in": 176,
-      "out": 633,
-      "reasoning": 487,
-      "ok": true,
-      "detail": "quotes 2/2 verbatim"
-    },
-    {
-      "provider": "meta",
-      "model": "muse-spark-1.1",
-      "case": "main_idea",
-      "sample": 0,
-      "ms": 1706,
-      "in": 78,
-      "out": 256,
-      "reasoning": 224,
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "provider": "meta",
-      "model": "muse-spark-1.1",
-      "case": "reactions",
-      "sample": 0,
-      "ms": 4168,
-      "in": 145,
-      "out": 888,
-      "reasoning": 712,
+      "reasoning": 0,
       "ok": true,
       "detail": "quotes 3/3 verbatim"
     },
     {
       "provider": "openrouter",
-      "model": "google/gemini-2.5-flash-lite",
-      "case": "complete_phrase_anxiety",
-      "sample": 0,
-      "ms": 1441,
-      "in": 86,
-      "out": 24,
-      "reasoning": 0,
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "provider": "openrouter",
-      "model": "google/gemini-2.5-flash-lite",
-      "case": "complete_phrase_cooking",
-      "sample": 0,
-      "ms": 834,
-      "in": 92,
-      "out": 17,
-      "reasoning": 0,
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "provider": "openrouter",
-      "model": "google/gemini-2.5-flash-lite",
-      "case": "annotate_quote",
-      "sample": 0,
-      "ms": 1050,
-      "in": 165,
-      "out": 86,
-      "reasoning": 0,
-      "ok": true,
-      "detail": "quotes 1/1 verbatim"
-    },
-    {
-      "provider": "openrouter",
-      "model": "google/gemini-2.5-flash-lite",
-      "case": "main_idea",
-      "sample": 0,
-      "ms": 891,
-      "in": 69,
-      "out": 18,
-      "reasoning": 0,
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "provider": "openrouter",
-      "model": "google/gemini-2.5-flash-lite",
+      "model": "meta-llama/llama-3.3-70b-instruct",
       "case": "reactions",
-      "sample": 0,
-      "ms": 1769,
-      "in": 132,
-      "out": 210,
+      "sample": 1,
+      "ms": 4298,
+      "in": 170,
+      "out": 226,
       "reasoning": 0,
       "ok": true,
       "detail": "quotes 3/3 verbatim"
@@ -303,154 +123,64 @@
   ],
   "raw": [
     {
-      "model": "muse-wonder-1.0",
+      "model": "meta-llama/llama-3.3-70b-instruct",
       "case": "complete_phrase_anxiety",
       "sample": 0,
-      "content": "social and economic circumstances beyond clinics\nfear, stigma, and financial insecurity\nthe social conditions people live in"
+      "content": "social and economic factors greatly\ncultural norms and personal beliefs\ngovernment policies and institutional barriers"
     },
     {
-      "model": "muse-wonder-1.0",
-      "case": "complete_phrase_cooking",
-      "sample": 0,
-      "content": "having a reliable weeknight dinner plan\nwhat's actually easy to cook tonight\nthe time you have to cook"
-    },
-    {
-      "model": "muse-wonder-1.0",
-      "case": "annotate_quote",
-      "sample": 0,
-      "content": "{\"issues\": [{\"quote\": \"as I said\", \"context\": \"Cats are independent, as I said.\", \"type\": \"relevance\", \"reason\": \"This refers back to an earlier point, but no earlier mention of independence was made, so the reference breaks coherence.\", \"replacement\": \"Cats are independent.\"}, {\"quote\": \"plethora\", \"context\": \"A plethora of reasons exist.\", \"type\": \"vocabulary\", \"reason\": \"This word is too fancy for a general audience when a simpler word would work.\", \"replacement\": \"lot\"}]}"
-    },
-    {
-      "model": "muse-wonder-1.0",
-      "case": "main_idea",
-      "sample": 0,
-      "content": "Cats are better pets than dogs because they are independent, quiet, longer-lived, and cute."
-    },
-    {
-      "model": "muse-wonder-1.0",
-      "case": "reactions",
-      "sample": 0,
-      "content": "{\"reactions\": [{\"quote\": \"Cats are independent, as I said.\", \"context\": \"Cats are independent, as I said. Dogs needs daily walks.\", \"kind\": \"question\", \"text\": \"As you said where? This is the first mention of independence, so the reference to an earlier claim is confusing.\"}, {\"quote\": \"A plethora of reasons exist.\", \"context\": \"Dogs needs daily walks. A plethora of reasons exist. Cats are quiet.\", \"kind\": \"critique\", \"text\": \"A plethora of reasons for what? This vague claim is never specified and does not connect the surrounding points about walks and noise.\"}, {\"quote\": \"Finally, cats are just cute.\", \"context\": \"Cats live longer than dogs. Finally, cats are just cute.\", \"kind\": \"comment\", \"text\": \"After factual comparisons about lifespan and noise, ending on the subjective 'just cute' feels like an abrupt, unsupported jump rather than a conclusion.\"}]}"
-    },
-    {
-      "model": "muse-spark-1.3",
+      "model": "meta-llama/llama-3.3-70b-instruct",
       "case": "complete_phrase_anxiety",
-      "sample": 0,
-      "content": "the places where people live.\nthe worries that keep people away.\nthe costs patients cannot afford."
+      "sample": 1,
+      "content": "social and economic factors largely\ncultural norms and personal beliefs\nenvironmental influences and policy decisions"
     },
     {
-      "model": "muse-spark-1.3",
+      "model": "meta-llama/llama-3.3-70b-instruct",
       "case": "complete_phrase_cooking",
       "sample": 0,
-      "content": "weeknight meals we can actually cook\ndinner routines and shared pantry staples\nquick recipes families make after work"
+      "content": "what we eat at home nightly\nhow meal prep affects our health\nthe food choices we make daily"
     },
     {
-      "model": "muse-spark-1.3",
-      "case": "annotate_quote",
-      "sample": 0,
-      "content": "{\"issues\": [{\"quote\": \"plethora\", \"context\": \"A plethora of reasons exist.\", \"type\": \"vocabulary\", \"reason\": \"Too fancy for General level, simpler word fits better.\", \"replacement\": \"a lot\"}, {\"quote\": \"as I said\", \"context\": \"Cats are independent, as I said.\", \"type\": \"relevance\", \"reason\": \"Refers to earlier mention that does not appear in the text, which breaks coherence.\", \"replacement\": \"\"}]}"
-    },
-    {
-      "model": "muse-spark-1.3",
-      "case": "main_idea",
-      "sample": 0,
-      "content": "Cats are better than dogs for many reasons."
-    },
-    {
-      "model": "muse-spark-1.3",
-      "case": "reactions",
-      "sample": 0,
-      "content": "{\"reactions\": [{\"quote\": \"as I said\", \"context\": \"Cats are independent, as I said.\", \"kind\": \"critique\", \"text\": \"You say 'as I said' but this is the first mention \u2014 what are you referring back to?\"}, {\"quote\": \"Dogs needs daily walks.\", \"context\": \"Cats are independent, as I said. Dogs needs daily walks. A plethora of reasons exist.\", \"kind\": \"critique\", \"text\": \"'Dogs needs' should be 'need' \u2014 also this jumps abruptly from cats being independent.\"}, {\"quote\": \"A plethora of reasons exist.\", \"context\": \"Dogs needs daily walks. A plethora of reasons exist. Cats are quiet.\", \"kind\": \"question\", \"text\": \"What plethora? This feels vague between specific claims \u2014 can you list them?\"}]}"
-    },
-    {
-      "model": "muse-spark-1.2",
-      "case": "complete_phrase_anxiety",
-      "sample": 0,
-      "content": "socioeconomic status and geographic location.\nsystemic inequities and policy decisions.\nsocial determinants beyond clinical settings."
-    },
-    {
-      "model": "muse-spark-1.2",
+      "model": "meta-llama/llama-3.3-70b-instruct",
       "case": "complete_phrase_cooking",
-      "sample": 0,
-      "content": "what's for dinner on busy weeknights\npantry staples and weeknight cooking routines\nwhat families can actually cook at home"
+      "sample": 1,
+      "content": "what we eat at home nightly\nthe role of food in our lives\nhow meals bring us all together"
     },
     {
-      "model": "muse-spark-1.2",
+      "model": "meta-llama/llama-3.3-70b-instruct",
       "case": "annotate_quote",
       "sample": 0,
-      "content": "{\"issues\": [{\"quote\": \"A plethora of reasons exist.\", \"context\": \"Dogs needs daily walks. A plethora of reasons exist. Cats are quiet.\", \"type\": \"vocabulary\", \"reason\": \"plethora is overly formal/fancy for General level requested\", \"replacement\": \"There are many reasons.\"}, {\"quote\": \"as I said\", \"context\": \"Cats are independent, as I said. Dogs needs daily walks.\", \"type\": \"relevance\", \"reason\": \"implies previous mention that does not exist in text, creating a coherence break\", \"replacement\": \"Cats are independent.\"}]}"
+      "content": "{\"issues\": [\n{\"quote\": \"A plethora of reasons exist\", \n\"context\": \"Dogs needs daily walks. A plethora of reasons exist.\", \n\"type\": \"vocabulary\", \n\"reason\": \"The word 'plethora' is too formal for the general level of this text.\", \n\"replacement\": \"There are many reasons\"},\n{\"quote\": \"Finally, cats are just cute\", \n\"context\": \"Cats live longer than dogs. Finally, cats are just cute.\", \n\"type\": \"relevance\", \n\"reason\": \"The statement about cats being cute, while positive, doesn't directly compare to a characteristic of dogs to support the argument that cats are better than dogs.\", \n\"replacement\": \"Additionally, cats are often more affectionate in their own unique ways than dogs.\"}\n]}"
     },
     {
-      "model": "muse-spark-1.2",
-      "case": "main_idea",
-      "sample": 0,
-      "content": "Cats are better pets than dogs because they are independent, quiet, longer-lived and cute while dogs require daily walks and bark a lot."
-    },
-    {
-      "model": "muse-spark-1.2",
-      "case": "reactions",
-      "sample": 0,
-      "content": "{\"reactions\": [{\"quote\": \"as I said\", \"context\": \"Cats are independent, as I said.\", \"kind\": \"question\", \"text\": \"You say 'as I said' but this is the first sentence - where did you say it before? Feels repetitive or assumes prior context that isn't here.\"}, {\"quote\": \"A plethora of reasons exist.\", \"context\": \"Dogs needs daily walks. A plethora of reasons exist. Cats are quiet.\", \"kind\": \"critique\", \"text\": \"This is a vague filler sentence and an unclear jump - it doesn't add a reason itself and breaks the flow between points about dogs and cats.\"}, {\"quote\": \"Finally, cats are just cute.\", \"context\": \"Cats live longer than dogs. Finally, cats are just cute.\", \"kind\": \"comment\", \"text\": \"This feels like a subjective jump after more factual claims about lifespan and noise - cute is opinion, not a supporting reason like the others.\"}]}"
-    },
-    {
-      "model": "muse-spark-1.1",
-      "case": "complete_phrase_anxiety",
-      "sample": 0,
-      "content": "by the quiet weight of anxiety itself\nby income, geography, and fear\nby whether people feel safe asking"
-    },
-    {
-      "model": "muse-spark-1.1",
-      "case": "complete_phrase_cooking",
-      "sample": 0,
-      "content": "what's cooking on weeknight tables\nhow families actually eat together\nwhether dinner makes it to the table"
-    },
-    {
-      "model": "muse-spark-1.1",
+      "model": "meta-llama/llama-3.3-70b-instruct",
       "case": "annotate_quote",
-      "sample": 0,
-      "content": "{\"issues\": [{\"quote\": \"A plethora of reasons exist.\", \"context\": \"Dogs needs daily walks. A plethora of reasons exist. Cats are quiet.\", \"type\": \"vocabulary\", \"reason\": \"Phrase is overly formal/fancy for General level which should avoid complex vocabulary.\", \"replacement\": \"There are many reasons for this.\"}, {\"quote\": \"as I said\", \"context\": \"Cats are independent, as I said. Dogs needs daily walks.\", \"type\": \"relevance\", \"reason\": \"Refers to a previous statement that was never made in the text, creating a coherence problem.\", \"replacement\": \"Cats are independent.\"}]}"
+      "sample": 1,
+      "content": "{\"issues\": [\n{\"quote\": \"A plethora of reasons exist\", \n\"context\": \"Dogs needs daily walks. A plethora of reasons exist. Cats are quiet.\", \n\"type\": \"vocabulary\", \n\"reason\": \"The word 'plethora' is too formal for the general level of discussion.\", \n\"replacement\": \"There are many reasons\"},\n{\"quote\": \"Finally, cats are just cute\", \n\"context\": \"Cats live longer than dogs. Finally, cats are just cute.\", \n\"type\": \"relevance\", \n\"reason\": \"The statement about cats being cute, while positive, doesn't directly compare to dogs in a meaningful way regarding their characteristics or needs.\", \n\"replacement\": \"Additionally, cats are often considered cute, which can be a plus for many owners.\"}\n]}"
     },
     {
-      "model": "muse-spark-1.1",
+      "model": "meta-llama/llama-3.3-70b-instruct",
       "case": "main_idea",
       "sample": 0,
-      "content": "The text argues that cats are better pets than dogs because they are independent, quiet, longer-lived, and cute."
+      "content": "Cats have several advantages over dogs, including their independence, quiet nature, and longer lifespan."
     },
     {
-      "model": "muse-spark-1.1",
-      "case": "reactions",
-      "sample": 0,
-      "content": "{\"reactions\": [{\"quote\": \"as I said\", \"context\": \"Cats are independent, as I said.\", \"kind\": \"question\", \"text\": \"You say 'as I said' here but this is the first sentence - where did you say it before?\"}, {\"quote\": \"Dogs needs\", \"context\": \"Dogs needs daily walks.\", \"kind\": \"critique\", \"text\": \"Grammar slip - should be 'Dogs need' not 'needs'.\"}, {\"quote\": \"A plethora of reasons exist.\", \"context\": \"Dogs needs daily walks. A plethora of reasons exist. Cats are quiet.\", \"kind\": \"comment\", \"text\": \"This feels like a vague filler that creates an unclear jump between the dog walking point and the quiet/barking point.\"}]}"
-    },
-    {
-      "model": "google/gemini-2.5-flash-lite",
-      "case": "complete_phrase_anxiety",
-      "sample": 0,
-      "content": "socioeconomic factors and social determinants.\npublic health policies and systemic inequities.\nenvironmental influences and personal circumstances."
-    },
-    {
-      "model": "google/gemini-2.5-flash-lite",
-      "case": "complete_phrase_cooking",
-      "sample": 0,
-      "content": "the food we eat.\nthe groceries we buy.\nthe ingredients we have."
-    },
-    {
-      "model": "google/gemini-2.5-flash-lite",
-      "case": "annotate_quote",
-      "sample": 0,
-      "content": "```json\n{\n  \"issues\": [\n    {\n      \"quote\": \"A plethora\",\n      \"context\": \"Dogs needs daily walks. A plethora of reasons exist. Cats are quiet.\",\n      \"type\": \"vocabulary\",\n      \"reason\": \"The word 'plethora' is too formal for a general audience.\",\n      \"replacement\": \"many\"\n    }\n  ]\n}\n```"
-    },
-    {
-      "model": "google/gemini-2.5-flash-lite",
+      "model": "meta-llama/llama-3.3-70b-instruct",
       "case": "main_idea",
-      "sample": 0,
-      "content": "Cats and dogs differ in independence, exercise needs, noise levels, lifespan, and appearance."
+      "sample": 1,
+      "content": "Cats have several advantages over dogs, including their independence, quiet nature, and longer lifespan."
     },
     {
-      "model": "google/gemini-2.5-flash-lite",
+      "model": "meta-llama/llama-3.3-70b-instruct",
       "case": "reactions",
       "sample": 0,
-      "content": "```json\n{\n  \"reactions\": [\n    {\n      \"quote\": \"as I said\",\n      \"context\": \"Cats are independent, as I said. Dogs needs daily walks.\",\n      \"kind\": \"question\",\n      \"text\": \"What did you say before about cats being independent?\"\n    },\n    {\n      \"quote\": \"A plethora of reasons exist.\",\n      \"context\": \"Dogs needs daily walks. A plethora of reasons exist. Cats are quiet.\",\n      \"kind\": \"question\",\n      \"text\": \"What are these reasons? The text only lists a few.\"\n    },\n    {\n      \"quote\": \"Cats live longer than dogs.\",\n      \"context\": \"Dogs bark. Cats live longer than dogs. Finally, cats are just cute.\",\n      \"kind\": \"question\",\n      \"text\": \"Is this statement factually correct? It's presented as a fact but without evidence.\"\n    }\n  ]\n}\n```"
+      "content": "{\"reactions\": [\n{\"quote\": \"as I said\", \"context\": \"Cats are independent, as I said.\", \"kind\": \"critique\", \"text\": \"The text does not contain a previous statement to support the phrase 'as I said', making it unclear what was previously stated.\"},\n{\"quote\": \"A plethora of reasons exist\", \"context\": \"Dogs needs daily walks. A plethora of reasons exist.\", \"kind\": \"question\", \"text\": \"What are these reasons that exist, and how do they relate to the comparison between cats and dogs?\"},\n{\"quote\": \"Finally, cats are just cute\", \"context\": \"Cats live longer than dogs. Finally, cats are just cute.\", \"kind\": \"comment\", \"text\": \"The transition to 'Finally, cats are just cute' seems abrupt and unrelated to the previous point about lifespan, making the text feel a bit disjointed.\"}\n]}"
+    },
+    {
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "reactions",
+      "sample": 1,
+      "content": "```json\n{\n  \"reactions\": [\n    {\n      \"quote\": \"as I said\",\n      \"context\": \"Cats are independent, as I said.\",\n      \"kind\": \"critique\",\n      \"text\": \"The text does not contain a previous statement to support the phrase 'as I said', making it unclear what was previously stated.\"\n    },\n    {\n      \"quote\": \"A plethora of reasons exist\",\n      \"context\": \"Dogs needs daily walks. A plethora of reasons exist.\",\n      \"kind\": \"question\",\n      \"text\": \"What are the plethora of reasons that exist? The text does not provide a clear explanation.\"\n    },\n    {\n      \"quote\": \"Cats live longer than dogs\",\n      \"context\": \"Cats are quiet. Dogs bark. Cats live longer than dogs.\",\n      \"kind\": \"comment\",\n      \"text\": \"This statement seems to be an unrelated fact, it would be better to connect it to the previous points or provide more context about why this is relevant to the comparison between cats and dogs.\"\n    }\n  ]\n}\n```"
     }
   ]
 }

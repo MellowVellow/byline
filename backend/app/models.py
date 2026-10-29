@@ -4,20 +4,21 @@ from pydantic import BaseModel, Field
 S = lambda n: Field(default="", max_length=n)  # noqa: E731
 
 class CompleteIn(BaseModel):
-    context: str = S(4000); level: str = Field(default="General", max_length=40); voice: str = S(1000)
+    context: str = S(4000); level: str = Field(default="General", max_length=40)
     assist_level: str = Field(default="Phrase", max_length=20)
-    before: str = S(8000); after: str = S(4000); version: int = 0; style: str = S(4000)
+    before: str = S(8000); after: str = S(4000); version: int = 0
     facts: list[str] = Field(default_factory=list, max_length=5)
     last_two: str = S(2000)
+    avoid: list[str] = Field(default_factory=list, max_length=3)
 
 class TextIn(BaseModel):
     context: str = S(4000); level: str = Field(default="General", max_length=40); text: str = S(20000)
     before: str = S(4000); after: str = S(4000)
-    persona: str = Field(default="Skeptical reader", max_length=60); style: str = S(4000)
+    persona: str = Field(default="Skeptical reader", max_length=60)
 
 class SynonymIn(BaseModel):
     context: str = S(4000); level: str = Field(default="General", max_length=40)
-    word: str = S(80); sentence: str = S(2000); style: str = S(4000)
+    word: str = S(80); sentence: str = S(2000)
 
 class GrammarIn(BaseModel):
     text: str = S(20000)
@@ -32,14 +33,11 @@ class LintRuleIn(BaseModel):
     id: str = S(80); category: str = Field(default="violet", max_length=30); rule: str = S(1000)
 
 class LintIn(BaseModel):
-    context: str = S(4000); style: str = S(4000); text: str = S(20000)
+    context: str = S(4000); text: str = S(20000)
     active_rules: list[LintRuleIn] = Field(default_factory=list, max_length=40)
 
 class ResearchIn(BaseModel):
     url: str = S(2000); question: str = Field(default="Extract the key facts relevant to my writing, with sources.", max_length=1000)
-
-class DiagramIn(BaseModel):
-    context: str = S(4000); style: str = S(4000); text: str = S(20000); kind: str = Field(default="mindmap", max_length=20)
 
 class OutlineGenIn(BaseModel):
     answers: dict = Field(default_factory=dict)

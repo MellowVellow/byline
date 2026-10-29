@@ -13,7 +13,7 @@ async def lint(body: LintIn):
         import json as _json
         rules = [{"id": r.id, "color": r.category, "rule": r.rule} for r in body.active_rules if r.id and r.rule]
         rule_map = {r["id"]: r["color"] for r in rules}
-        s, u = prompts.lint_prompt(body.context, body.style, body.text, _json.dumps(rules))
+        s, u = prompts.lint_prompt(body.context, body.text, _json.dumps(rules))
         data, usage, model = None, {}, ""
         last_err = None
         for _attempt in range(2):  # one retry on parse/upstream hiccup

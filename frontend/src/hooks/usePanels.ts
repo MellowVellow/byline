@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { api } from '../lib/api'
-import { buildStyle, type AppliedSettings } from '../lib/buildStyle'
+import type { AppliedSettings } from '../lib/types'
 import { FALLBACK_ISSUES, FALLBACK_REACTIONS, FALLBACK_READINGS } from '../lib/fallback'
 import { keys as storageKeys, getJSON } from '../lib/storage'
 import { recordCall } from '../lib/metrics'
@@ -52,7 +52,7 @@ export function usePanels(deps: PanelDeps) {
     if (!deps.editingRef.current || !deps.getEditor()) return
     const tm = deps.plain(); if (tm.text.trim().length < 20) return
     const { ctl, version } = begin('annotate'); deps.setLoad('annotate', true)
-    const d = await api.annotate({ context: deps.appliedRef.current.context, level: deps.appliedRef.current.level, text: tm.text, style: buildStyle(deps.appliedRef.current) }, ctl.signal); recordCall(d?.meta)
+    const d = await api.annotate({ context: deps.appliedRef.current.context, level: deps.appliedRef.current.level, text: tm.text }, ctl.signal); recordCall(d?.meta)
     if (!fresh('annotate', ctl, version)) { if (aborts.current['annotate'] === ctl) deps.setLoad('annotate', false); return }
     deps.setLoad('annotate', false)
     let out: Issue[] = d?.issues ? d.issues.map((i: Issue) => ({ ...i, id: deps.nid() })) : (deps.demo ? FALLBACK_ISSUES.map(i => ({ ...i, id: deps.nid() })) : [])
@@ -68,7 +68,7 @@ export function usePanels(deps: PanelDeps) {
     if (!deps.editingRef.current || !deps.getEditor()) return
     const tm = deps.plain(); if (tm.text.trim().length < 20) return
     const { ctl, version } = begin('reactions'); deps.setLoad('reactions', true)
-    const d = await api.reactions({ context: deps.appliedRef.current.context, level: deps.appliedRef.current.level, text: tm.text, persona: deps.appliedRef.current.persona, style: buildStyle(deps.appliedRef.current) }, ctl.signal); recordCall(d?.meta)
+    const d = await api.reactions({ context: deps.appliedRef.current.context, level: deps.appliedRef.current.level, text: tm.text, persona: deps.appliedRef.current.persona }, ctl.signal); recordCall(d?.meta)
     if (!fresh('reactions', ctl, version)) { if (aborts.current['reactions'] === ctl) deps.setLoad('reactions', false); return }
     deps.setLoad('reactions', false)
     const out: Reaction[] = d?.reactions ? d.reactions.map((r: Reaction) => ({ ...r, id: deps.nid() })) : (deps.demo ? FALLBACK_REACTIONS.map(r => ({ ...r, id: deps.nid() })) : [])
@@ -77,7 +77,7 @@ export function usePanels(deps: PanelDeps) {
   async function refreshMainIdea() {
     if (!deps.editingRef.current || !deps.getEditor()) return
     const { ctl, version } = begin('main'); deps.setLoad('main', true)
-    const d = await api.mainIdea({ context: deps.appliedRef.current.context, level: deps.appliedRef.current.level, text: deps.plain().text, style: buildStyle(deps.appliedRef.current) }, ctl.signal); recordCall(d?.meta)
+    const d = await api.mainIdea({ context: deps.appliedRef.current.context, level: deps.appliedRef.current.level, text: deps.plain().text }, ctl.signal); recordCall(d?.meta)
     if (!fresh('main', ctl, version)) { if (aborts.current['main'] === ctl) deps.setLoad('main', false); return }
     if (d?.main_idea) deps.setMainIdea(d.main_idea)
     deps.setLoad('main', false)

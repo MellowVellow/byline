@@ -14,9 +14,11 @@ def test_lint_ids_match_frontend():
 
 
 def test_constants_match_frontend():
+    # Style settings were removed from the UI (style → lint rules), so only
+    # DICTIONS stays frontend-visible; TONES/CLAUSES remain backend-only for
+    # the setup-agent prompts.
     ts = (ROOT / "frontend/src/lib/constants.ts").read_text()
-    for name, py_val in [("DICTIONS", DICTIONS), ("TONES", TONES), ("CLAUSES", CLAUSES)]:
-        m = re.search(rf"export const {name} = \[([^\]]+)\]", ts)
-        assert m, name
-        fe_val = re.findall(r"'([^']+)'", m.group(1))
-        assert fe_val == py_val, name
+    m = re.search(r"export const DICTIONS = \[([^\]]+)\]", ts)
+    assert m, "DICTIONS"
+    fe_val = re.findall(r"'([^']+)'", m.group(1))
+    assert fe_val == DICTIONS, "DICTIONS"

@@ -1,5 +1,5 @@
 /**
- * UI sound design (Tone.js, lazy-loaded, on unless muted, throttled).
+ * UI sound design (Tone.js, lazy-loaded, muted by default, throttled).
  * - Activation / deactivation: synthesized MembraneSynth body plus a
  *   short melodic gesture — rising perfect fifth on, falling fifth off — so
  *   state changes are legible by ear alone.
@@ -11,7 +11,7 @@ let synth: any = null
 let membrane: any = null
 let lastPlay = 0
 
-export function sfxEnabled(): boolean { return localStorage.getItem('byline.sfx') !== '0' }
+export function sfxEnabled(): boolean { return localStorage.getItem('byline.sfx') === '1' }
 export function setSfxEnabled(on: boolean) { localStorage.setItem('byline.sfx', on ? '1' : '0'); if (!on && synth) { try { synth.releaseAll?.() } catch { /* noop */ } } }
 
 async function ensure() {

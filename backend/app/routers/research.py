@@ -2,7 +2,7 @@ from fastapi import APIRouter, UploadFile, File
 import asyncio, httpx, json
 from .. import llm, prompts, citations
 from ..config import settings
-from ..models import TextIn, ResearchIn, DiagramIn, CiteIn, BiblioIn
+from ..models import TextIn, ResearchIn, CiteIn, BiblioIn
 from ..quote import filter_anchored
 from ..security import is_safe_public_url
 from .common import ok, fail, err, meta
@@ -108,17 +108,6 @@ async def research_upload(file: UploadFile = File(...), question: str = "Extract
         facts = llm.extract_json(r["text"]).get("facts", []) if r.get("text") else []
         for f in facts: f.setdefault("source_title", file.filename or "upload")
         return ok(facts=facts[:12], file_id=fid, model=r.get("model", ""))
-    except Exception as e: return err(e)
-
-@router.post("/api/diagram")
-async def diagram(body: DiagramIn):
-    try:
-        s, u = prompts.diagram_prompt(body.context, body.text, body.kind if body.kind in ("mindmap", "flowchart") else "mindmap")
-        data, usage, model = await llm.json_call(s, u, max_tokens=1400, temperature=0.4)
-        mermaid = (data.get("mermaid") or "").strip()
-        if not mermaid or not (mermaid.startswith("mindmap") or mermaid.startswith("flowchart") or mermaid.startswith("graph")): return fail(error="bad mermaid")
-        nodes = [n for n in data.get("nodes", []) if isinstance(n, dict) and (n.get("quote", "") in body.text)]
-        return ok(mermaid=mermaid, caption=data.get("caption", ""), nodes=nodes, model=model, usage=usage)
     except Exception as e: return err(e)
 
 @router.post("/api/cite")

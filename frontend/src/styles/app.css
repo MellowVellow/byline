@@ -6,26 +6,27 @@
 /* Mobile/tablet: rails become bars — left sticky under topbar, right fixed bottom tab bar.
    Never stack docks below the paper (was: order:2, unreachable past the document). */
 @media(max-width:1100px){
-  .layout{display:block}
+  .layout{display:block;padding:10px 8px}
   .layout>main{padding-bottom:64px}
-  .layout>.rail:first-child{position:sticky;top:178px;z-index:40;background:var(--bg);max-height:48vh;overflow-y:auto;width:100%;padding:4px 0}
-  .layout .editor-bar{top:112px}
-  .layout>.rail:first-child .rail-strip{flex-direction:row;justify-content:flex-start;padding:4px 2px}
-  .rail.right-rail{order:3;position:fixed;left:0;right:0;bottom:0;top:auto;z-index:45;background:var(--bg);border-top:1px solid var(--border);max-height:54vh;overflow-y:auto;width:100%;padding:4px 10px calc(4px + env(safe-area-inset-bottom))}
+  .layout>.rail:first-child{position:sticky;top:calc(var(--tbh,48px) + var(--barh,44px));z-index:40;background:var(--bg);max-height:42vh;overflow-y:auto;width:100%;padding:2px 0}
+  .layout .editor-bar{top:var(--tbh,48px)}
+  .layout>.rail:first-child .rail-strip{flex-direction:row;justify-content:flex-start;padding:2px}
+  .rail.right-rail{order:3;position:fixed;left:0;right:0;bottom:0;top:auto;z-index:45;background:var(--bg);border-top:1px solid var(--border);max-height:50vh;overflow-y:auto;width:100%;padding:2px 10px calc(4px + env(safe-area-inset-bottom))}
   .rail.right-rail .rail-strip{flex-direction:row;justify-content:space-around;padding:2px 0}
-  .rail-strip button{width:40px;height:40px}
-  .rail-scroll{max-height:38vh}
+  .rail-strip button{width:38px;height:34px}
+  .rail-scroll{max-height:36vh}
   .dock-tabs{gap:6px}
-  .dock-tabs button{padding:9px 6px}
+  .dock-tabs button{padding:8px 6px}
 }
 @media(max-width:760px){
-  .layout>.rail:first-child{top:174px}
+  .layout>.rail:first-child{top:calc(var(--tbh,48px) + var(--barh,44px))}
   .editor-topbar .ai-loading{display:none}
   .top-left a img{height:24px!important}
-  .editor-bar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
-  .editor-bar .bar-ai{flex:none}
+  .editor-bar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;gap:5px;padding:5px 8px;margin-bottom:8px}
+  .editor-bar button{min-height:30px;padding:5px 9px;font-size:12.5px}
+  .editor-bar .bar-ai{flex:0 0 auto}
   .editor-bar .kbd{display:none}
-  .editor-bar .bar-ai{flex:1 1 auto;justify-content:center}
+  .setup-shine{min-height:30px;padding:5px 12px;font-size:13px}
   .demo-steps{font-size:12px;padding:8px 10px;line-height:1.4}
   .demo-steps span{display:inline}
   .sugg-popup,.popup{width:calc(100vw - 16px)}
@@ -35,6 +36,7 @@
   .proof-sheet{padding:24px 18px 18px 40px}
   .proof-sheet::before{left:26px}
   .proof-sheet h2{font-size:21px}
+  .paper{padding:24px 18px 24px 42px;background:linear-gradient(90deg,transparent 0 30px,color-mix(in srgb,var(--proof) 38%,transparent) 30px,color-mix(in srgb,var(--proof) 38%,transparent) 31px,transparent 31px),var(--paper)}
 }
 .paper{background:linear-gradient(90deg,transparent 0 26px,color-mix(in srgb,var(--proof) 38%,transparent) 26px,color-mix(in srgb,var(--proof) 38%,transparent) 27px,transparent 27px),var(--paper);border:1px solid var(--border);border-radius:var(--radius-lg);min-height:70vh;padding:30px 38px}
 .dual-editors{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
@@ -56,7 +58,7 @@
 .settings-row input[type=color]{width:38px;height:30px;padding:2px;flex:none}
 .shortcut-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:6px 0;border-top:1px solid var(--border);font-size:13px}
 /* TipTap Notion-like menus */
-.editor-bar{position:sticky;top:58px;z-index:42;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;margin:0 0 14px;border:1px solid var(--border);border-radius:4px;background:var(--dock)}
+.editor-bar{position:sticky;top:var(--tbh,48px);z-index:42;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 10px;margin:0 0 10px;border:1px solid var(--border);border-radius:4px;background:var(--dock)}
 .editor-bar .bar-ai{border-color:var(--ai);color:var(--ai);font-weight:600}
 .bubble-menu{display:flex;gap:2px;align-items:center;background:var(--ink);color:var(--bg);border-radius:9px;padding:4px;box-shadow:0 10px 30px rgba(0,0,0,.25);z-index:70}
 .bubble-menu button{background:transparent;border:none;color:var(--bg);padding:5px 8px;border-radius:6px;font-size:13px}
@@ -104,6 +106,10 @@
 .reason-text{font-size:12.5px;color:var(--muted);line-height:1.5}
 .replacement-text{font-weight:700;font-size:13px}
 .sugg-popup{position:absolute;z-index:60;width:min(360px,calc(100vw - 24px));background:var(--bg);border:1px solid var(--border);border-radius:4px;box-shadow:var(--shadow-pop);overflow:hidden}
+.sugg-flex{display:flex;align-items:stretch}
+.reroll-btn{flex:0 0 auto;border:none;border-right:1px solid var(--border);background:none;cursor:pointer;font-size:15px;line-height:1;color:var(--muted);padding:0 9px}
+.reroll-btn:hover{background:var(--hover);color:var(--ink)}
+.sugg-list{flex:1;min-width:0}
 .sugg-row{padding:9px 12px;cursor:pointer;font-family:"Source Serif 4",Georgia,serif;font-size:16.5px;line-height:1.4;color:var(--muted);border-top:1px solid var(--border)}
 .sugg-row:first-child{border-top:none}
 .sugg-row.sel{color:var(--ink);font-weight:700;background:color-mix(in srgb,var(--ai) 10%,var(--bg))}
@@ -242,7 +248,19 @@ input[type=range]{accent-color:var(--ink);padding:0;border:none;background:trans
 .nav-btn{font-size:13px;font-weight:500;border:1px solid var(--border);background:var(--bg);border-radius:var(--radius);padding:6px 11px;line-height:1.35;text-decoration:none;display:inline-flex;align-items:center}
 .nav-btn:hover{border-color:var(--muted)}
 .nav-btn.active{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-@media(max-width:900px){.editor-topbar .mode-toggle{position:relative;transform:none}.editor-topbar{flex-wrap:wrap}}
+@media(max-width:900px){
+  .editor-topbar{flex-wrap:nowrap;gap:8px;padding:6px 10px;min-height:44px;overflow-x:auto;scrollbar-width:none}
+  .editor-topbar .mode-toggle{position:relative;transform:none;left:auto}
+  .mode-switch{min-width:168px;height:34px}
+  .mode-toggle button{padding:4px 10px;font-size:12.5px}
+  .nav-btn{padding:4px 8px;font-size:12px}
+  .editor-topbar .top-right{gap:6px}
+  .editor-topbar .metric{display:none}
+}
+@media(max-width:700px){
+  .status-text{display:none}
+  .editor-topbar .dot{display:none}
+}
 .library-backdrop{position:fixed;inset:0;background:rgba(20,20,25,.45);z-index:80;display:flex;align-items:flex-start;justify-content:center;padding:70px 16px 24px}
 .library-modal{background:var(--bg);border:1px solid var(--border);border-radius:4px;width:min(860px,96vw);max-height:84vh;display:flex;flex-direction:column;box-shadow:var(--shadow-pop)}
 .library-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border)}
@@ -250,11 +268,6 @@ input[type=range]{accent-color:var(--ink);padding:0;border:none;background:trans
 .library-rule{border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:10px;line-height:1.55}
 .library-rule p{margin:7px 0}
 .library-example{display:grid;gap:6px;background:var(--dock);border-radius:6px;padding:9px}
-.diagram-card{margin-top:10px}
-.diagram-svg{overflow-x:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;cursor:pointer}
-.diagram-svg svg{max-width:100%;height:auto;min-width:460px}
-.diagram-svg svg text{fill:var(--ink)}
-.diagram-src{font-size:11px;white-space:pre-wrap;background:var(--dock);border-radius:6px;padding:8px;overflow-x:auto}
 
 /* centered shining Setup (wizard + exports) */
 .setup-center{position:absolute;left:50%;transform:translateX(-50%);z-index:30}
@@ -341,8 +354,8 @@ footer.section{padding-top:20px;border-top:1px solid var(--border)}
 @media(max-width:700px){
   .topbar{padding:9px 12px;gap:8px;flex-wrap:wrap}
   .layout{padding:10px;gap:10px}
-  .paper{padding:22px 18px;min-height:60vh}
-  .paper.paged{padding:28px 20px}
+  .paper{padding:24px 16px 24px 42px;min-height:60vh;background:linear-gradient(90deg,transparent 0 30px,color-mix(in srgb,var(--proof) 38%,transparent) 30px,color-mix(in srgb,var(--proof) 38%,transparent) 31px,transparent 31px),var(--paper)}
+  .paper.paged{padding:32px 18px 32px 44px;background:linear-gradient(90deg,transparent 0 32px,color-mix(in srgb,var(--proof) 38%,transparent) 32px,color-mix(in srgb,var(--proof) 38%,transparent) 33px,transparent 33px),var(--paper)}
   .ProseMirror{font-size:17px;min-height:52vh}
   .hero p{font-size:16px}
   .waitlist input{flex-basis:100%;max-width:none}
@@ -351,13 +364,6 @@ footer.section{padding-top:20px;border-top:1px solid var(--border)}
   .metric{white-space:normal}
 }
 @media(max-width:1100px){.rail-scroll{max-height:none}}
-
-@media(max-width:900px){
-  .editor-topbar{row-gap:8px;padding-bottom:12px}
-  .editor-topbar .mode-toggle{order:3;flex:1 1 100%;max-width:340px;margin-inline:auto;left:auto}
-  .editor-topbar .top-right{flex-wrap:wrap;justify-content:flex-end;row-gap:6px}
-}
-@media(max-width:700px){.editor-topbar .metric{display:none}}
 
 .notice-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid color-mix(in srgb,var(--blue) 45%,var(--border));background:color-mix(in srgb,var(--blue) 7%,var(--bg));border-radius:var(--radius-lg);padding:9px 12px;margin-bottom:10px;font-size:13px}
 .notice-bar span{flex:1 1 240px}
@@ -401,10 +407,3 @@ footer.section{padding-top:20px;border-top:1px solid var(--border)}
 
 .alt-btn{position:absolute;z-index:75;background:var(--ink);color:var(--bg);border:1px solid var(--ink);border-radius:99px;padding:5px 13px;min-height:32px;font-size:12.5px;font-weight:600;box-shadow:var(--shadow-pop);cursor:pointer}
 .alt-btn:hover{background:color-mix(in srgb,var(--ink) 88%,var(--bg))}
-
-/* Sticky stack (final, wins by order): topbar -> setup bar -> left dock, flush at top */
-@media(max-width:1100px){
-  .layout .editor-bar{flex-wrap:nowrap;overflow-x:auto;top:var(--tbh,112px)}
-  .layout .editor-bar .bar-ai{flex:none}
-  .layout>.rail:first-child{top:calc(var(--tbh,112px) + var(--barh,66px))}
-}

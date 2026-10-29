@@ -27,7 +27,7 @@ npm --prefix frontend install && npm --prefix frontend run dev   # :5173, proxie
 Grammar popup per misspelled word: **Ignore word** (= ignore.txt: never flag, no corrections) or **Add to dictionary** (= spelling.txt: never flag + used for corrections). Exceptions persist in browser and filter future checks instantly. **Export additions** in Language dock downloads `en_spelling_additions.txt`; merge it into `languagetool/en_spelling_additions.txt`, then `docker compose build languagetool && docker compose up -d languagetool` to bake words into the custom image for everyone.
 
 ## Benchmark
-See `BENCHMARK.md`. Re-run: `python3 bench/bench_muse.py --samples 3`
+See `BENCHMARK.md` for benchmark tables.
 
 ## Tests
 ```bash

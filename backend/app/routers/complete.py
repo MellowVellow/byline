@@ -9,7 +9,6 @@ router = APIRouter()
 CAPS = {"Hint": 5, "Phrase": 8, "Sentence": 25, "Question": 12, "Block": 130}
 ASSIST_TOKENS = {"Hint": 120, "Phrase": 220, "Sentence": 600, "Question": 220, "Block": 1200}
 
-_SENT_END = re.compile(r"""[.!?]["'”’)\]]*\s*$""")
 
 _COMMON_SHORT = {"a", "i", "an", "in", "on", "at", "to", "of", "or", "by", "be", "we", "he", "it", "is", "the", "and", "for", "are", "but", "not", "you", "all", "can", "had", "her", "was", "one", "our", "out"}
 try:
@@ -34,20 +33,6 @@ def merge_partial(before: str, suggestion: str) -> str:
         if not (_zipf(merged, "en") >= 3.0 and _zipf(merged, "en") > _zipf(first, "en")): return suggestion
     return partial + suggestion
 
-def fix_suggestion(before: str, suggestion: str) -> str:
-    return sentence_case(before, merge_partial(before, suggestion))
-
-def sentence_case(before: str, suggestion: str) -> str:
-    """Auto rule: at sentence start (empty / after . ! ?), capitalize first letter."""
-    b = (before or "").rstrip()
-    if b and not _SENT_END.search(b):
-        return suggestion
-    m = re.search(r"[A-Za-z]", suggestion)
-    if not m:
-        return suggestion
-    i = m.start()
-    return suggestion[:i] + suggestion[i].upper() + suggestion[i + 1:]
-
 def parse_options(raw: str, assist: str) -> list[str]:
     out = []
     for line in raw.splitlines():
@@ -56,29 +41,39 @@ def parse_options(raw: str, assist: str) -> list[str]:
     cap = CAPS.get(assist, 8)
     return [s for s in out if len(s.split()) <= cap + 3][:3]
 
+def post_process(before: str, opts: list[str], assist: str) -> list[str]:
+    sugg = [merge_partial(before, x) for x in opts]
+    if assist == "Question": sugg = [s if s.rstrip().endswith("?") else s.rstrip() + "?" for s in sugg]
+    return sugg
+
 def valid_options(sugg: list[str], assist: str) -> bool:
-    """Sentence/Block often degrade to fragments — reject so caller retries once."""
+    """Sentence/Block/Question often degrade — reject so caller retries once."""
     if not sugg: return False
     if assist == "Block": return all(len(s.split()) >= 40 and len(re.findall(r"[.!?](?:\s|$)", s + " ")) >= 3 for s in sugg)
     if assist == "Sentence": return all(len(s.split()) >= 10 and re.search(r"[.!?][\"'”’)\]]*$", s.strip()) for s in sugg)
+    if assist == "Question": return len(sugg) == 3 and all(s.rstrip().endswith("?") for s in sugg)
     return True
+
+def retry_hint(assist: str) -> str:
+    if assist == "Question": return "\nRETRY: previous format invalid — return exactly 3 questions, one per line, each ending with a question mark."
+    return "\nRETRY: previous format invalid — follow ASSIST exactly, full sentences only, no fragments."
 
 @router.post("/api/complete")
 async def complete(body: CompleteIn):
     try:
-        s, u = prompts.complete_prompt(body.context, body.level, body.before, body.after, body.assist_level, body.voice, body.style, body.facts, body.last_two)
+        s, u = prompts.complete_prompt(body.context, body.level, body.before, body.after, body.assist_level, body.facts, body.last_two, body.avoid)
         try:
             t0 = __import__('time').perf_counter(); local_raw = await llm.local_text(s, u); dt = __import__('time').perf_counter() - t0
-            sugg = [fix_suggestion(body.before, x) for x in parse_options(local_raw, body.assist_level)]
+            sugg = post_process(body.before, parse_options(local_raw, body.assist_level), body.assist_level)
             if sugg: return ok(suggestions=sugg, version=body.version, model=f"local:{llm.settings.local_model or 'glimmer-lora'}", ms=round(dt * 1000), usage={})
             raise ValueError("local empty")
         except Exception:
             pass
         raw, usage, model, dt = await llm.timed_text(s, u, max_tokens=ASSIST_TOKENS.get(body.assist_level, 220), temperature=0.8)
-        sugg = [fix_suggestion(body.before, x) for x in parse_options(raw, body.assist_level)]
+        sugg = post_process(body.before, parse_options(raw, body.assist_level), body.assist_level)
         if sugg and not valid_options(sugg, body.assist_level):
-            raw2, usage, model, dt2 = await llm.timed_text(s, u + "\nRETRY: previous format invalid — follow ASSIST exactly, full sentences only, no fragments.", max_tokens=ASSIST_TOKENS.get(body.assist_level, 220), temperature=0.7)
-            sugg2 = [fix_suggestion(body.before, x) for x in parse_options(raw2, body.assist_level)]
+            raw2, usage, model, dt2 = await llm.timed_text(s, u + retry_hint(body.assist_level), max_tokens=ASSIST_TOKENS.get(body.assist_level, 220), temperature=0.7)
+            sugg2 = post_process(body.before, parse_options(raw2, body.assist_level), body.assist_level)
             if sugg2: sugg, dt = sugg2, dt + dt2
         return ok(suggestions=sugg, version=body.version, model=model, ms=round(dt * 1000), usage=usage, meta=meta("complete", s, u, usage, model, dt*1000, 0.8, ASSIST_TOKENS.get(body.assist_level, 220))) if sugg else fail(version=body.version)
     except Exception as e: return err(e)

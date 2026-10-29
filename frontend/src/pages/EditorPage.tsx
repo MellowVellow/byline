@@ -14,8 +14,7 @@ import SettingsMenu from '../components/SettingsMenu'
 import EditorMenus from '../components/EditorMenus'
 import { loadSettings, saveSettings, type AppSettings } from '../lib/settings'
 import { textFragmentUrl } from '../lib/link'
-import { DICTIONS, TONES, VOICE_PRESETS, RHYTHMS, TRANSITIONS, ASSISTS, ASSIST_DESCRIPTIONS, PERSONAS, matchText, digitFor, REACTION_STYLE, LANG_STYLE, LAYER_ORDER } from '../lib/constants'
-import { buildStyle } from '../lib/buildStyle'
+import { DICTIONS, TRANSITIONS, ASSISTS, ASSIST_DESCRIPTIONS, PERSONAS, matchText, digitFor, REACTION_STYLE, LANG_STYLE, LAYER_ORDER } from '../lib/constants'
 import { useLint, lintKeyOf } from '../hooks/useLint'
 import { useSynonyms } from '../hooks/useSynonyms'
 import { useGhost } from '../hooks/useGhost'
@@ -23,12 +22,11 @@ import { usePanels } from '../hooks/usePanels'
 import { keys as storageKeys, getJSON, setJSON, getStr, setStr, removeKey } from '../lib/storage'
 export { matchText, digitFor, REACTION_STYLE, LANG_STYLE, LAYER_ORDER } from '../lib/constants'
 import { LINTER_RULE_LIBRARY, LINT_COLORS, type LintResult } from '../lib/rules'
-import Diagram, { type DiagramNode } from '../components/Diagram'
-import SetupWizard, { type SetupPayload } from '../components/SetupWizard'
-import SourcesLibrary from '../components/SourcesLibrary'
-import { sfxSuccess } from '../lib/sfx'
 import { TableOfContents, getHierarchicalIndexes, type TableOfContentData } from '@tiptap/extension-table-of-contents'
 import { PageBreak, Footnote, collectFootnotes } from '../editor/extensions'
+import SourcesLibrary from '../components/SourcesLibrary'
+import { sfxSuccess } from '../lib/sfx'
+import SetupWizard, { type SetupPayload } from '../components/SetupWizard'
 import { exportDocx } from '../lib/docx-export'
 import { researchUpload } from '../lib/api'
 import type { Fact } from '../lib/types'
@@ -52,16 +50,6 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const saved = demo ? null : getJSON<any>(docKey, null)
   const [context, setContext] = useState(demo ? SAMPLE_CONTEXT : (saved?.context || ''))
   const [level, setLevel] = useState(saved?.level || 'General')
-  const [voice, setVoice] = useState('')
-  const [tones, setTones] = useState<Record<string, 'allow' | 'ban'>>({})
-  const [rhythm, setRhythm] = useState(2)
-  const [gramVoice, setGramVoice] = useState<'active' | 'passive'>('passive')
-  const [clause, setClause] = useState('Subordinated')
-  const [density, setDensity] = useState(2)
-  const [audLevel, setAudLevel] = useState(3)
-  const [audText, setAudText] = useState('')
-  const [diagram, setDiagram] = useState<{ mermaid: string; caption: string; nodes: DiagramNode[] }>({ mermaid: '', caption: '', nodes: [] })
-  const [diagramKind, setDiagramKind] = useState<'mindmap' | 'flowchart'>('mindmap')
   const [facts, setFacts] = useState<Fact[]>(() => getJSON(storageKeys.facts(demo), [] as Fact[]))
   const [researchUrl, setResearchUrl] = useState('')
   const [researchQ, setResearchQ] = useState('')
@@ -76,19 +64,11 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   function applySetupPayload(p: SetupPayload) {
     const d = p.dimensions || {} as any
     if (d.diction && DICTIONS.includes(d.diction)) setLevel(d.diction)
-    if (d.voice) setVoice(d.voice)
-    if (d.tone) { const ts = String(d.tone).split(/[,;]/).map((s: string) => s.trim()).filter((t: string) => TONES.includes(t)); if (ts.length) setTones(Object.fromEntries(ts.map(t => [t, 'allow']))) }
-    const st = (d.style || '').toLowerCase()
-    if (st.includes('staccato')) setRhythm(1); else if (st.includes('flow')) setRhythm(3)
-    if (st.includes('zero passive') || st.includes('strictly active')) setGramVoice('active' as any)
-    if (st.includes('simple')) setClause('Simple'); else if (st.includes('coordinat')) setClause('Coordinated')
     if (p.active_preset_rules?.length) setEnabledRules(new Set(p.active_preset_rules))
     if (p.custom_rules?.length) { const n = p.custom_rules.map(c => c.rule); setCustomRules(n); setJSON(storageKeys.customRules, n) }
     setJSON(storageKeys.configActive, p)
     setActiveConfig(p); setContext((c: string) => c || `Goal config ${p.configuration_id}: ${d.tone || ''} ${d.voice || ''}`.slice(0, 240))
-    const next = { ...draftObj(), level: d.diction && DICTIONS.includes(d.diction) ? d.diction : level, voice: d.voice || voice,
-      style: `${buildStyle(appliedRef.current)}\nAllowed transitions: ${(p.ghost_text_filters?.allowed_transitions || []).join(', ')}\nStarter focus: ${(p.ghost_text_filters?.starter_categories || []).join(', ')}` }
-    appliedRef.current = next as any; setApplied(next as any); sfxSuccess()
+    sfxSuccess()
   }
   const [sfxOn, setSfxOn] = useState(sfxEnabled())
   const [answers, setAnswers] = useState({ goal: '', doc_type: 'essay', audience: '', audience_level: 3, key_points: '', voice_note: '' })
@@ -103,17 +83,10 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const transRef = useRef<typeof transMenu>(null); transRef.current = transMenu
   const [assist, setAssist] = useState('Phrase')
   const [persona, setPersona] = useState(PERSONAS[0])
-  // left-dock edits are STAGED until Apply; AI calls always read appliedRef
-  const [applied, setApplied] = useState(() => ({ context: demo ? SAMPLE_CONTEXT : (saved?.context || ''), level: saved?.level || 'General', voice: '', assist: 'Phrase', persona: PERSONAS[0], tones: {} as Record<string, 'allow' | 'ban'>, rhythm: 2, gramVoice: 'passive' as string, clause: 'Subordinated', density: 2, audLevel: 3, audText: '' }))
+  // settings apply on change — no staged draft; AI calls always read the live values via appliedRef
+  const draftObj = () => ({ context, level, assist, persona })
+  const applied = draftObj()
   const appliedRef = useRef(applied); appliedRef.current = applied
-  const draftObj = () => ({ context, level, voice, assist, persona, tones, rhythm, gramVoice, clause, density, audLevel, audText })
-  const dirty = JSON.stringify(applied) !== JSON.stringify(draftObj())
-  function applySettings() { blip('accept')
-    const next = draftObj()
-    appliedRef.current = next; setApplied(next)
-    requestComplete(); requestAnnotate(); requestReactions(); refreshMainIdea(); if (researchAutoRef.current) refreshReadings(); lint.runLint()
-  }
-  function cycleTone(t: string) { setTones(prev => { const n = { ...prev }; if (!n[t]) n[t] = 'allow'; else if (n[t] === 'allow') n[t] = 'ban'; else delete n[t]; return n }) }
   const [issues, setIssues] = useState<Issue[]>([])
   const [reactions, setReactions] = useState<Reaction[]>([])
   const [grammar, setGrammar] = useState<GrammarMatch[]>([])
@@ -187,7 +160,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   useEffect(() => { if (prevLoadingRef.current && !anyLoading) blip('done'); prevLoadingRef.current = anyLoading }, [anyLoading])
   const [leftOpen, setLeftOpen] = useState(getStr(storageKeys.leftOpen) === '1')
   const [rightOpen, setRightOpen] = useState(getStr(storageKeys.rightOpen) === '1')
-  type LeftTab = 'write' | 'style' | 'outline'
+  type LeftTab = 'write' | 'outline'
   type RightTab = 'language' | 'lint' | 'reader' | 'sources' | 'suggest'
   const [leftTab, setLeftTab] = useState<LeftTab>('write')
   const [rightTab, setRightTab] = useState<RightTab>('language')
@@ -263,9 +236,21 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const { synonyms, synPos, altBtn, requestAlternatives, replaceWord } = syn
   const factsRef = useRef(facts); factsRef.current = facts
   const ghost = useGhost({ getEditor: () => editor, editorReady: !!editor, appliedRef, refs, setLoad, record, demo, getFacts: () => factsRef.current, isMenuOpen: () => !!transRef.current, isSuggestDisabled: () => disabledTabsRef.current.has('suggest') })
-  const { suggestions, ghostIdx, setGhostIdx, suggHistory, suggPos, showGhost, clearGhost, acceptGhost, requestComplete } = ghost
+  const { suggestions, ghostIdx, setGhostIdx, suggHistory, suggPos, showGhost, clearGhost, acceptGhost, requestComplete, reroll } = ghost
   const panels = usePanels({ getEditor: () => editor, plain, appliedRef, editingRef, versionRef: refs, setLoad, demo, nid, dictRef, researchAutoRef, setGrammar, setIssues, setReactions, setReadings, setMainIdea, setStale })
   const { requestGrammar, requestAnnotate, requestReactions, refreshMainIdea, refreshReadings, researchAutoRun } = panels
+
+  // Apply-on-change: any Write-setting edit re-runs the affected AI layers (debounced).
+  const appliedSig = JSON.stringify(applied)
+  const firstSigRef = useRef(appliedSig)
+  useEffect(() => {
+    if (appliedSig === firstSigRef.current) return
+    const t = setTimeout(() => {
+      requestComplete()
+      if (editingRef.current) { requestAnnotate(); requestReactions(); refreshMainIdea(); if (researchAutoRef.current) refreshReadings(); lint.runLint() }
+    }, 600)
+    return () => clearTimeout(t)
+  }, [appliedSig]) // eslint-disable-line
 
   const rebuildAnchors = useCallback(() => {
     if (!editor) return
@@ -337,7 +322,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   function insertFact(f: Fact) { editor?.chain().focus().insertContent(insertCitationText(f, citeStyle, citeTemplate)).run() }
   async function refreshOutline() { if (!editingRef.current || !editor) return; setLoad('outline', true); const d = await api.outline({ text: plain().text }); if (d?.outline) setOutline(d.outline); setLoad('outline', false) }
   function rerunAll() { requestComplete(); requestGrammar(); requestAnnotate(); requestReactions(); refreshMainIdea(); refreshOutline(); if (researchAutoRef.current) refreshReadings(); lint.runLint() }
-  refs.current.fns = { complete: requestComplete, grammar: requestGrammar, annotate: requestAnnotate, reactions: requestReactions, accept: acceptGhost, clearGhost, showGhost, closePopup, researchAuto: researchAutoRun, lintAuto: () => lint.runLint() }
+  refs.current.fns = { complete: requestComplete, reroll, grammar: requestGrammar, annotate: requestAnnotate, reactions: requestReactions, accept: acceptGhost, clearGhost, showGhost, closePopup, researchAuto: researchAutoRun, lintAuto: () => lint.runLint() }
 
   // capture-phase keyboard + click: survives ProseMirror defaults, no stale closures via refs
   useEffect(() => {
@@ -346,6 +331,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey
       if (mod && e.code === 'Space') { e.preventDefault(); e.stopPropagation(); refs.current.fns.complete?.(); return }
+      if (e.altKey && (e.key === 'r' || e.key === 'R')) { e.preventDefault(); e.stopPropagation(); reroll(); return }
       if (mod && e.key === '/') { e.preventDefault(); e.stopPropagation(); openTransMenu(); return }
       if (transRef.current) {
         const m = transRef.current
@@ -369,6 +355,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       if (syn.handleSynonymKey(e)) return
       const sugg = refs.current.sugg
       if (sugg.length) {
+        if (e.key === '`') { e.preventDefault(); e.stopPropagation(); reroll(); return }
         if (e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); acceptGhost(refs.current.idx); return }
         if (['1', '2', '3'].includes(e.key) && !mod) { e.preventDefault(); e.stopPropagation(); acceptGhost(Number(e.key) - 1); return }
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); const n = (refs.current.idx + (e.key === 'ArrowDown' ? 1 : sugg.length - 1)) % sugg.length; refs.current.idx = n; setGhostIdx(n); showGhost(n); return }
@@ -446,12 +433,6 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     if (blank >= 0) editor.chain().setTextSelection(at + prefix.length + blank).run()
     setTransMenu(null)
   }
-  async function refreshDiagram() {
-    if (!editor) return; setLoad('diagram', true)
-    const d = await api.diagram({ context: appliedRef.current.context, text: plain().text, kind: diagramKind })
-    if (d?.ok) { setDiagram({ mermaid: d.mermaid, caption: d.caption, nodes: d.nodes || [] }); if (d.caption) setMainIdea(d.caption) }
-    setLoad('diagram', false)
-  }
   async function runResearch(file?: File) {
     setLoad('research', true)
     const d = file ? await researchUpload(file, researchQ || 'Extract key facts for my writing') : await api.research({ url: researchUrl, question: researchQ || 'Extract the key facts relevant to my writing, with sources.' })
@@ -500,22 +481,15 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     setLoad('outlinegen', false)
     if (!d?.ok) return false
     const summary = d.context_summary || answers.goal
-    const tonesNext: Record<string, 'allow' | 'ban'> = Array.isArray(d.tones) ? Object.fromEntries(d.tones.filter((t: string) => TONES.includes(t)).map((t: string) => [t, 'allow' as const])) : tones
-    const next0 = {
-      level: DICTIONS.includes(d.diction) ? d.diction : level, voice: typeof d.voice === 'string' && d.voice ? d.voice : voice, tones: tonesNext,
-      rhythm: [1, 2, 3].includes(d.rhythm) ? d.rhythm : rhythm, gramVoice: d.gram_voice === 'active' ? 'active' as const : d.gram_voice === 'passive' ? 'passive' as const : gramVoice,
-      clause: ['Simple', 'Coordinated', 'Subordinated'].includes(d.clause) ? d.clause : clause, density: [1, 2, 3].includes(d.density) ? d.density : density,
-      audText: d.audience_text || audText, audLevel: d.audience_level || audLevel,
-    }
-    const choiceDiction = (answers as any).choices?.diction; if (choiceDiction && DICTIONS.includes(choiceDiction)) next0.level = choiceDiction
-    setContext(summary); setLevel(next0.level); setVoice(next0.voice); setTones(tonesNext); setRhythm(next0.rhythm); setGramVoice(next0.gramVoice as any); setClause(next0.clause); setDensity(next0.density); setAudText(next0.audText); setAudLevel(next0.audLevel)
+    const nextLevel = DICTIONS.includes(d.diction) ? d.diction : level
+    const choiceDiction = (answers as any).choices?.diction; const finalLevel = choiceDiction && DICTIONS.includes(choiceDiction) ? choiceDiction : nextLevel
+    setContext(summary); setLevel(finalLevel)
     // Stage outline in its OWN editor; exit wizard; main editor untouched.
     const draft: OutlineDraft[] = ((d.outline || []) as any[]).map(o => ({ heading: String(o.heading || 'Untitled'), purpose: String(o.purpose || ''), points: ((o.points || []) as any[]).map(String), state: 'pending' as const }))
     setOutlineDraft(draft)
     if (outlineEditor && draft.length) outlineEditor.commands.setContent(draft.map((o, i) => outlineSectionHtml(o, i === 0 ? 1 : 2)).join(''))
     setLeftTab('outline'); if (!leftOpen) { setLeftOpen(true); setStr(storageKeys.leftOpen, '1') }
-    const next = { ...draftObj(), context: summary, ...next0 }
-    appliedRef.current = next as any; setApplied(next as any); setWizardOpen(false)
+    setWizardOpen(false)
     setTimeout(() => { requestComplete(); requestAnnotate(); requestReactions(); refreshMainIdea() }, 80); sfxSuccess(); return true
   }
   async function exportDataset() {
@@ -533,20 +507,18 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   // docks under the topbar and the left dock docks flush below the setup bar
   // on any device (no hard-coded pixel offsets).
   useEffect(() => {
-    const tb = document.querySelector('.editor-topbar'); const bar = document.querySelector('.editor-bar')
-    if (!tb || !bar) return
-    const set = () => { document.documentElement.style.setProperty('--tbh', `${(tb as HTMLElement).offsetHeight}px`); document.documentElement.style.setProperty('--barh', `${(bar as HTMLElement).offsetHeight}px`) }
-    set(); const ro = new ResizeObserver(set); ro.observe(tb); ro.observe(bar); return () => ro.disconnect()
+    const tb = document.querySelector('.editor-topbar') as HTMLElement | null
+    const bar = document.querySelector('.editor-bar') as HTMLElement | null
+    if (!tb && !bar) return
+    const set = () => {
+      if (tb) document.documentElement.style.setProperty('--tbh', `${tb.offsetHeight}px`)
+      if (bar) document.documentElement.style.setProperty('--barh', `${bar.offsetHeight}px`)
+    }
+    set(); const ro = new ResizeObserver(set); if (tb) ro.observe(tb); if (bar) ro.observe(bar); return () => ro.disconnect()
   }, [editor])
   if (!editor) return null
   const acc = metrics.offered ? Math.round(100 * metrics.accepted / metrics.offered) : 0
   const avgMs = metrics.msCount ? Math.round(metrics.msTotal / metrics.msCount) : 0
-  const draftNow = draftObj()
-  const tabDirty = {
-    write: JSON.stringify({ context: applied.context, level: applied.level, assist: applied.assist, persona: applied.persona }) !== JSON.stringify({ context: draftNow.context, level: draftNow.level, assist: draftNow.assist, persona: draftNow.persona }),
-    style: JSON.stringify({ tones: applied.tones, voice: applied.voice, rhythm: applied.rhythm, gramVoice: applied.gramVoice, clause: applied.clause, density: applied.density, audLevel: applied.audLevel, audText: applied.audText }) !== JSON.stringify({ tones: draftNow.tones, voice: draftNow.voice, rhythm: draftNow.rhythm, gramVoice: draftNow.gramVoice, clause: draftNow.clause, density: draftNow.density, audLevel: draftNow.audLevel, audText: draftNow.audText }),
-    outline: false,
-  }
   const cols = `${leftOpen ? (leftTab === 'outline' ? '430px' : '264px') : '52px'} minmax(0,1fr) ${rightOpen ? '348px' : '52px'}`
   return (
     <div>
@@ -569,10 +541,10 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
 
       <div className="layout" style={{ gridTemplateColumns: cols }}>
         <aside className="rail" onClickCapture={e => { if ((e.target as HTMLElement).closest('button')) blip('select') }}>
-          {!leftOpen ? <div className="rail-strip"><button onClick={() => toggleDock('left')} title="Expand">›</button>{(['write','style','outline'] as LeftTab[]).map(ic => <button key={ic} title={ic} aria-label={ic} onClick={() => { setLeftTab(ic); toggleDock('left') }}>{ic[0].toUpperCase()}</button>)}</div> : <>
-            <div className="rail-head"><strong style={{ fontSize: 13 }}>{leftTab === 'write' ? 'Write' : leftTab === 'style' ? 'Style' : 'Outline'}</strong><button onClick={() => toggleDock('left')} title="Collapse">‹</button></div>
+          {!leftOpen ? <div className="rail-strip"><button onClick={() => toggleDock('left')} title="Expand">›</button>{(['write','outline'] as LeftTab[]).map(ic => <button key={ic} title={ic} aria-label={ic} onClick={() => { setLeftTab(ic); toggleDock('left') }}>{ic[0].toUpperCase()}</button>)}</div> : <>
+            <div className="rail-head"><strong style={{ fontSize: 13 }}>{leftTab === 'write' ? 'Write' : 'Outline'}</strong><button onClick={() => toggleDock('left')} title="Collapse">‹</button></div>
             <div className="dock-tabs" role="tablist" aria-label="Write settings">
-              {(['write', 'style', 'outline'] as LeftTab[]).map(t => <button key={t} role="tab" aria-selected={leftTab === t} className={leftTab === t ? 'active' : ''} onClick={() => setLeftTab(t)}>{t === 'write' ? 'Write' : t === 'style' ? 'Style' : 'Outline'}{tabDirty[t] && <span className="tab-dot" title="Unapplied changes" />}</button>)}
+              {(['write', 'outline'] as LeftTab[]).map(t => <button key={t} role="tab" aria-selected={leftTab === t} className={leftTab === t ? 'active' : ''} onClick={() => setLeftTab(t)}>{t === 'write' ? 'Write' : 'Outline'}</button>)}
             </div>
             <div className="rail-scroll">
             {leftTab === 'write' && <>
@@ -586,34 +558,6 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               <label>Reader persona</label><select style={{ width: '100%' }} value={persona} onChange={e => setPersona(e.target.value)}>{PERSONAS.map(l => <option key={l}>{l}</option>)}</select>
             </div>
             </>}
-            {leftTab === 'style' && <>
-            <div className="dock"><h3>Tone</h3>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{TONES.map(t => { const st = tones[t]; return <button key={t} className={`tone-tag ${st || ''}`} title={`${t}: ${st === 'allow' ? 'allowed' : st === 'ban' ? 'not allowed' : 'off'} — click to cycle`} aria-label={`${t}, ${st === 'allow' ? 'allowed' : st === 'ban' ? 'not allowed' : 'off'}`} onClick={() => cycleTone(t)}>{t}</button> })}</div>
-            </div>
-            <div className="dock"><h3>Voice</h3>
-              <input style={{ width: '100%' }} list="voice-presets" value={voice} onChange={e => setVoice(e.target.value)} placeholder="Describe a voice, or pick an example…" />
-              <datalist id="voice-presets">{VOICE_PRESETS.map(v => <option key={v} value={v} />)}</datalist>
-            </div>
-            <div className="dock"><h3>Syntax</h3>
-              <label>Sentence rhythm · Short ↔ Long</label>
-              <input type="range" min={1} max={3} step={1} value={rhythm} onChange={e => setRhythm(Number(e.target.value))} style={{ width: '100%' }} />
-              <div className="meta">{RHYTHMS[rhythm]}</div>
-              <label>Grammatical voice</label>
-              <div className="mode-toggle" style={{ display: 'flex' }}><button className={gramVoice === 'active' ? 'active' : ''} onClick={() => setGramVoice('active')} style={{ flex: 1 }}>Strictly active</button><button className={gramVoice === 'passive' ? 'active' : ''} onClick={() => setGramVoice('passive')} style={{ flex: 1 }}>Passive permitted</button></div>
-              <label>Clause complexity</label>
-              <select style={{ width: '100%' }} value={clause} onChange={e => setClause(e.target.value)}><option>Simple</option><option>Coordinated</option><option>Subordinated</option></select>
-              <label>Information density · Sparse ↔ Dense</label>
-              <input type="range" min={1} max={3} step={1} value={density} onChange={e => setDensity(Number(e.target.value))} style={{ width: '100%' }} />
-              <div className="meta">{density === 1 ? 'Sparse' : density === 3 ? 'Dense' : 'Balanced'}</div>
-            </div>
-            <div className="dock"><h3>Audience</h3>
-              <label>Who is reading this?</label>
-              <input style={{ width: '100%' }} value={audText} onChange={e => setAudText(e.target.value)} placeholder="Stakeholders, undergraduates…" />
-              <label>Knowledge · 1 Beginner ↔ 5 Expert</label>
-              <input type="range" min={1} max={5} step={1} value={audLevel} onChange={e => setAudLevel(Number(e.target.value))} style={{ width: '100%' }} />
-              <div className="meta">{audLevel}/5</div>
-            </div>
-            </>}
             {leftTab === 'outline' && <>
             <div className="dock outline-dock"><h3>Outline editor</h3>
               <div className="meta" style={{ marginBottom: 8 }}>Edit outline here · main editor stays separate · saves automatically.</div>
@@ -624,7 +568,6 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             </div>
             </>}
             </div>
-            <div className="rail-foot"><button className="primary" disabled={!dirty} onClick={applySettings} style={{ width: '100%' }}>Apply settings{dirty ? ' ●' : ''}</button></div>
           </>}
         </aside>
 
@@ -666,11 +609,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             </>}
             {editing && rightTab === 'reader' && <>
             <div className="dock"><h3><span className="swatch" style={{ background: 'var(--ai)' }} />Perceived main idea{(loading.main || loading.outline) && <Spinner />}</h3>
-              <div className="quote-serif">{mainIdea || diagram.caption || '—'}</div>
-              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}><button disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshMainIdea}>{loading.main ? 'Reading…' : 'Main idea'}</button>
-              <select value={diagramKind} onChange={e => setDiagramKind(e.target.value as any)}><option value="mindmap">Mindmap</option><option value="flowchart">Flowchart</option></select>
-              <button disabled={!editing} onClick={refreshDiagram}>{loading.diagram ? 'Drawing…' : 'Draw diagram'}</button></div>
-              <Diagram source={diagram.mermaid} caption="" nodes={diagram.nodes} onNode={n => focusAnchor({ id: `dg:${n.label}`, kind: 'reaction', quote: n.quote, context: n.context, title: n.label, detail: n.quote })} />
+              <div className="quote-serif">{mainIdea || '—'}</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}><button disabled={!editing} onMouseDown={e => e.preventDefault()} onClick={refreshMainIdea}>{loading.main ? 'Reading…' : 'Main idea'}</button></div>
               {outline.map((o, i) => <div key={i} {...keyAct(() => focusAnchor({ id: `o${i}`, kind: 'reaction', quote: o.quote, context: o.context, title: 'Outline', detail: o.label }))} className="dock-item" onClick={() => focusAnchor({ id: `o${i}`, kind: 'reaction', quote: o.quote, context: o.context, title: 'Outline', detail: o.label })}>{o.label}<div className="meta">“{o.quote}”</div></div>)}
               <button style={{ marginTop: 8 }} onMouseDown={e => e.preventDefault()} onClick={refreshOutline}>Outline</button>
             </div>
@@ -711,7 +651,12 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             </>}
             {(rightTab === 'suggest' || !editing) && <div className="dock dock-section suggest-dock"><h3><span className="swatch" style={{ background: 'var(--grey)' }} />Suggestions{loading.complete && <Spinner />}</h3>
               <div className="dock-scroll">
-              {suggestions.map((s, i) => <div key={`s${i}`} {...keyAct(() => acceptGhost(i))} className={`ghost-row ${i === ghostIdx ? 'sel' : ''}`} onClick={() => acceptGhost(i)}><span className="quote-serif">{s}</span></div>)}
+              <div className="sugg-flex">
+                <button className="reroll-btn" onMouseDown={e => e.preventDefault()} onClick={reroll} title="Reroll — different options (`)" aria-label="Reroll suggestions">↻</button>
+                <div className="sugg-list">
+                {suggestions.map((s, i) => <div key={`s${i}`} {...keyAct(() => acceptGhost(i))} className={`ghost-row ${i === ghostIdx ? 'sel' : ''}`} onClick={() => acceptGhost(i)}><span className="quote-serif">{s}</span></div>)}
+                </div>
+              </div>
               {suggHistory.map((s, i) => <div key={`h${i}`} className="ghost-row">{s}</div>)}
               {loading.complete && !suggestions.length && <div className="meta"><LoadingDots /></div>}{!suggestions.length && !suggHistory.length && !loading.complete && <div className="meta">No suggestions yet — keep writing, or press Ctrl+Space.</div>}
               </div>
@@ -766,7 +711,12 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       )}
       {suggestions.length > 0 && (
         <div className="sugg-popup fade" style={{ left: suggPos.x, top: suggPos.y, maxHeight: suggPos.h, overflowY: 'auto' }} role="listbox" aria-label="Suggestions">
-          {suggestions.map((s, i) => <div key={i} className={`sugg-row ${i === ghostIdx ? 'sel' : ''}`} onMouseDown={e => { e.preventDefault(); acceptGhost(i) }} onMouseEnter={() => { setGhostIdx(i); refs.current.idx = i; showGhost(i) }}><span className="num">{i + 1}</span>{s}</div>)}
+          <div className="sugg-flex">
+            <button className="reroll-btn" onMouseDown={e => { e.preventDefault(); reroll() }} title="Reroll — different options (`)" aria-label="Reroll suggestions">↻</button>
+            <div className="sugg-list">
+              {suggestions.map((s, i) => <div key={i} className={`sugg-row ${i === ghostIdx ? 'sel' : ''}`} onMouseDown={e => { e.preventDefault(); acceptGhost(i) }} onMouseEnter={() => { setGhostIdx(i); refs.current.idx = i; showGhost(i) }}><span className="num">{i + 1}</span>{s}</div>)}
+            </div>
+          </div>
         </div>
       )}
       {lintGroup.length > 0 && (

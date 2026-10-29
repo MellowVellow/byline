@@ -15,7 +15,7 @@ class Settings:
     meta_base_url: str = os.getenv("META_BASE_URL", "https://api.meta.ai/v1")
     meta_model: str = os.getenv("META_MODEL", "muse-spark-1.3")
     openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
-    fallback_model: str = os.getenv("FALLBACK_MODEL", "google/gemini-2.5-flash-lite")
+    fallback_model: str = os.getenv("FALLBACK_MODEL", "meta-llama/llama-3.3-70b-instruct")
     languagetool_url: str = os.getenv("LANGUAGETOOL_URL", "http://localhost:8010/v2/check")
     supabase_url: str = os.getenv("SUPABASE_URL", "")
     supabase_key: str = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_ANON_KEY", "")

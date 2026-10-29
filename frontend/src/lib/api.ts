@@ -32,7 +32,6 @@ export const api = {
   research: (b: unknown) => postRaw('/api/research', b),
   cite: (b: unknown) => postRaw('/api/cite', b),
   bibliography: (style: string, items: unknown[]) => postRaw('/api/cite/bibliography', { style, items }),
-  diagram: (b: unknown) => postRaw('/api/diagram', b),
   outlineGenerate: (b: unknown) => postRaw('/api/outline-generate', b),
   setupAgent: (b: unknown) => postRaw('/api/setup-agent', b),
   setupQuestions: (b: unknown) => postRaw('/api/setup-questions', b),

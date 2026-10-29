@@ -1,0 +1,366 @@
+{
+  "rows": [
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-4-scout",
+      "case": "complete_phrase_anxiety",
+      "sample": 0,
+      "ms": 3419,
+      "in": 99,
+      "out": 28,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-4-scout",
+      "case": "complete_phrase_anxiety",
+      "sample": 1,
+      "ms": 1475,
+      "in": 99,
+      "out": 21,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-4-scout",
+      "case": "complete_phrase_cooking",
+      "sample": 0,
+      "ms": 1823,
+      "in": 105,
+      "out": 27,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-4-scout",
+      "case": "complete_phrase_cooking",
+      "sample": 1,
+      "ms": 1760,
+      "in": 105,
+      "out": 28,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-4-scout",
+      "case": "annotate_quote",
+      "sample": 0,
+      "ms": 10076,
+      "in": 179,
+      "out": 179,
+      "reasoning": 0,
+      "ok": false,
+      "detail": "parse-fail Expecting ',' delimiter: line 8 column 29 (char 274)"
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-4-scout",
+      "case": "annotate_quote",
+      "sample": 1,
+      "ms": 9059,
+      "in": 179,
+      "out": 167,
+      "reasoning": 0,
+      "ok": false,
+      "detail": "quotes 1/2 verbatim"
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-4-scout",
+      "case": "main_idea",
+      "sample": 0,
+      "ms": 1527,
+      "in": 81,
+      "out": 18,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-4-scout",
+      "case": "main_idea",
+      "sample": 1,
+      "ms": 1854,
+      "in": 81,
+      "out": 18,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-4-scout",
+      "case": "reactions",
+      "sample": 0,
+      "ms": 9152,
+      "in": 148,
+      "out": 174,
+      "reasoning": 0,
+      "ok": true,
+      "detail": "quotes 3/3 verbatim"
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-4-scout",
+      "case": "reactions",
+      "sample": 1,
+      "ms": 8195,
+      "in": 148,
+      "out": 176,
+      "reasoning": 0,
+      "ok": true,
+      "detail": "quotes 3/3 verbatim"
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "complete_phrase_anxiety",
+      "sample": 0,
+      "ms": 917,
+      "in": 98,
+      "out": 24,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "complete_phrase_anxiety",
+      "sample": 1,
+      "ms": 824,
+      "in": 98,
+      "out": 21,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "complete_phrase_cooking",
+      "sample": 0,
+      "ms": 1152,
+      "in": 103,
+      "out": 20,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "complete_phrase_cooking",
+      "sample": 1,
+      "ms": 1042,
+      "in": 104,
+      "out": 21,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "annotate_quote",
+      "sample": 0,
+      "ms": 3524,
+      "in": 198,
+      "out": 144,
+      "reasoning": 0,
+      "ok": true,
+      "detail": "quotes 2/2 verbatim"
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "annotate_quote",
+      "sample": 1,
+      "ms": 3898,
+      "in": 198,
+      "out": 169,
+      "reasoning": 0,
+      "ok": true,
+      "detail": "quotes 2/2 verbatim"
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "main_idea",
+      "sample": 0,
+      "ms": 1354,
+      "in": 82,
+      "out": 20,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "main_idea",
+      "sample": 1,
+      "ms": 1743,
+      "in": 82,
+      "out": 26,
+      "reasoning": 0,
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "reactions",
+      "sample": 0,
+      "ms": 10576,
+      "in": 150,
+      "out": 241,
+      "reasoning": 0,
+      "ok": true,
+      "detail": "quotes 3/3 verbatim"
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "reactions",
+      "sample": 1,
+      "ms": 3623,
+      "in": 170,
+      "out": 184,
+      "reasoning": 0,
+      "ok": true,
+      "detail": "quotes 3/3 verbatim"
+    }
+  ],
+  "raw": [
+    {
+      "model": "meta-llama/llama-4-scout",
+      "case": "complete_phrase_anxiety",
+      "sample": 0,
+      "content": "societal factors and economic disparities.\n \ncomplex relationships between anxiety and overall wellbeing.\n \npsychological and sociological influences on health outcomes."
+    },
+    {
+      "model": "meta-llama/llama-4-scout",
+      "case": "complete_phrase_anxiety",
+      "sample": 1,
+      "content": "societal and economic factors at play.\n geographical location and socioeconomic status.\n demographic characteristics and healthcare policy."
+    },
+    {
+      "model": "meta-llama/llama-4-scout",
+      "case": "complete_phrase_cooking",
+      "sample": 0,
+      "content": "factors that influence our daily food choices.\nhabits that form in our busy kitchens.\ndecisions made at the grocery store shelf."
+    },
+    {
+      "model": "meta-llama/llama-4-scout",
+      "case": "complete_phrase_cooking",
+      "sample": 1,
+      "content": "factors that influence our daily meal choices somehow\nhabits formed in childhood affect eating behaviors greatly\nsocial environments play a significant role always apparently"
+    },
+    {
+      "model": "meta-llama/llama-4-scout",
+      "case": "annotate_quote",
+      "sample": 0,
+      "content": "Here are the issues:\n\n```json\n{\n  \"issues\": [\n    {\n      \"quote\": \"plethora\",\n      \"context\": \"A plethora of reasons exist.\",\n      \"type\": \"vocabulary\",\n      \"reason\": \"The word 'plethora' is a formal or fancy word that may not be suitable for a general-level argument.\",\n      \"replacement\": \"many\" or \"a lot of\"\n    },\n    {\n      \"quote\": \"just cute\",\n      \"context\": \"Finally, cats are just cute.\",\n      \"type\": \"relevance\",\n      \"reason\": \"The conclusion that cats are better than dogs because they are 'just cute' feels arbitrary and not thoroughly supported by the previous points.\",\n      \"replacement\": \"perhaps rephrase to provide a more substantial reason why being cute is relevant to the argument\"\n    }\n  ]\n}\n```"
+    },
+    {
+      "model": "meta-llama/llama-4-scout",
+      "case": "annotate_quote",
+      "sample": 1,
+      "content": "Here are the issues:\n\n```\n{\n  \"issues\": [\n    {\n      \"quote\": \"A plethora of reasons exist\",\n      \"context\": \"A plethora of reasons exist. Cats are quiet.\",\n      \"type\": \"vocabulary\",\n      \"reason\": \"The word 'plethora' is too fancy and formal for a general-level argument.\",\n      \"replacement\": \"Many reasons exist\"\n    },\n    {\n      \"quote\": \"Cats are just cute\",\n      \"context\": \"Finally, cats are just cute.\",\n      \"type\": \"relevance\",\n      \"reason\": \"The statement is too subjective and doesn't provide a substantial reason why cats are better than dogs.\",\n      \"replacement\": \"Consider a more specific reason, e.g., 'Cats are low-maintenance pets'\"\n    }\n  ]\n}\n```"
+    },
+    {
+      "model": "meta-llama/llama-4-scout",
+      "case": "main_idea",
+      "sample": 0,
+      "content": "Cats have several advantages over dogs, including being independent, quiet, and long-lived."
+    },
+    {
+      "model": "meta-llama/llama-4-scout",
+      "case": "main_idea",
+      "sample": 1,
+      "content": "Cats have several advantages over dogs, including being independent, quiet, and long-lived."
+    },
+    {
+      "model": "meta-llama/llama-4-scout",
+      "case": "reactions",
+      "sample": 0,
+      "content": "Here are 3 reader reactions:\n\n```\n{\n  \"reactions\": [\n    {\n      \"quote\": \"Cats are independent\",\n      \"context\": \"Cats are independent, as I said.\",\n      \"kind\": \"comment\",\n      \"text\": \"Good point, but what does that have to do with choosing a pet?\"\n    },\n    {\n      \"quote\": \"A plethora of reasons exist\",\n      \"context\": \"A plethora of reasons exist.\",\n      \"kind\": \"critique\",\n      \"text\": \"That's a vague statement, what are these reasons?\"\n    },\n    {\n      \"quote\": \"Cats are quiet\",\n      \"context\": \"Cats are quiet. Dogs bark.\",\n      \"kind\": \"comment\",\n      \"text\": \"That's not always true, some dogs are quiet and some cats are loud\"\n    }\n  ]\n}\n```"
+    },
+    {
+      "model": "meta-llama/llama-4-scout",
+      "case": "reactions",
+      "sample": 1,
+      "content": "Here are 3 reader reactions:\n\n```\n{\n  \"reactions\": [\n    {\n      \"quote\": \"Cats are independent\",\n      \"context\": \"Cats are independent, as I said.\",\n      \"kind\": \"comment\",\n      \"text\": \"Common characteristic of cats, but doesn't necessarily make them better than dogs.\"\n    },\n    {\n      \"quote\": \"A plethora of reasons exist\",\n      \"context\": \"A plethora of reasons exist.\",\n      \"kind\": \"critique\",\n      \"text\": \"Not convincing, you haven't listed any reasons yet.\"\n    },\n    {\n      \"quote\": \"Cats live longer than dogs\",\n      \"context\": \"Cats live longer than dogs. Finally, cats are just cute.\",\n      \"kind\": \"question\",\n      \"text\": \"Is that really a valid reason to prefer cats?\"\n    }\n  ]\n}\n```"
+    },
+    {
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "complete_phrase_anxiety",
+      "sample": 0,
+      "content": "social and economic factors also play\ncultural and environmental influences as well\nsocioeconomic status and personal beliefs too"
+    },
+    {
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "complete_phrase_anxiety",
+      "sample": 1,
+      "content": "social and economic factors primarily\ncultural and environmental influences largely\nsocioeconomic status and policy mostly"
+    },
+    {
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "complete_phrase_cooking",
+      "sample": 0,
+      "content": "what we eat at home nightly\nthe role of food in healing\nhow meals bring us together"
+    },
+    {
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "complete_phrase_cooking",
+      "sample": 1,
+      "content": "the ingredients we have at home\nwhat we can cook in minutes\nhow food brings us all together"
+    },
+    {
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "annotate_quote",
+      "sample": 0,
+      "content": "{\"issues\": [\n{\"quote\": \"A plethora of reasons exist\", \n\"context\": \"Dogs needs daily walks. A plethora of reasons exist.\", \n\"type\": \"vocabulary\", \n\"reason\": \"The word 'plethora' is too formal for the general level of the text.\", \n\"replacement\": \"There are many reasons\"},\n{\"quote\": \"Finally, cats are just cute\", \n\"context\": \"Cats live longer than dogs. Finally, cats are just cute.\", \n\"type\": \"relevance\", \n\"reason\": \"The sentence seems out of place as it doesn't logically follow from the previous sentence about lifespan.\", \n\"replacement\": \"Additionally, cats are often considered cute\"}\n]}"
+    },
+    {
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "annotate_quote",
+      "sample": 1,
+      "content": "{\"issues\": [\n{\"quote\": \"A plethora of reasons exist\", \n\"context\": \"Cats are independent, as I said. Dogs needs daily walks. A plethora of reasons exist.\", \n\"type\": \"vocabulary\", \n\"reason\": \"The word 'plethora' is too formal for a general-level text\", \n\"replacement\": \"There are many reasons\"},\n{\"quote\": \"Finally, cats are just cute\", \n\"context\": \"Cats are quiet. Dogs bark. Cats live longer than dogs. Finally, cats are just cute.\", \n\"type\": \"relevance\", \n\"reason\": \"The statement 'cats are just cute' is too subjective and doesn't provide a strong argument to support why cats are better than dogs\", \n\"replacement\": \"Additionally, cats have a more appealing appearance to many people\"}\n]}"
+    },
+    {
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "main_idea",
+      "sample": 0,
+      "content": "Cats have several advantages over dogs, including their independence, quiet nature, and longer lifespan."
+    },
+    {
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "main_idea",
+      "sample": 1,
+      "content": "Cats are generally considered to be a more low-maintenance and longer-lived pet than dogs, with several other desirable traits."
+    },
+    {
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "reactions",
+      "sample": 0,
+      "content": "```json\n{\n  \"reactions\": [\n    {\n      \"quote\": \"as I said\",\n      \"context\": \"Cats are independent, as I said.\",\n      \"kind\": \"critique\",\n      \"text\": \"The statement 'as I said' implies a previous mention, but this is the beginning of the text. It feels like a repetition or a reference to a non-existent previous statement.\"\n    },\n    {\n      \"quote\": \"A plethora of reasons exist\",\n      \"context\": \"Dogs needs daily walks. A plethora of reasons exist.\",\n      \"kind\": \"question\",\n      \"text\": \"What are these reasons? The text does not specify, making this statement unclear and lacking in detail.\"\n    },\n    {\n      \"quote\": \"Cats live longer than dogs. Finally, cats are just cute.\",\n      \"context\": \"Cats live longer than dogs. Finally, cats are just cute.\",\n      \"kind\": \"critique\",\n      \"text\": \"The jump from discussing lifespan to stating that cats are cute feels abrupt and unrelated. It would be more cohesive to connect these ideas or to use transitional phrases.\"\n    }\n  ]\n}\n```"
+    },
+    {
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "case": "reactions",
+      "sample": 1,
+      "content": "{\"reactions\": [\n{\"quote\": \"as I said\", \"context\": \"Cats are independent, as I said.\", \"kind\": \"critique\", \"text\": \"The text does not contain a previous statement to support the phrase 'as I said', making it unclear what was previously stated.\"},\n{\"quote\": \"A plethora of reasons exist\", \"context\": \"A plethora of reasons exist.\", \"kind\": \"question\", \"text\": \"What are these reasons that are being referred to? The text does not provide any specific examples or explanations.\"},\n{\"quote\": \"Finally, cats are just cute\", \"context\": \"Cats live longer than dogs. Finally, cats are just cute.\", \"kind\": \"comment\", \"text\": \"The transition to the statement about cats being cute seems abrupt and unrelated to the previous point about lifespan, making the text feel a bit disjointed.\"}\n]}"
+    }
+  ]
+}

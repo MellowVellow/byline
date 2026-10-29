@@ -1,4 +1,4 @@
-"""Meta Muse primary (reasoning_effort=minimal), OpenRouter Gemini fallback. Soft-fail only."""
+"""OpenRouter llama-3.3-70b-instruct primary, Meta Muse fallback. Soft-fail only."""
 from __future__ import annotations
 import json, logging, re, time
 from typing import Any
@@ -51,6 +51,13 @@ async def _call(url: str, key: str, model: str, system: str, user: str, max_toke
 async def chat(system: str, user: str, *, max_tokens: int = 800, temperature: float = 0.7) -> tuple[str, dict, str]:
     """Return (content, usage, model_used). Raise LLMError after both providers fail."""
     errors = []
+    if settings.openrouter_api_key:
+        try:
+            c, u = await _call("https://openrouter.ai/api/v1/chat/completions", settings.openrouter_api_key, settings.fallback_model, system, user, max_tokens, temperature, False)
+            if c.strip(): return c, u, settings.fallback_model
+            errors.append("openrouter: empty content")
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"openrouter: {type(e).__name__}: {e}")
     if settings.meta_api_key:
         try:
             c, u = await _call(f"{settings.meta_base_url}/chat/completions", settings.meta_api_key, settings.meta_model, system, user, max_tokens, temperature, True)
@@ -58,13 +65,6 @@ async def chat(system: str, user: str, *, max_tokens: int = 800, temperature: fl
             errors.append("meta: empty content")
         except Exception as e:  # noqa: BLE001
             errors.append(f"meta: {type(e).__name__}: {e}")
-    if settings.openrouter_api_key:
-        try:
-            c, u = await _call("https://openrouter.ai/api/v1/chat/completions", settings.openrouter_api_key, settings.fallback_model, system, user, min(max_tokens, 500), temperature, False)
-            if c.strip(): return c, u, settings.fallback_model
-            errors.append("openrouter: empty content")
-        except Exception as e:  # noqa: BLE001
-            errors.append(f"openrouter: {type(e).__name__}: {e}")
     log.warning("LLM failed: %s", "; ".join(errors))
     raise LLMError("; ".join(errors) or "no LLM key configured")
 
@@ -103,15 +103,16 @@ FACTS_FORMAT = {"type": "json_schema", "name": "Facts", "schema": {"type": "obje
 
 async def schema_call(system: str, user: str, schema: dict, name: str, *, max_tokens: int = 1200) -> tuple[dict, dict, str]:
     """Chat completions with json_schema constrained decoding."""
-    if not settings.meta_api_key:
-        raise LLMError("META_API_KEY not set")
-    body = {"model": settings.meta_model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            "max_tokens": max_tokens, "temperature": 0.4, "reasoning_effort": "minimal",
-            "response_format": {"type": "json_schema", "json_schema": {"name": name, "schema": schema}}}
-    r = await _client().post(f"{settings.meta_base_url}/chat/completions", json=body, headers={"Authorization": f"Bearer {settings.meta_api_key}", "Content-Type": "application/json"})
+    if not settings.openrouter_api_key:
+        raise LLMError("OPENROUTER_API_KEY not set")
+    body = {"model": settings.fallback_model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "max_tokens": max_tokens, "temperature": 0.4,
+            "response_format": {"type": "json_schema", "json_schema": {"name": name, "schema": schema, "strict": True}}}
+    r = await _client().post("https://openrouter.ai/api/v1/chat/completions", json=body,
+                             headers={"Authorization": f"Bearer {settings.openrouter_api_key}", "Content-Type": "application/json", "X-Title": "Byline"})
     r.raise_for_status(); d = r.json()
     content = (d["choices"][0]["message"].get("content") or "") if d.get("choices") else ""
-    return extract_json(content), d.get("usage") or {}, settings.meta_model
+    return extract_json(content), d.get("usage") or {}, settings.fallback_model
 
 
 async def local_text(system: str, user: str, *, max_tokens: int = 120) -> str:

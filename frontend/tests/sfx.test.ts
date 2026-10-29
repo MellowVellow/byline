@@ -4,19 +4,19 @@ import { sfxEnabled, sfxMuted, sfxToggle, setSfxEnabled } from '../src/lib/sfx'
 
 describe('sfx default', () => {
   beforeEach(() => { localStorage.clear() })
-  it('defaults ON when unset (fresh origin)', () => {
-    expect(sfxEnabled()).toBe(true)
-    expect(sfxMuted()).toBe(false)
-  })
-  it('stays OFF after explicit mute', () => {
-    setSfxEnabled(false)
+  it('defaults MUTED when unset (fresh origin)', () => {
     expect(sfxEnabled()).toBe(false)
     expect(sfxMuted()).toBe(true)
   })
-  it('toggle flips and persists', () => {
-    expect(sfxToggle()).toBe(true) // enabled -> toggle returns muted=true
-    expect(localStorage.getItem('byline.sfx')).toBe('0')
-    expect(sfxToggle()).toBe(false) // muted -> toggle returns muted=false
+  it('stays ON after explicit enable', () => {
+    setSfxEnabled(true)
     expect(sfxEnabled()).toBe(true)
+    expect(sfxMuted()).toBe(false)
+  })
+  it('toggle flips and persists', () => {
+    expect(sfxToggle()).toBe(false) // muted -> toggle returns muted=false (now on)
+    expect(localStorage.getItem('byline.sfx')).toBe('1')
+    expect(sfxToggle()).toBe(true) // enabled -> toggle returns muted=true
+    expect(sfxEnabled()).toBe(false)
   })
 })

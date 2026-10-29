@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { sfxStep, sfxPick, sfxToggle, sfxMuted } from '../lib/sfx'
+import { sfxStep, sfxPick } from '../lib/sfx'
 import { api } from '../lib/api'
 import type { OutlineDraft, DocSection } from '../lib/types'
 import '../styles/setup-wizard.css'
@@ -23,7 +23,6 @@ export default function SetupWizard({ answers, setAnswers, onClose, onGenerate, 
   onGenerate: (a?: Answers) => Promise<boolean>; generating: boolean; onApplySetup?: (p: SetupPayload) => void
   tab: WizardTab; setTab: (t: WizardTab) => void; outline?: OutlineReview; search?: unknown
 }) {
-  const [muted, setMuted] = useState(sfxMuted())
   const [context, setContext] = useState(answers.key_points || '')
   const [questions, setQuestions] = useState<Q[]>([])
   const [picks, setPicks] = useState<Record<string, string>>({})
@@ -62,7 +61,6 @@ export default function SetupWizard({ answers, setAnswers, onClose, onGenerate, 
         <div className="wz-row" style={{ justifyContent: 'space-between' }}>
           <span style={{ fontFamily: '"Source Serif 4",serif', fontStyle: 'italic', fontSize: 14, color: '#A93226' }}>Byline — setup</span>
           <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button className={`wz-icon ${muted ? '' : 'on'}`} aria-label="Toggle sound" onClick={() => { const m = sfxToggle(); setMuted(m); if (!m) sfxPick() }}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5 6 9H2v6h4l5 4V5z" />{muted ? <line x1="22" y1="9" x2="16" y2="15" /> : <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />}</svg></button>
             <button className="wz-icon" aria-label="Close" onClick={close}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg></button>
           </span>
         </div>
@@ -94,7 +92,7 @@ export default function SetupWizard({ answers, setAnswers, onClose, onGenerate, 
               </div>)}
               {genErr && <div role="alert" style={{ color: '#B3261E', fontSize: 14 }}>Generation failed — check connection, retry.</div>}
               <div className="wz-row"><button className="wz-chip" onClick={() => { setQuestions([]); setPicks({}); setOther({}) }}>← Back</button><span className="spacer" />
-                <button className="wz-cta" disabled={generating} onClick={finish}>{generating ? 'Generating…' : 'Apply settings + generate outline →'}</button></div>
+                <button className="wz-cta" disabled={generating} onClick={finish}>{generating ? 'Generating…' : 'Generate outline →'}</button></div>
             </>}
         </div>}
 

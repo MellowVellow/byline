@@ -60,6 +60,7 @@ export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
     { keys: 'Tab', action: 'Accept highlighted suggestion / apply highlighted fix', context: 'Suggestion or popup open' },
     { keys: '1 – 3', action: 'Accept suggestion #N', context: 'Suggestions open' },
     { keys: '↑ / ↓', action: 'Cycle suggestions', context: 'Suggestions open' },
+    { keys: '`', action: 'Reroll — fresh suggestion options', context: 'Suggestions open' },
     { keys: 'Esc', action: 'Dismiss suggestions', context: 'Suggestions open' },
     { keys: 'Double-click word', action: 'Synonyms for word', context: 'Editor' },
     { keys: '1 – 3 / Tab', action: 'Pick synonym #N / first synonym', context: 'Synonyms open' },

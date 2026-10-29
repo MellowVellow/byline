@@ -3,7 +3,7 @@ import { api } from '../lib/api'
 import { locateQuote, type TextMap } from '../lib/locate'
 import { LINTER_RULE_LIBRARY, LINT_PRIORITY, type LintResult } from '../lib/rules'
 import { lintStore, modeStore, syncLint } from '../editor/decorations'
-import { buildStyle, type AppliedSettings } from '../lib/buildStyle'
+import type { AppliedSettings } from '../lib/types'
 import { keys as storageKeys, setStr } from '../lib/storage'
 import { recordCall } from '../lib/metrics'
 
@@ -62,7 +62,7 @@ export function useLint(deps: LintDeps) {
     lintBusyRef.current = true
     const ctl = new AbortController(); lintAbortRef.current = ctl
     deps.setLoad('lint', true); setLintStatus('Linting…')
-    const d = await api.lint({ context: deps.appliedRef.current.context, style: buildStyle(deps.appliedRef.current), text: tm.text, active_rules: active }, ctl.signal); recordCall(d?.meta)
+    const d = await api.lint({ context: deps.appliedRef.current.context, text: tm.text, active_rules: active }, ctl.signal); recordCall(d?.meta)
     lintBusyRef.current = false; deps.setLoad('lint', false)
     if (ctl.signal.aborted) return
     if (!d?.ok) { setLintStatus(`Lint failed — ${String(d?.error || 'unknown backend error').slice(0, 140)}`); return }

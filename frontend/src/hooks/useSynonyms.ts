@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { api } from '../lib/api'
-import { buildStyle, type AppliedSettings } from '../lib/buildStyle'
+import type { AppliedSettings } from '../lib/types'
 import type { TextMap } from '../lib/locate'
 import { blip } from '../lib/sfx'
 
@@ -55,7 +55,7 @@ export function useSynonyms(deps: SynonymDeps) {
     const sent = tm.text.split(/(?<=[.!?])\s/).find(s => s.includes(alt.text)) || tm.text.slice(Math.max(0, fragIdx - 120), fragIdx + 160)
     deps.setLoad('synonyms', true)
     const A = deps.appliedRef.current
-    const d = await api.synonyms({ context: A.context, level: A.level, word: alt.text, sentence: sent, style: buildStyle(A) })
+    const d = await api.synonyms({ context: A.context, level: A.level, word: alt.text, sentence: sent })
     deps.setLoad('synonyms', false)
     if (d?.synonyms) { setSynonyms(d.synonyms.slice(0, 3)); blip('done') }
   }

@@ -10,3 +10,4 @@ export type Anchor = { id: string; kind: AnchorKind; tone?: string; quote: strin
 export type Fact = { fact: string; source_title: string; url: string; locator: string; excerpt: string }
 export type OutlineDraft = { heading: string; purpose: string; points: string[]; state: 'pending' | 'inserted' | 'skipped' }
 export type DocSection = { heading: string; preview: string; from: number; to: number }
+export type AppliedSettings = { context: string; level: string; assist: string; persona: string }

@@ -1,9 +1,5 @@
 /** Shared writing-config constants. Mirror: backend/app/constants.py — keep in sync. */
 export const DICTIONS = ['Formal', 'Casual', 'Slang', 'Simple', 'General', 'Academic', 'Technical', 'Buzzwords', 'Bullshitting']
-export const TONES = ['Serious', 'Humorous', 'Sarcastic', 'Bleak and oppressive', 'Objective', 'Subjective', 'Logical', 'Emotional', 'Intimate', 'Distant', 'Journal', 'Formal conference speech']
-export const CLAUSES = ['Simple', 'Coordinated', 'Subordinated']
-export const VOICE_PRESETS = ["Ernest Hemingway — minimalist, direct prose, short declarative sentences, no adornment", "F. Scott Fitzgerald (The Great Gatsby) — lyrical, rich with symbolic imagery, long musical sentences", "Gen Z style — emotionally expressive, internet-native, casual, still readable", "Poem / Poetic — exaggerated, lyrical imagery, sometimes meta, rhythm over exposition"]
-export const RHYTHMS = ['', 'Staccato', 'Varied', 'Flowing']
 export const ASSISTS = ['Hint', 'Phrase', 'Sentence', 'Block', 'Question']
 export const ASSIST_DESCRIPTIONS: Record<string, string> = {
   Hint: '1–3 word idea cues only.',
