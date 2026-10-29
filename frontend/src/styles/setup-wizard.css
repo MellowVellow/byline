@@ -30,3 +30,5 @@
 @keyframes wzPulse{50%{opacity:.35}}
 .wz-icon:focus-visible,.wz-chip:focus-visible,.wz-dot:focus-visible,.wz-cta:focus-visible,.wz-pill:focus-visible{outline:2px solid #A93226;outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.wz-card,.wz-card::before,.wz-step,.wz-glowbar,.wz-pill .rec,.wz-cta:hover::after{animation:none!important;transition:none!important}.wz-chip:hover,.wz-dot.on{transform:none}}
+
+@media(max-width:640px){.wz-back{padding:10px}.wz-card{padding:24px 18px 18px}.wz-chip{min-height:44px}}
