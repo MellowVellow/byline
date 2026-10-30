@@ -12,6 +12,8 @@ if _env.exists():
 
 # Verified Meta-authored model identifiers across approved providers
 APPROVED_META_MODELS = {
+    # Hackathon primary model (Baseten-hosted)
+    "meta-models/muse-spark-open-1026",
     # OpenRouter Meta models
     "meta-llama/llama-3.3-70b-instruct",
     "meta-llama/llama-3.1-70b-instruct",
@@ -38,7 +40,8 @@ class Settings:
     openrouter_model: str = os.getenv("FALLBACK_MODEL", os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct"))
     fallback_model: str = openrouter_model
     baseten_api_key: str = os.getenv("BASETEN_API_KEY", "")
-    baseten_model: str = os.getenv("BASETEN_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
+    # Hackathon primary: always use muse-spark-open-1026 on Baseten
+    baseten_model: str = os.getenv("BASETEN_MODEL", "meta-models/muse-spark-open-1026")
     languagetool_url: str = os.getenv("LANGUAGETOOL_URL", "http://localhost:8010/v2/check")
     supabase_url: str = os.getenv("SUPABASE_URL", "")
     supabase_key: str = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_ANON_KEY", "")

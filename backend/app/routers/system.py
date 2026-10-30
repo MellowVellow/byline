@@ -15,9 +15,9 @@ async def health():
             lt = r.status_code == 200
     except Exception: pass
     return ok(
-        meta_configured=bool(settings.meta_api_key or settings.openrouter_api_key or settings.baseten_api_key),
-        provider="meta" if settings.meta_api_key else ("openrouter" if settings.openrouter_api_key else ("baseten" if settings.baseten_api_key else "mock")),
-        model=settings.meta_model if settings.meta_api_key else (settings.openrouter_model if settings.openrouter_api_key else "mock:meta-llama-3.3-70b-instruct"),
+        meta_configured=bool(settings.baseten_api_key or settings.meta_api_key or settings.openrouter_api_key),
+        provider="baseten" if settings.baseten_api_key else ("meta" if settings.meta_api_key else ("openrouter" if settings.openrouter_api_key else "mock")),
+        model="meta-models/muse-spark-open-1026" if settings.baseten_api_key else (settings.meta_model if settings.meta_api_key else "mock:muse-spark-open-1026"),
         languagetool=lt
     )
 
@@ -26,11 +26,11 @@ async def get_approved_models():
     """Return explicit allowlist of Meta-authored models and current runtime active configuration."""
     return ok(
         approved_models=sorted(list(APPROVED_META_MODELS)),
-        active_model=settings.meta_model if settings.meta_api_key else (settings.openrouter_model if settings.openrouter_api_key else "meta-llama/llama-3.3-70b-instruct"),
-        active_provider="meta_api" if settings.meta_api_key else ("openrouter" if settings.openrouter_api_key else ("baseten" if settings.baseten_api_key else "mock_engine")),
+        active_model="meta-models/muse-spark-open-1026" if settings.baseten_api_key else (settings.meta_model if settings.meta_api_key else "meta-models/muse-spark-open-1026"),
+        active_provider="baseten_hackathon" if settings.baseten_api_key else ("meta_api" if settings.meta_api_key else ("openrouter" if settings.openrouter_api_key else "mock_engine")),
+        baseten_available=bool(settings.baseten_api_key),
         meta_api_available=bool(settings.meta_api_key),
         openrouter_available=bool(settings.openrouter_api_key),
-        baseten_available=bool(settings.baseten_api_key),
     )
 
 @router.post("/api/dataset")

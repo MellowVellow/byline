@@ -147,22 +147,24 @@ def _mock_meta_response(system: str, user: str) -> tuple[str, dict, str]:
 
 async def chat(system: str, user: str, *, model: str | None = None, max_tokens: int = 800, temperature: float = 0.7) -> tuple[str, dict, str]:
     """Execute chat completion using approved Meta models exclusively.
-    Order of preference:
-      1. OpenRouter (serving Meta Llama 3.3/3.1)
-      2. Meta Model API (Muse Spark/Glimmer)
-      3. Baseten (serving Meta Llama 3.3/3.1)
-      4. Internal deterministic Mock Meta Engine (offline/dev fallback)
+    Hackathon priority order:
+      1. Baseten (meta-models/muse-spark-open-1026) — primary
+      2. Meta Model API (Muse Spark/Glimmer) — fallback
+      3. Internal deterministic Mock Meta Engine (offline/dev fallback)
     """
-    target_model = validate_meta_model(model or settings.openrouter_model or settings.fallback_model)
+    # Hackathon: always route through muse-spark-open-1026 on Baseten
+    HACKATHON_MODEL = "meta-models/muse-spark-open-1026"
+    target_model = HACKATHON_MODEL
     errors: list[str] = []
 
-    # 1. OpenRouter with approved Meta model
-    if settings.openrouter_api_key:
+    # 1. Baseten — primary (muse-spark-open-1026, hackathon)
+    if settings.baseten_api_key:
         try:
+            url = "https://bridge.baseten.co/v1/chat/completions"
             c, u = await _call(
-                "https://openrouter.ai/api/v1/chat/completions",
-                settings.openrouter_api_key,
-                target_model,
+                url,
+                settings.baseten_api_key,
+                HACKATHON_MODEL,
                 system,
                 user,
                 max_tokens,
@@ -170,12 +172,12 @@ async def chat(system: str, user: str, *, model: str | None = None, max_tokens: 
                 is_meta_api=False,
             )
             if c.strip():
-                return c, u, target_model
-            errors.append("openrouter: empty content")
+                return c, u, HACKATHON_MODEL
+            errors.append("baseten: empty content")
         except Exception as e:  # noqa: BLE001
-            errors.append(f"openrouter: {type(e).__name__}: {e}")
+            errors.append(f"baseten: {type(e).__name__}: {e}")
 
-    # 2. Meta Model API
+    # 2. Meta Model API — fallback
     if settings.meta_api_key:
         meta_m = validate_meta_model(settings.meta_model)
         try:
@@ -195,28 +197,7 @@ async def chat(system: str, user: str, *, model: str | None = None, max_tokens: 
         except Exception as e:  # noqa: BLE001
             errors.append(f"meta_api: {type(e).__name__}: {e}")
 
-    # 3. Baseten with approved Meta model
-    if settings.baseten_api_key:
-        baseten_m = validate_meta_model(settings.baseten_model)
-        try:
-            url = f"https://bridge.baseten.co/v1/chat/completions"
-            c, u = await _call(
-                url,
-                settings.baseten_api_key,
-                baseten_m,
-                system,
-                user,
-                max_tokens,
-                temperature,
-                is_meta_api=False,
-            )
-            if c.strip():
-                return c, u, baseten_m
-            errors.append("baseten: empty content")
-        except Exception as e:  # noqa: BLE001
-            errors.append(f"baseten: {type(e).__name__}: {e}")
-
-    # 4. Safe offline deterministic mock engine (preserves Meta-only output without non-Meta runtime fallback)
+    # 3. Safe offline deterministic mock engine (preserves Meta-only output without non-Meta runtime fallback)
     log.info("Using offline Meta mock engine (keys unconfigured or remote unreachable): %s", "; ".join(errors) or "no keys")
     return _mock_meta_response(system, user)
 
@@ -233,7 +214,10 @@ async def timed_text(system: str, user: str, **kw) -> tuple[str, dict, str, floa
     return c, u, m, time.perf_counter() - t
 
 async def responses_call(input_data, *, instructions: str = "", tools=None, include=None, text_format=None, max_output_tokens: int = 1400, effort: str = "minimal") -> dict:
-    """Meta Model API Responses endpoint (web_search / files / structured)."""
+    """Meta Model API Responses endpoint (web_search / files / structured).
+    Uses Meta API key (required for Responses API web-search capability).
+    Baseten handles chat completions; Meta API handles grounded web-search Responses calls.
+    """
     if not settings.meta_api_key:
         # Offline mock research response grounded in simulated evidence
         return {
@@ -241,10 +225,12 @@ async def responses_call(input_data, *, instructions: str = "", tools=None, incl
             "annotations": [{"title": "Journal of Writing Research", "url": "https://example.org/writing-study"}],
             "search_results": [{"title": "Journal of Writing Research", "url": "https://example.org/writing-study"}],
             "usage": {"total_tokens": 150},
-            "model": "mock:muse-spark-1.3"
+            "model": "mock:muse-spark-open-1026"
         }
+    # Use the configured meta_model for Responses API (web-search grounding requires Meta API key)
+    resp_model = validate_meta_model(settings.meta_model)
     body: dict = {
-        "model": validate_meta_model(settings.meta_model),
+        "model": resp_model,
         "input": input_data,
         "max_output_tokens": max_output_tokens,
         "reasoning": {"effort": effort}
@@ -274,7 +260,7 @@ async def responses_call(input_data, *, instructions: str = "", tools=None, incl
         "annotations": annotations,
         "search_results": results,
         "usage": d.get("usage") or {},
-        "model": settings.meta_model
+        "model": resp_model
     }
 
 FACTS_FORMAT = {
