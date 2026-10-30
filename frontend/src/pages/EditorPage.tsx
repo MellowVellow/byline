@@ -13,6 +13,7 @@ import ReviewDock from '../components/ReviewDock'
 import ConnectModal from '../components/ConnectModal'
 import ParaphrasePopup from '../components/ParaphrasePopup'
 import SuggestionPopup from '../components/SuggestionPopup'
+import InlineReviewPopup from '../components/InlineReviewPopup'
 import SetupWizard, { type SetupResult } from '../components/SetupWizard'
 import SettingsMenu from '../components/SettingsMenu'
 import ExpandSectionModal from '../components/ExpandSectionModal'
@@ -23,16 +24,16 @@ import { AnchorDecorations, anchorStore, syncAnchors, syncGhost, syncFlash, flas
 import { contextService, type SelectionContext } from '../services/context-service'
 import { globalAnalysisService } from '../services/analysis-service'
 import { harperService } from '../services/harper-service'
-import { resolveAnchor } from '../editor/anchoring'
+import { resolveAnchor, applySafeReplacement } from '../editor/anchoring'
 import type { DocumentContext, OutlineNode, ThemeId } from '../domain/document'
 import type { Finding, FindingStatus, Suggestion, Persona } from '../domain/finding'
 import { THEME_DEFINITIONS } from '../domain/writing-profile'
 import { loadSettings, saveSettings, type AppSettings } from '../lib/settings'
 import { api } from '../lib/api'
 import { GOLDEN_PATH_SAMPLE_DOC, GOLDEN_PATH_SAMPLE_CONTEXT } from '../lib/fallback'
-import { sfxAccept, sfxPick, blip } from '../lib/sfx'
+import { sfxAccept, sfxDismiss, sfxPick, blip } from '../lib/sfx'
 
-export type AssistGranularity = 'Hint' | 'Phrase' | 'Sentence'
+export type AssistGranularity = 'Hint' | 'Phrase' | 'Sentence' | 'Question'
 
 export default function EditorPage({ demo = false }: { demo?: boolean }) {
   // App & View mode
@@ -126,6 +127,12 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [selectionContext, setSelectionContext] = useState<SelectionContext | null>(null)
   const [popupPos, setPopupPos] = useState({ x: 200, y: 300 })
 
+  // Inline Review Popup state for clicked underlined text or selection in Edit mode
+  const [inlineReviewState, setInlineReviewState] = useState<{
+    findings: Finding[]
+    position: { x: number; y: number }
+  } | null>(null)
+
   // Draft Assistance state (Ghost text & Suggestion popup below cursor)
   const [assistLevel, setAssistLevel] = useState<AssistGranularity>('Phrase')
   const [draftSuggestions, setDraftSuggestions] = useState<string[]>([])
@@ -164,32 +171,44 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     },
     onSelectionUpdate: ({ editor }) => {
       const selCtx = contextService.getSelectionContext(editor)
-      setSelectionContext(selCtx)
+      const at = editor.state.selection.from
+      const to = editor.state.selection.to
 
+      // In Edit mode: check if selection overlaps any finding or cursor is on underlined text
+      if (mode === 'editing') {
+        const matchingFindings = findings.filter(f => {
+          if (f.status === 'resolved' || f.status === 'dismissed') return false
+          const rng = anchorStore.ranges.get(f.id)
+          if (!rng) return false
+          if (at === to) {
+            return at >= rng.from && at <= rng.to
+          }
+          return Math.max(at, rng.from) < Math.min(to, rng.to)
+        })
+
+        if (matchingFindings.length > 0 && editor.view) {
+          const coords = editor.view.coordsAtPos(to)
+          setInlineReviewState({
+            findings: matchingFindings,
+            position: {
+              x: Math.max(16, Math.min(coords.left + window.scrollX, window.innerWidth - 440)),
+              y: coords.bottom + 8 + window.scrollY,
+            },
+          })
+          setSelectionContext(null)
+          setHighlightedFindingId(matchingFindings[0].id)
+          return
+        }
+      }
+
+      // If no findings matched, standard selectionContext (Paraphrase popup below cursor)
+      setSelectionContext(selCtx)
       if (selCtx && editor.view) {
         const coords = editor.view.coordsAtPos(selCtx.to)
         setPopupPos({
           x: Math.max(16, Math.min(coords.left + window.scrollX, window.innerWidth - 420)),
           y: coords.bottom + 8 + window.scrollY,
         })
-      }
-
-      // Check if cursor falls within any finding's underlined range
-      const at = editor.state.selection.from
-      let foundId: string | null = null
-      for (const f of findings) {
-        if (f.status === 'resolved' || f.status === 'dismissed') continue
-        const rng = anchorStore.ranges.get(f.id)
-        if (rng && at >= rng.from && at <= rng.to) {
-          foundId = f.id
-          break
-        }
-      }
-      if (foundId) {
-        setHighlightedFindingId(foundId)
-        if (mode === 'editing') {
-          setRightOpen(true)
-        }
       }
     },
     onCreate: ({ editor }) => {
@@ -241,32 +260,37 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     return () => { void harperService.dispose() }
   }, [])
 
-  // Click on underlined text moves to relevant card and highlights it in Reflection dock (only in Editing mode)
+  // Click on underlined text opens suggestions/comments popup below cursor (in Editing mode)
   useEffect(() => {
     if (!editor || !editor.view) return
     const dom = editor.view.dom
     const onClick = (e: MouseEvent) => {
+      if (mode !== 'editing') return
       const target = (e.target as HTMLElement).closest('[data-anchor-id], [data-anchor-ids]')
       const anchorId = target?.getAttribute('data-anchor-id')
       const anchorIds = target?.getAttribute('data-anchor-ids')
-      if (anchorId) {
-        setHighlightedFindingId(anchorId)
-        if (mode === 'editing') {
-          setRightOpen(true)
+
+      if (anchorId || anchorIds) {
+        const ids = anchorId ? [anchorId] : (anchorIds?.split(',') || [])
+        const matched = findings.filter(f => ids.includes(f.id) && f.status !== 'resolved' && f.status !== 'dismissed')
+        if (matched.length > 0) {
+          const rect = target!.getBoundingClientRect()
+          setInlineReviewState({
+            findings: matched,
+            position: {
+              x: Math.max(16, Math.min(rect.left + window.scrollX, window.innerWidth - 440)),
+              y: rect.bottom + 8 + window.scrollY,
+            },
+          })
+          setSelectionContext(null)
+          setHighlightedFindingId(matched[0].id)
+          blip('select')
         }
-        blip('select')
-      } else if (anchorIds) {
-        // Merged gradient anchor: highlight the first finding, but open review dock
-        setHighlightedFindingId(anchorIds.split(',')[0])
-        if (mode === 'editing') {
-          setRightOpen(true)
-        }
-        blip('select')
       }
     }
     dom.addEventListener('click', onClick)
     return () => dom.removeEventListener('click', onClick)
-  }, [editor, mode])
+  }, [editor, mode, findings])
 
   // Sync mode changes to decorations
   useEffect(() => {
@@ -458,11 +482,17 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       })
 
       const list = (res?.suggestions || []).slice(0, 3)
-      const options = list.length > 0 ? list : [
+      const fallbackQuestions = [
+        'How will regional transit authorities balance upfront capital outlays?',
+        'What policy incentives accelerate private-sector transit investment?',
+        'Which corridors offer the highest passenger density returns?',
+      ]
+      const defaultOptions = [
         'demonstrating long-term return on infrastructure capital.',
         'which significantly mitigates municipal debt exposure.',
         'yielding higher compounding returns across metropolitan regions.',
       ]
+      const options = list.length > 0 ? list : (assistLevel === 'Question' ? fallbackQuestions : defaultOptions)
 
       setDraftSuggestions(options)
 
@@ -483,7 +513,10 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
 
       blip('done')
     } catch {
-      const fallbackOptions = [
+      const fallbackOptions = assistLevel === 'Question' ? [
+        'How will regional transit authorities balance upfront capital outlays?',
+        'What policy incentives accelerate private-sector transit investment?',
+      ] : [
         'yielding higher compounding returns across metropolitan regions.',
         'which significantly mitigates municipal debt exposure.',
       ]
@@ -524,6 +557,33 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     if (editor) syncGhost(editor)
     setDraftSuggestions([])
     setSuggestPopupPos(null)
+  }
+
+  // Handle inline review popup actions (Edit mode)
+  const handleApplyInlineSuggestion = (finding: Finding, suggestion: Suggestion) => {
+    if (!editor) return
+    const res = applySafeReplacement(editor, finding.anchor, suggestion.text)
+    if (res.success) {
+      sfxAccept()
+      globalAnalysisService.updateStatus(finding.id, 'resolved')
+      setInlineReviewState(prev => {
+        if (!prev) return null
+        const remaining = prev.findings.filter(f => f.id !== finding.id)
+        return remaining.length > 0 ? { ...prev, findings: remaining } : null
+      })
+    } else {
+      alert(res.error || 'Failed to apply replacement.')
+    }
+  }
+
+  const handleDismissInlineFinding = (findingId: string) => {
+    sfxDismiss()
+    globalAnalysisService.updateStatus(findingId, 'dismissed')
+    setInlineReviewState(prev => {
+      if (!prev) return null
+      const remaining = prev.findings.filter(f => f.id !== findingId)
+      return remaining.length > 0 ? { ...prev, findings: remaining } : null
+    })
   }
 
   // Keyboard shortcut listener: Tab for ghost text, Escape to dismiss, Ctrl+Space
@@ -1209,7 +1269,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               {/* Granularity Selector */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                 <span className="meta" style={{ fontSize: 11 }}>Assist:</span>
-                {(['Hint', 'Phrase', 'Sentence'] as AssistGranularity[]).map(gran => (
+                {(['Hint', 'Phrase', 'Sentence', 'Question'] as AssistGranularity[]).map(gran => (
                   <button
                     key={gran}
                     type="button"
@@ -1350,8 +1410,20 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             />
           )}
 
+          {/* Inline Review Popup directly below cursor/underlined text in Edit Mode */}
+          {mode === 'editing' && inlineReviewState && inlineReviewState.findings.length > 0 && (
+            <InlineReviewPopup
+              findings={inlineReviewState.findings}
+              position={inlineReviewState.position}
+              editor={editor}
+              onApplySuggestion={handleApplyInlineSuggestion}
+              onDismissFinding={handleDismissInlineFinding}
+              onClose={() => setInlineReviewState(null)}
+            />
+          )}
+
           {/* Alternatives Popup positioned directly below cursor/selection */}
-          {selectionContext && (
+          {selectionContext && !inlineReviewState && (
             <ParaphrasePopup
               editor={editor}
               selectionContext={selectionContext}
