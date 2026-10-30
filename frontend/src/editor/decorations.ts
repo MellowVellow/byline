@@ -52,13 +52,13 @@ export function subtractRange(r: { from: number; to: number }, taken: { from: nu
 }
 
 const KIND_COLORS: Record<string, string> = {
-  grammar: '#C0281F',
-  reader: '#6D3BE0',
-  vocabulary: '#8A5F00',
-  claim: '#1765CC',
-  supervisor: '#8A5F00',
-  reaction: '#6D3BE0',
-  relevance: '#C0281F',
+  grammar: 'var(--lt)',
+  reader: 'var(--ai)',
+  vocabulary: 'var(--yellow)',
+  claim: 'var(--blue)',
+  supervisor: 'var(--yellow)',
+  reaction: 'var(--ai)',
+  relevance: 'var(--lt)',
 }
 
 function groupOverlapping(anchors: Array<{ id: string; kind: string; from: number; to: number }>): Array<{ items: typeof anchors; from: number; to: number }> {
@@ -101,7 +101,7 @@ function buildAnchors(doc: any): Decoration[] {
   for (const g of groups) {
     if (g.items.length === 1) {
       const a = g.items[0]
-      const color = KIND_COLORS[a.kind] || '#C0281F'
+      const color = KIND_COLORS[a.kind] || 'var(--lt)'
       decos.push(Decoration.inline(g.from, g.to, {
         class: `anch anch-${a.kind}${anchorStore.linkedId === a.id ? ' anch-linked' : ''}`,
         'data-anchor-id': a.id,
@@ -110,7 +110,7 @@ function buildAnchors(doc: any): Decoration[] {
     } else {
       // Multiple overlapping anchors on same range -> merged gradient underline
       const stops = g.items.map((a, i) => {
-        const c = KIND_COLORS[a.kind] || '#C0281F'
+        const c = KIND_COLORS[a.kind] || 'var(--lt)'
         const pct = Math.round((i / Math.max(1, g.items.length - 1)) * 100)
         return `${c} ${pct}%`
       })

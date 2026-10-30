@@ -5,9 +5,21 @@ export type Density = 'comfortable' | 'compact'
 
 export interface AppSettings {
   theme: ThemeMode
-  ai: string; grammar: string; sources: string; wordChoice: string; selection: string; suggest: string
-  editorFont: EditorFont; fontSize: number; lineHeight: number; paperWidth: PaperWidth
-  density: Density; showWordCount: boolean; showMetrics: boolean; reduceMotion: boolean; spellcheck: boolean
+  ai: string
+  grammar: string
+  sources: string
+  wordChoice: string
+  selection: string
+  suggest: string
+  editorFont: EditorFont
+  fontSize: number
+  lineHeight: number
+  paperWidth: PaperWidth
+  density: Density
+  showWordCount: boolean
+  showMetrics: boolean
+  reduceMotion: boolean
+  spellcheck: boolean
   // Meta-authored inference settings
   metaModel: string
   temperature: number
@@ -21,18 +33,98 @@ export interface AppSettings {
   autoApplyGrammar: boolean
 }
 
-/** One preset drives every annotation surface: grammar=Language red, ai=Reader purple, sources=blue, wordChoice=Lint yellow, suggest=Suggest grey. */
-export const COLOR_PRESETS: Record<string, { label: string; ai: string; grammar: string; sources: string; wordChoice: string; selection: string; suggest: string }> = {
-  default: { label: 'Byline', ai: '#6D3BE0', grammar: '#C0281F', sources: '#1765CC', wordChoice: '#8A5F00', selection: '#F5E3B0', suggest: '#626A75' },
-  ocean: { label: 'Ocean', ai: '#0E7490', grammar: '#E11D48', sources: '#2563EB', wordChoice: '#D97706', selection: '#DBEAFE', suggest: '#64748B' },
-  forest: { label: 'Forest', ai: '#15803D', grammar: '#DC2626', sources: '#0369A1', wordChoice: '#CA8A04', selection: '#DCFCE7', suggest: '#6B7280' },
-  sunset: { label: 'Sunset', ai: '#C026D3', grammar: '#EA580C', sources: '#4F46E5', wordChoice: '#EAB308', selection: '#FDE68A', suggest: '#78716C' },
-  mono: { label: 'Mono', ai: '#525252', grammar: '#171717', sources: '#404040', wordChoice: '#737373', selection: '#E5E5E5', suggest: '#9CA3AF' },
+export interface ColorPreset {
+  label: string
+  description: string
+  grammar: string   // Red / error / language
+  ai: string        // Purple / reader
+  wordChoice: string// Amber / supervisor / flow
+  sources: string   // Blue / researcher / citations
+  suggest: string   // Grey / ghost suggestions
+  selection: string // Selection highlight
 }
 
+/** Rich, coordinated color presets driving the logo, annotations, cards, and paper underlines */
+export const COLOR_PRESETS: Record<string, ColorPreset> = {
+  byline: {
+    label: 'Byline Classic',
+    description: 'Iconic editorial palette: bold crimson, deep royal purple, warm amber, cobalt blue',
+    grammar: '#C0281F',
+    ai: '#6D3BE0',
+    wordChoice: '#8A5F00',
+    sources: '#1765CC',
+    suggest: '#626A75',
+    selection: '#F5E3B0',
+  },
+  oxford: {
+    label: 'Oxford',
+    description: 'Scholarly distinction: crimson red, deep indigo reader, antique brass, cobalt',
+    grammar: '#BE123C',
+    ai: '#4338CA',
+    wordChoice: '#B45309',
+    sources: '#1D4ED8',
+    suggest: '#475569',
+    selection: '#E0E7FF',
+  },
+  glacier: {
+    label: 'Glacier',
+    description: 'Crisp & modern: rose, vibrant cyan reader, ochre flow, steel blue evidence',
+    grammar: '#E11D48',
+    ai: '#0891B2',
+    wordChoice: '#D97706',
+    sources: '#2563EB',
+    suggest: '#64748B',
+    selection: '#CFFAFE',
+  },
+  verdant: {
+    label: 'Verdant',
+    description: 'Forest-inspired: scarlet berry, emerald green reader, olive gold, sky azure',
+    grammar: '#DC2626',
+    ai: '#059669',
+    wordChoice: '#CA8A04',
+    sources: '#0284C7',
+    suggest: '#6B7280',
+    selection: '#D1FAE5',
+  },
+  sunset: {
+    label: 'Sunset',
+    description: 'Warm evening: burnt orange, vivid magenta reader, warm gold, electric indigo',
+    grammar: '#EA580C',
+    ai: '#C026D3',
+    wordChoice: '#EAB308',
+    sources: '#4F46E5',
+    suggest: '#78716C',
+    selection: '#FDE68A',
+  },
+  monochrome: {
+    label: 'Monochrome',
+    description: 'Distraction-free high-contrast grayscale for deep focused drafting',
+    grammar: '#18181B',
+    ai: '#3F3F46',
+    wordChoice: '#71717A',
+    sources: '#52525B',
+    suggest: '#A1A1AA',
+    selection: '#E4E4E7',
+  },
+}
+
+// Backwards compatibility aliases
+COLOR_PRESETS.default = COLOR_PRESETS.byline
+COLOR_PRESETS.ocean = COLOR_PRESETS.glacier
+COLOR_PRESETS.forest = COLOR_PRESETS.verdant
+
 export const DEFAULT_SETTINGS: AppSettings = {
-  theme: 'system', ...COLOR_PRESETS.default, editorFont: 'serif', fontSize: 19, lineHeight: 1.65,
-  paperWidth: 'normal', density: 'comfortable', showWordCount: true, showMetrics: true, reduceMotion: false, spellcheck: false,
+  theme: 'system',
+  ...COLOR_PRESETS.byline,
+  editorFont: 'serif',
+  fontSize: 19,
+  lineHeight: 1.65,
+  paperWidth: 'normal',
+  density: 'comfortable',
+  showWordCount: true,
+  showMetrics: true,
+  reduceMotion: false,
+  spellcheck: false,
   metaModel: 'meta-llama/llama-3.3-70b-instruct',
   temperature: 0.7,
   maxTokens: 800,
@@ -42,8 +134,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   language: 'en-US',
   autoApplyGrammar: false,
 }
+
 const KEY = 'byline.settings.v1'
-const { label: _l, ...presetColors } = COLOR_PRESETS.default; void _l; void presetColors
 
 export function loadSettings(): AppSettings {
   try {
@@ -53,23 +145,49 @@ export function loadSettings(): AppSettings {
   const legacy = localStorage.getItem('byline.theme')
   return { ...DEFAULT_SETTINGS, theme: legacy === 'light' || legacy === 'dark' ? legacy : 'system' }
 }
+
 export function resolveTheme(t: ThemeMode): 'light' | 'dark' {
   return t === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : t
 }
+
 export function applySettings(s: AppSettings) {
   const root = document.documentElement
   const resolved = resolveTheme(s.theme)
-  root.dataset.theme = resolved; root.dataset.density = s.density; root.dataset.motion = s.reduceMotion ? 'reduce' : ''
-  localStorage.setItem('byline.theme', resolved); dispatchEvent(new Event('byline-theme'))
-  root.style.setProperty('--ai', s.ai); root.style.setProperty('--lt', s.grammar)
-  root.style.setProperty('--blue', s.sources); root.style.setProperty('--yellow', s.wordChoice)
-  root.style.setProperty('--grey', s.suggest || COLOR_PRESETS.default.suggest)
+  root.dataset.theme = resolved
+  root.dataset.density = s.density
+  root.dataset.motion = s.reduceMotion ? 'reduce' : ''
+  localStorage.setItem('byline.theme', resolved)
+  dispatchEvent(new Event('byline-theme'))
+
+  // Apply colors to root CSS custom properties
+  root.style.setProperty('--ai', s.ai)
+  root.style.setProperty('--lt', s.grammar)
+  root.style.setProperty('--blue', s.sources)
+  root.style.setProperty('--yellow', s.wordChoice)
+  root.style.setProperty('--grey', s.suggest || COLOR_PRESETS.byline.suggest)
   root.style.setProperty('--link', s.selection)
-  root.style.setProperty('--editor-font', s.editorFont === 'serif' ? '"Source Serif 4",Georgia,serif' : s.editorFont === 'mono' ? 'ui-monospace,Menlo,monospace' : '"Inter",-apple-system,"Segoe UI",sans-serif')
-  root.style.setProperty('--editor-size', `${s.fontSize}px`); root.style.setProperty('--editor-lh', String(s.lineHeight))
-  root.style.setProperty('--paper-w', s.paperWidth === 'narrow' ? '58ch' : s.paperWidth === 'wide' ? '88ch' : '70ch')
+
+  // Typography & document setup
+  root.style.setProperty(
+    '--editor-font',
+    s.editorFont === 'serif'
+      ? '"Source Serif Pro","Source Serif 4",Georgia,serif'
+      : s.editorFont === 'mono'
+      ? 'ui-monospace,Menlo,monospace'
+      : '"Inter",-apple-system,"Segoe UI",sans-serif'
+  )
+  root.style.setProperty('--editor-size', `${s.fontSize}px`)
+  root.style.setProperty('--editor-lh', String(s.lineHeight))
+  root.style.setProperty('--paper-w', s.paperWidth === 'narrow' ? '58ch' : s.paperWidth === 'wide' ? '88ch' : '72ch')
+
+  // Notify listeners (Logo, etc.) that colors changed
+  dispatchEvent(new Event('byline-colors'))
 }
-export function saveSettings(s: AppSettings) { localStorage.setItem(KEY, JSON.stringify(s)); applySettings(s) }
+
+export function saveSettings(s: AppSettings) {
+  localStorage.setItem(KEY, JSON.stringify(s))
+  applySettings(s)
+}
 
 export interface Shortcut { keys: string; action: string; context?: string }
 export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [

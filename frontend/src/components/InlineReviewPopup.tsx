@@ -13,10 +13,34 @@ export interface InlineReviewPopupProps {
 }
 
 export const PERSONA_STYLES: Record<string, { label: string; color: string; border: string; bg: string; dot: string }> = {
-  grammar: { label: 'Grammar', color: '#C0281F', border: '#F87171', bg: '#FEF2F2', dot: '🔴' },
-  reader: { label: 'Reader', color: '#6D3BE0', border: '#C084FC', bg: '#FAF5FF', dot: '🟣' },
-  supervisor: { label: 'Supervisor', color: '#8A5F00', border: '#FBBF24', bg: '#FEFCE8', dot: '🟡' },
-  researcher: { label: 'Researcher', color: '#1765CC', border: '#60A5FA', bg: '#EFF6FF', dot: '🔵' },
+  grammar: {
+    label: 'Grammar',
+    color: 'var(--lt)',
+    border: 'color-mix(in srgb, var(--lt) 45%, transparent)',
+    bg: 'color-mix(in srgb, var(--lt) 10%, var(--paper))',
+    dot: '🔴',
+  },
+  reader: {
+    label: 'Reader',
+    color: 'var(--ai)',
+    border: 'color-mix(in srgb, var(--ai) 45%, transparent)',
+    bg: 'color-mix(in srgb, var(--ai) 10%, var(--paper))',
+    dot: '🟣',
+  },
+  supervisor: {
+    label: 'Supervisor',
+    color: 'var(--yellow)',
+    border: 'color-mix(in srgb, var(--yellow) 45%, transparent)',
+    bg: 'color-mix(in srgb, var(--yellow) 10%, var(--paper))',
+    dot: '🟡',
+  },
+  researcher: {
+    label: 'Researcher',
+    color: 'var(--blue)',
+    border: 'color-mix(in srgb, var(--blue) 45%, transparent)',
+    bg: 'color-mix(in srgb, var(--blue) 10%, var(--paper))',
+    dot: '🔵',
+  },
 }
 
 /**
@@ -73,7 +97,7 @@ export default function InlineReviewPopup({
 
   const activeMeta = PERSONA_STYLES[activeFinding.persona] || {
     label: activeFinding.persona,
-    color: '#1765CC',
+    color: 'var(--blue)',
     border: 'var(--border)',
     bg: 'var(--paper)',
     dot: '●',

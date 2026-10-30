@@ -26,10 +26,34 @@ export interface ReviewDockProps {
 }
 
 const PERSONA_LABELS: Record<Persona, { label: string; color: string; border: string; bg: string; dot: string }> = {
-  grammar: { label: 'Grammar', color: '#C0281F', border: '#F87171', bg: '#FEF2F2', dot: '🔴' },
-  reader: { label: 'Reader', color: '#6D3BE0', border: '#C084FC', bg: '#FAF5FF', dot: '🟣' },
-  supervisor: { label: 'Supervisor', color: '#8A5F00', border: '#FBBF24', bg: '#FEFCE8', dot: '🟡' },
-  researcher: { label: 'Researcher', color: '#1765CC', border: '#60A5FA', bg: '#EFF6FF', dot: '🔵' },
+  grammar: {
+    label: 'Grammar',
+    color: 'var(--lt)',
+    border: 'color-mix(in srgb, var(--lt) 45%, transparent)',
+    bg: 'color-mix(in srgb, var(--lt) 10%, var(--paper))',
+    dot: '🔴',
+  },
+  reader: {
+    label: 'Reader',
+    color: 'var(--ai)',
+    border: 'color-mix(in srgb, var(--ai) 45%, transparent)',
+    bg: 'color-mix(in srgb, var(--ai) 10%, var(--paper))',
+    dot: '🟣',
+  },
+  supervisor: {
+    label: 'Supervisor',
+    color: 'var(--yellow)',
+    border: 'color-mix(in srgb, var(--yellow) 45%, transparent)',
+    bg: 'color-mix(in srgb, var(--yellow) 10%, var(--paper))',
+    dot: '🟡',
+  },
+  researcher: {
+    label: 'Researcher',
+    color: 'var(--blue)',
+    border: 'color-mix(in srgb, var(--blue) 45%, transparent)',
+    bg: 'color-mix(in srgb, var(--blue) 10%, var(--paper))',
+    dot: '🔵',
+  },
 }
 
 export const REVIEW_PERSONAS: Array<{
@@ -41,10 +65,10 @@ export const REVIEW_PERSONAS: Array<{
   description: string
   endpoint: string
 }> = [
-  { id: 'grammar', label: 'Grammar', colorName: 'Red', colorDot: '🔴', color: '#C0281F', description: 'Spelling, punctuation, typography', endpoint: '/api/grammar' },
-  { id: 'reader', label: 'Reader', colorName: 'Purple', colorDot: '🟣', color: '#6D3BE0', description: 'Perception, intent gap, tone reaction', endpoint: '/api/reactions' },
-  { id: 'supervisor', label: 'Supervisor', colorName: 'Yellow', colorDot: '🟡', color: '#8A5F00', description: 'Outline alignment, structural flow, logic gaps', endpoint: '/api/lint' },
-  { id: 'researcher', label: 'Researcher', colorName: 'Blue', colorDot: '🔵', color: '#1765CC', description: 'Claim verification, citations, evidence grounding', endpoint: '/api/readings' },
+  { id: 'grammar', label: 'Grammar', colorName: 'Red', colorDot: '🔴', color: 'var(--lt)', description: 'Spelling, punctuation, typography', endpoint: '/api/grammar' },
+  { id: 'reader', label: 'Reader', colorName: 'Purple', colorDot: '🟣', color: 'var(--ai)', description: 'Perception, intent gap, tone reaction', endpoint: '/api/reactions' },
+  { id: 'supervisor', label: 'Supervisor', colorName: 'Yellow', colorDot: '🟡', color: 'var(--yellow)', description: 'Outline alignment, structural flow, logic gaps', endpoint: '/api/lint' },
+  { id: 'researcher', label: 'Researcher', colorName: 'Blue', colorDot: '🔵', color: 'var(--blue)', description: 'Claim verification, citations, evidence grounding', endpoint: '/api/readings' },
 ]
 
 const STATUS_LABELS: Record<FindingStatus | 'all', string> = {
