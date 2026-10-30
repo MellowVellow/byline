@@ -37,9 +37,10 @@
   .proof-sheet::before{left:26px}
   .proof-sheet h2{font-size:21px}
   .paper{padding:24px 18px 24px 42px;background:linear-gradient(90deg,transparent 0 30px,color-mix(in srgb,var(--proof) 38%,transparent) 30px,color-mix(in srgb,var(--proof) 38%,transparent) 31px,transparent 31px),var(--paper)}
+
 }
-.paper{background:linear-gradient(90deg,transparent 0 26px,color-mix(in srgb,var(--proof) 38%,transparent) 26px,color-mix(in srgb,var(--proof) 38%,transparent) 27px,transparent 27px),var(--paper);border:1px solid var(--border);border-radius:var(--radius-lg);min-height:70vh;height:auto;padding:30px 38px;box-sizing:border-box}
-.paper .ProseMirror{max-width:none;margin:0;min-height:60vh;width:100%}
+.paper{background:linear-gradient(90deg,transparent 0 26px,color-mix(in srgb,var(--proof) 38%,transparent) 26px,color-mix(in srgb,var(--proof) 38%,transparent) 27px,transparent 27px),var(--paper);border:1px solid var(--border);border-radius:var(--radius-lg);min-height:70vh;height:auto;padding:36px 42px 72px;box-sizing:border-box;box-shadow:var(--shadow-paper)}
+.paper .tiptap,.paper .ProseMirror{max-width:none;margin:0;width:100%;min-height:50vh;box-sizing:border-box}
 .dual-editors{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
 .dual-editors .paper{min-height:50vh;padding:22px 24px}
 .dual-editors .ProseMirror{max-width:none;min-height:44vh;font-size:16px}

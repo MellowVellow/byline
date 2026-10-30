@@ -32,7 +32,7 @@ import { api } from '../lib/api'
 import { GOLDEN_PATH_SAMPLE_DOC, GOLDEN_PATH_SAMPLE_CONTEXT } from '../lib/fallback'
 import { sfxAccept, sfxPick, blip } from '../lib/sfx'
 
-export type AssistGranularity = 'Hint' | 'Phrase' | 'Sentence' | 'Paragraph'
+export type AssistGranularity = 'Hint' | 'Phrase' | 'Sentence'
 
 export default function EditorPage({ demo = false }: { demo?: boolean }) {
   // App & View mode
@@ -1209,7 +1209,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               {/* Granularity Selector */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                 <span className="meta" style={{ fontSize: 11 }}>Assist:</span>
-                {(['Hint', 'Phrase', 'Sentence', 'Paragraph'] as AssistGranularity[]).map(gran => (
+                {(['Hint', 'Phrase', 'Sentence'] as AssistGranularity[]).map(gran => (
                   <button
                     key={gran}
                     type="button"
@@ -1321,10 +1321,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             style={{
               flex: 1,
               overflowY: 'auto',
-              padding: '16px 20px 64px',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
+              padding: '20px 24px 80px',
               minHeight: 0,
             }}
           >
@@ -1333,20 +1330,11 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               style={{
                 width: '100%',
                 maxWidth: appSettings.paperWidth === 'narrow' ? '58ch' : (appSettings.paperWidth === 'wide' ? '88ch' : '72ch'),
-                minHeight: '70vh',
-                height: 'auto',
                 margin: '0 auto',
-                border: '1px solid var(--border)',
-                background: 'linear-gradient(90deg, transparent 0 26px, color-mix(in srgb, var(--proof) 38%, transparent) 26px, color-mix(in srgb, var(--proof) 38%, transparent) 27px, transparent 27px), var(--paper)',
-                boxShadow: 'var(--shadow-paper)',
-                borderRadius: 'var(--radius-lg)',
-                padding: '32px 42px',
                 boxSizing: 'border-box',
-                display: 'flex',
-                flexDirection: 'column',
               }}
             >
-              <EditorContent editor={editor} style={{ flex: 1, minHeight: 0, width: '100%' }} />
+              <EditorContent editor={editor} />
             </div>
           </div>
 

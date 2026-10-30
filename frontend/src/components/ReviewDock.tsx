@@ -488,7 +488,7 @@ export default function ReviewDock({
       )}
 
       {/* Findings list — old card UI */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 14px 12px', display: 'grid', gap: 12, minHeight: 0, minWidth: 0 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 14px 12px', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, minWidth: 0 }}>
         {sorted.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--ink-4)', fontSize: 13, paddingTop: 40 }}>
             No findings in this view.
@@ -515,6 +515,8 @@ export default function ReviewDock({
                   opacity: f.status === 'resolved' || f.status === 'dismissed' ? 0.6 : 1,
                   display: 'grid', gap: 8,
                   minWidth: 0,
+                  height: 'fit-content',
+                  flexShrink: 0,
                   boxShadow: isHighlighted ? '0 0 0 1px color-mix(in srgb, var(--ink) 20%, transparent)' : 'none',
                 }}
               >
