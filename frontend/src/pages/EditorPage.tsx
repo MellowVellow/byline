@@ -141,6 +141,39 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   const [langMenuOpen, setLangMenuOpen] = useState(false)
 
+  // Ref to the editor scroll container so popups can scroll it into view
+  const editorScrollRef = useRef<HTMLDivElement>(null)
+  // Ref to the right rail aside element so we can measure its actual rendered width
+  const rightRailRef = useRef<HTMLElement>(null)
+
+  /**
+   * Convert a raw viewport coordinate from TipTap / getBoundingClientRect into a
+   * safe { x, y } for position:fixed popups, accounting for:
+   *   - right dock width (measured from DOM, clamp x to not overlap it)
+   *   - viewport bottom (if popup would overflow, scroll editor container up)
+   */
+  const safePosFixed = useCallback(
+    (viewportLeft: number, viewportBottom: number, popupW = 440, popupH = 300) => {
+      // Measure the right rail's actual left edge from the DOM for accurate clamping
+      const rightRailLeft = rightRailRef.current
+        ? rightRailRef.current.getBoundingClientRect().left
+        : window.innerWidth - (rightOpen ? 318 : 52)
+      const maxRight = rightRailLeft - 16
+      const x = Math.max(16, Math.min(viewportLeft, maxRight - popupW))
+      const yNatural = viewportBottom + 8
+
+      // If the popup would overflow the viewport bottom, scroll the editor scroll
+      // container enough to bring it into view instead of clamping (which hides it)
+      const overflow = yNatural + popupH - window.innerHeight
+      if (overflow > 0 && editorScrollRef.current) {
+        editorScrollRef.current.scrollTop += overflow + 16
+      }
+
+      return { x, y: yNatural }
+    },
+    [rightOpen]
+  )
+
   // Initialize TipTap Editor with AnchorDecorations
   const editor = useEditor({
     extensions: [
@@ -191,10 +224,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           const coords = editor.view.coordsAtPos(to)
           setInlineReviewState({
             findings: matchingFindings,
-            position: {
-              x: Math.max(16, coords.left),
-              y: coords.bottom + 8,
-            },
+            position: safePosFixed(coords.left, coords.bottom, 440, 300),
           })
           setSelectionContext(null)
           setHighlightedFindingId(matchingFindings[0].id)
@@ -206,10 +236,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       setSelectionContext(selCtx)
       if (selCtx && editor.view) {
         const coords = editor.view.coordsAtPos(selCtx.to)
-        setPopupPos({
-          x: Math.max(16, coords.left),
-          y: coords.bottom + 8,
-        })
+        setPopupPos(safePosFixed(coords.left, coords.bottom, 400, 260))
       }
     },
     onCreate: ({ editor }) => {
@@ -278,10 +305,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           const rect = target!.getBoundingClientRect()
           setInlineReviewState({
             findings: matched,
-            position: {
-              x: Math.max(16, rect.left),
-              y: rect.bottom + 8,
-            },
+            position: safePosFixed(rect.left, rect.bottom, 440, 300),
           })
           setSelectionContext(null)
           setHighlightedFindingId(matched[0].id)
@@ -291,7 +315,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     }
     dom.addEventListener('click', onClick)
     return () => dom.removeEventListener('click', onClick)
-  }, [editor, mode, findings])
+  }, [editor, mode, findings, safePosFixed])
 
   // Sync mode changes to decorations
   useEffect(() => {
@@ -513,10 +537,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
 
       // Calculate popup position directly below cursor
       const coords = editor.view.coordsAtPos(pos)
-      setSuggestPopupPos({
-        x: Math.max(16, coords.left),
-        y: coords.bottom + 8,
-      })
+      setSuggestPopupPos(safePosFixed(coords.left, coords.bottom, 440, 240))
 
       blip('done')
     } catch {
@@ -534,10 +555,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       syncGhost(editor)
 
       const coords = editor.view.coordsAtPos(pos)
-      setSuggestPopupPos({
-        x: Math.max(16, coords.left),
-        y: coords.bottom + 8,
-      })
+      setSuggestPopupPos(safePosFixed(coords.left, coords.bottom, 440, 240))
     } finally {
       setDraftLoading(false)
     }
@@ -1441,6 +1459,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
 
           {/* Paper Editor Container */}
           <div
+            ref={editorScrollRef}
             style={{
               flex: 1,
               overflowY: 'auto',
@@ -1500,6 +1519,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
 
         {/* Right Rail: Reflection (Unified Findings across 4 Personas) */}
         <aside
+          ref={rightRailRef}
           className="rail right-rail"
           style={{
             height: '100%',
