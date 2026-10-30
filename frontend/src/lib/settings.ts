@@ -1,6 +1,6 @@
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type EditorFont = 'serif' | 'sans' | 'mono'
-export type PaperWidth = 'narrow' | 'normal' | 'wide'
+export type PaperWidth = 'narrow' | 'normal' | 'wide' | 'full'
 export type Density = 'comfortable' | 'compact'
 
 export interface AppSettings {
@@ -15,9 +15,9 @@ export interface AppSettings {
   fontSize: number
   lineHeight: number
   paperWidth: PaperWidth
-  density: Density
+  density?: Density
   showWordCount: boolean
-  showMetrics: boolean
+  showMetrics?: boolean
   reduceMotion: boolean
   spellcheck: boolean
   // Meta-authored inference settings
@@ -154,7 +154,7 @@ export function applySettings(s: AppSettings) {
   const root = document.documentElement
   const resolved = resolveTheme(s.theme)
   root.dataset.theme = resolved
-  root.dataset.density = s.density
+  if (s.density) root.dataset.density = s.density
   root.dataset.motion = s.reduceMotion ? 'reduce' : ''
   localStorage.setItem('byline.theme', resolved)
   dispatchEvent(new Event('byline-theme'))
@@ -178,7 +178,7 @@ export function applySettings(s: AppSettings) {
   )
   root.style.setProperty('--editor-size', `${s.fontSize}px`)
   root.style.setProperty('--editor-lh', String(s.lineHeight))
-  root.style.setProperty('--paper-w', s.paperWidth === 'narrow' ? '58ch' : s.paperWidth === 'wide' ? '88ch' : '72ch')
+  root.style.setProperty('--paper-w', s.paperWidth === 'narrow' ? '58ch' : s.paperWidth === 'wide' ? '92ch' : s.paperWidth === 'full' ? '100%' : '72ch')
 
   // Notify listeners (Logo, etc.) that colors changed
   dispatchEvent(new Event('byline-colors'))

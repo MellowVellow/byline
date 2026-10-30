@@ -684,16 +684,6 @@ export default function ReviewDock({
                         Ignore rule
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); handleAddToDictionary(f) }}
-                      style={{
-                        padding: '4px 8px', background: 'transparent', border: '1px dashed var(--ink-2)',
-                        borderRadius: 4, fontSize: 11, color: 'var(--ink-4)', cursor: 'pointer', textAlign: 'center',
-                      }}
-                    >
-                      Add to dictionary
-                    </button>
                   </div>
                 )}
               </div>

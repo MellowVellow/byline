@@ -1422,6 +1422,30 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
                 )}
               </div>
 
+              {/* Word & Character Count Badge (when enabled in settings) */}
+              {appSettings.showWordCount && editor && (
+                <div
+                  style={{
+                    fontSize: 11.5,
+                    color: 'var(--muted)',
+                    fontVariantNumeric: 'tabular-nums',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '0 8px',
+                    height: 28,
+                    background: 'var(--hover)',
+                    borderRadius: 'var(--radius, 4px)',
+                    border: '1px solid var(--border)',
+                  }}
+                  title="Document Word & Character Count"
+                >
+                  <span><strong>{editor.storage.characterCount?.words?.() ?? 0}</strong> words</span>
+                  <span style={{ opacity: 0.5 }}>·</span>
+                  <span>{editor.storage.characterCount?.characters?.() ?? 0} chars</span>
+                </div>
+              )}
+
               {/* Suggest Button */}
               <button
                 type="button"
@@ -1478,7 +1502,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               className="paper"
               style={{
                 width: '100%',
-                maxWidth: appSettings.paperWidth === 'narrow' ? '58ch' : (appSettings.paperWidth === 'wide' ? '88ch' : '72ch'),
+                maxWidth:
+                  appSettings.paperWidth === 'narrow'
+                    ? '58ch'
+                    : appSettings.paperWidth === 'wide'
+                    ? '92ch'
+                    : appSettings.paperWidth === 'full'
+                    ? '100%'
+                    : '72ch',
                 margin: '0 auto',
                 boxSizing: 'border-box',
               }}

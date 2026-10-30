@@ -1,9 +1,19 @@
 import React, { useEffect, useState } from 'react'
 import { COLOR_PRESETS, DEFAULT_SETTINGS, SHORTCUTS, type AppSettings } from '../lib/settings'
-import { sfxMuted, sfxToggle, blip, sfxSuccess } from '../lib/sfx'
+import {
+  sfxMuted,
+  sfxToggle,
+  blip,
+  sfxSuccess,
+  getSfxInstrument,
+  setSfxInstrument,
+  getSfxPitch,
+  setSfxPitch,
+  type SfxInstrument,
+} from '../lib/sfx'
 import { Logo } from './Brand'
 
-type Tab = 'colors' | 'document' | 'sfx' | 'accessibility' | 'shortcuts'
+type Tab = 'colors' | 'document' | 'accessibility' | 'shortcuts'
 
 const PERSONA_FIELDS: { key: 'grammar' | 'ai' | 'wordChoice' | 'sources' | 'suggest'; label: string; hint: string; defaultColor: string }[] = [
   { key: 'grammar',    label: 'Grammar',    hint: 'Language correctness, punctuation, spelling',   defaultColor: '#C0281F' },
@@ -24,6 +34,8 @@ export default function SettingsMenu({
 }) {
   const [tab, setTab] = useState<Tab>('colors')
   const [muted, setMuted] = useState(sfxMuted())
+  const [instrument, setInstrumentState] = useState<SfxInstrument>(getSfxInstrument)
+  const [pitch, setPitchState] = useState<number>(getSfxPitch)
 
   const set = (p: Partial<AppSettings>) => {
     blip('select')
@@ -42,10 +54,29 @@ export default function SettingsMenu({
   const TABS: { id: Tab; label: string }[] = [
     { id: 'colors',        label: 'Colors & Theme' },
     { id: 'document',      label: 'Document Setup' },
-    { id: 'sfx',           label: 'SFX (Audio)' },
-    { id: 'accessibility', label: 'Accessibility' },
+    { id: 'accessibility', label: 'Accessibility & Audio' },
     { id: 'shortcuts',     label: 'Shortcuts' },
   ]
+
+  const handleInstrumentChange = (inst: SfxInstrument) => {
+    setSfxInstrument(inst)
+    setInstrumentState(inst)
+    if (muted) {
+      sfxToggle()
+      setMuted(false)
+    }
+    blip('select')
+  }
+
+  const handlePitchChange = (semitones: number) => {
+    setSfxPitch(semitones)
+    setPitchState(semitones)
+    if (muted) {
+      sfxToggle()
+      setMuted(false)
+    }
+    blip('select')
+  }
 
   return (
     <div className="library-backdrop" onMouseDown={onClose}>
@@ -301,7 +332,7 @@ export default function SettingsMenu({
           )}
 
           {/* ══════════════════════════════════════════════════
-              TAB 2: DOCUMENT SETUP (FONT, LINE, ETC.)
+              TAB 2: DOCUMENT SETUP (FONT, LINE, FULL/WIDE WIDTH)
           ══════════════════════════════════════════════════ */}
           {tab === 'document' && (
             <div style={{ display: 'grid', gap: 22 }}>
@@ -381,16 +412,20 @@ export default function SettingsMenu({
                 </div>
               </div>
 
-              {/* Paper Layout Width */}
+              {/* Paper Layout Width (Full / Wide / Normal / Narrow) */}
               <div>
-                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', display: 'block', marginBottom: 8 }}>
-                  Paper Column Width
-                </label>
-                <div className="mode-toggle" style={{ display: 'flex', maxWidth: 360 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', margin: 0 }}>
+                    Paper Layout Width
+                  </label>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>Controls reading column span</span>
+                </div>
+                <div className="mode-toggle" style={{ display: 'flex', maxWidth: 440 }}>
                   {([
                     ['narrow', 'Narrow (58ch)'],
                     ['normal', 'Normal (72ch)'],
-                    ['wide', 'Wide (88ch)'],
+                    ['wide', 'Wide (92ch)'],
+                    ['full', 'Full (100% Span)'],
                   ] as const).map(([v, l]) => (
                     <button
                       key={v}
@@ -403,28 +438,8 @@ export default function SettingsMenu({
                     </button>
                   ))}
                 </div>
-              </div>
-
-              {/* Interface Density */}
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', display: 'block', marginBottom: 8 }}>
-                  Interface Density
-                </label>
-                <div className="mode-toggle" style={{ display: 'flex', maxWidth: 360 }}>
-                  {([
-                    ['comfortable', 'Comfortable (Default)'],
-                    ['compact', 'Compact'],
-                  ] as const).map(([v, l]) => (
-                    <button
-                      key={v}
-                      type="button"
-                      className={settings.density === v ? 'active' : ''}
-                      style={{ flex: 1, fontSize: 12 }}
-                      onClick={() => set({ density: v })}
-                    >
-                      {l}
-                    </button>
-                  ))}
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                  Select "Full" or "Wide" to span the paper editor out across the middle canvas.
                 </div>
               </div>
 
@@ -492,164 +507,211 @@ export default function SettingsMenu({
           )}
 
           {/* ══════════════════════════════════════════════════
-              TAB 3: SFX (AUDIO)
-          ══════════════════════════════════════════════════ */}
-          {tab === 'sfx' && (
-            <div style={{ display: 'grid', gap: 20 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '12px 16px',
-                  background: 'var(--dock)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-lg, 6px)',
-                }}
-              >
-                <div>
-                  <strong style={{ fontSize: 13, color: 'var(--ink)', display: 'block' }}>UI Sound Effects (Melodic SFX)</strong>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>Subtle acoustic feedback for accepting suggestions, toggles, and findings</span>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={!muted}
-                  aria-label="UI sound effects"
-                  className={`switch ${!muted ? 'on' : ''}`}
-                  onClick={e => {
-                    e.preventDefault()
-                    const m = sfxToggle()
-                    setMuted(m)
-                    if (!m) sfxSuccess()
-                  }}
-                >
-                  <span className="knob" />
-                </button>
-              </div>
-
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', display: 'block', marginBottom: 10 }}>
-                  Interactive Sound Audition
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
-                  {[
-                    { label: 'Modal Open', cue: () => blip('open') },
-                    { label: 'Button Select', cue: () => blip('select') },
-                    { label: 'Accept Suggestion', cue: () => blip('done') },
-                    { label: 'Mode Switch', cue: () => blip('mode') },
-                    { label: 'Dismiss / Error', cue: () => blip('error') },
-                    { label: 'Success Chime', cue: () => sfxSuccess() },
-                  ].map(s => (
-                    <button
-                      key={s.label}
-                      type="button"
-                      onClick={() => {
-                        if (muted) {
-                          sfxToggle()
-                          setMuted(false)
-                        }
-                        s.cue()
-                      }}
-                      style={{
-                        padding: '8px 10px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 6,
-                        fontSize: 12,
-                        borderRadius: 'var(--radius, 4px)',
-                      }}
-                    >
-                      <span>▶</span>
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
-                  Soundscape Design
-                </label>
-                <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
-                  Byline synthesizes real-time musical cues using Tone.js on a warm pentatonic scale. The cues are designed to communicate system state changes legibly by ear without distracting from the editorial writing flow.
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ══════════════════════════════════════════════════
-              TAB 4: ACCESSIBILITY
+              TAB 3: ACCESSIBILITY & AUDIO (MERGED SFX)
           ══════════════════════════════════════════════════ */}
           {tab === 'accessibility' && (
-            <div style={{ display: 'grid', gap: 16 }}>
-              {[
-                {
-                  key: 'reduceMotion' as const,
-                  title: 'Reduce Motion',
-                  desc: 'Disable pulse animations, sliding drawers, and animated keyframe transitions',
-                },
-                {
-                  key: 'showWordCount' as const,
-                  title: 'Show Word & Character Count',
-                  desc: 'Display real-time word counter in the sticky drafting toolbar',
-                },
-                {
-                  key: 'showMetrics' as const,
-                  title: 'Show Ghost Acceptance Metrics',
-                  desc: 'Track accepted vs suggested ghost text completions in the drafting bar',
-                },
-              ].map(item => (
-                <label
-                  key={item.key}
+            <div style={{ display: 'grid', gap: 24 }}>
+
+              {/* Section 1: Audio / SFX (Soundscape & Tone Controls) */}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)', paddingBottom: 6, borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
+                  Audio Feedback & Synth Tone
+                </div>
+
+                {/* Master SFX Switch */}
+                <div
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    cursor: 'pointer',
-                    padding: '8px 0',
-                    borderBottom: '1px solid color-mix(in srgb, var(--border) 60%, transparent)',
+                    padding: '10px 14px',
+                    background: 'var(--dock)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-lg, 6px)',
+                    marginBottom: 14,
                   }}
                 >
                   <div>
-                    <strong style={{ fontSize: 13, color: 'var(--ink)', display: 'block' }}>{item.title}</strong>
-                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>{item.desc}</span>
+                    <strong style={{ fontSize: 13, color: 'var(--ink)', display: 'block' }}>UI Sound Effects (Melodic SFX)</strong>
+                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>Subtle acoustic chimes for accepting suggestions, toggles, and findings</span>
                   </div>
                   <button
                     type="button"
                     role="switch"
-                    aria-checked={settings[item.key]}
-                    aria-label={item.title}
-                    className={`switch ${settings[item.key] ? 'on' : ''}`}
+                    aria-checked={!muted}
+                    aria-label="UI sound effects"
+                    className={`switch ${!muted ? 'on' : ''}`}
                     onClick={e => {
                       e.preventDefault()
-                      set({ [item.key]: !settings[item.key] } as Partial<AppSettings>)
+                      const m = sfxToggle()
+                      setMuted(m)
+                      if (!m) sfxSuccess()
                     }}
                   >
                     <span className="knob" />
                   </button>
-                </label>
-              ))}
+                </div>
 
-              <div
-                style={{
-                  background: 'var(--hover)',
-                  borderRadius: 'var(--radius, 4px)',
-                  padding: '12px 14px',
-                  fontSize: 12,
-                  color: 'var(--muted)',
-                  lineHeight: 1.5,
-                  marginTop: 8,
-                }}
-              >
-                <strong>Accessibility Commitment:</strong> Byline enforces high-contrast WCAG 2.1 AA focus rings, semantic ARIA landmarks, screen-reader status notices, and keyboard-first navigation across all modal surfaces.
+                {/* Instrument / Timbre Selector */}
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
+                    Synthesizer Instrument / Timbre
+                  </label>
+                  <div className="mode-toggle" style={{ display: 'flex', maxWidth: 440 }}>
+                    {([
+                      ['triangle', 'Soft Bell'],
+                      ['sine', 'Pure Tone'],
+                      ['square', 'Chiptune (8-Bit)'],
+                      ['sawtooth', 'Bright String'],
+                    ] as const).map(([inst, label]) => (
+                      <button
+                        key={inst}
+                        type="button"
+                        className={instrument === inst ? 'active' : ''}
+                        style={{ flex: 1, fontSize: 11.5 }}
+                        onClick={() => handleInstrumentChange(inst)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Pitch / Tone Transposition */}
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', margin: 0 }}>
+                      Pitch & Tone Tuning
+                    </label>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>
+                      {pitch === 0 ? 'Normal (C4)' : pitch > 0 ? `+${pitch} semitones (Higher)` : `${pitch} semitones (Lower)`}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={-7}
+                    max={7}
+                    step={1}
+                    value={pitch}
+                    onChange={e => handlePitchChange(Number(e.target.value))}
+                    style={{ width: '100%', maxWidth: 440 }}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', maxWidth: 440, fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
+                    <span>-7 Deep Low</span>
+                    <span>0 Default</span>
+                    <span>+7 Crisp High</span>
+                  </div>
+                </div>
+
+                {/* Audition Testing Buttons */}
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
+                    Audition Sound Cues
+                  </label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {[
+                      { label: 'Select', cue: () => blip('select') },
+                      { label: 'Accept', cue: () => blip('done') },
+                      { label: 'Mode Toggle', cue: () => blip('mode') },
+                      { label: 'Success Chime', cue: () => sfxSuccess() },
+                      { label: 'Dismiss', cue: () => blip('dismiss') },
+                    ].map(s => (
+                      <button
+                        key={s.label}
+                        type="button"
+                        onClick={() => {
+                          if (muted) {
+                            sfxToggle()
+                            setMuted(false)
+                          }
+                          s.cue()
+                        }}
+                        style={{ padding: '4px 9px', fontSize: 11, borderRadius: 3 }}
+                      >
+                        ▶ {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
+
+              {/* Section 2: Visual Accessibility & Metrics */}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)', paddingBottom: 6, borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
+                  Display & Accessibility Controls
+                </div>
+
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {/* Word & Character Count Toggle */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      cursor: 'pointer',
+                      padding: '8px 0',
+                      borderBottom: '1px solid color-mix(in srgb, var(--border) 60%, transparent)',
+                    }}
+                  >
+                    <div>
+                      <strong style={{ fontSize: 13, color: 'var(--ink)', display: 'block' }}>Show Word & Character Count</strong>
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                        Displays real-time live word and character counters in the sticky drafting toolbar
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={settings.showWordCount}
+                      aria-label="Show word count"
+                      className={`switch ${settings.showWordCount ? 'on' : ''}`}
+                      onClick={e => {
+                        e.preventDefault()
+                        set({ showWordCount: !settings.showWordCount })
+                      }}
+                    >
+                      <span className="knob" />
+                    </button>
+                  </label>
+
+                  {/* Reduce Motion Toggle */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      cursor: 'pointer',
+                      padding: '8px 0',
+                    }}
+                  >
+                    <div>
+                      <strong style={{ fontSize: 13, color: 'var(--ink)', display: 'block' }}>Reduce Motion</strong>
+                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                        Disable pulse glows, sliding drawers, and animated keyframe transitions
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={settings.reduceMotion}
+                      aria-label="Reduce motion"
+                      className={`switch ${settings.reduceMotion ? 'on' : ''}`}
+                      onClick={e => {
+                        e.preventDefault()
+                        set({ reduceMotion: !settings.reduceMotion })
+                      }}
+                    >
+                      <span className="knob" />
+                    </button>
+                  </label>
+                </div>
+              </div>
+
             </div>
           )}
 
           {/* ══════════════════════════════════════════════════
-              TAB 5: SHORTCUTS
+              TAB 4: SHORTCUTS
           ══════════════════════════════════════════════════ */}
           {tab === 'shortcuts' && (
             <div style={{ display: 'grid', gap: 18 }}>
