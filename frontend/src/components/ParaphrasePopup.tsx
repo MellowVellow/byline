@@ -124,9 +124,9 @@ export default function ParaphrasePopup({
     <div
       className="sugg-popup fade"
       style={{
-        position: 'absolute',
-        top: position.y,
-        left: Math.max(16, Math.min(position.x, window.innerWidth - 400)),
+        position: 'fixed',
+        top: Math.min(position.y, window.innerHeight - 280),
+        left: Math.max(16, Math.min(position.x, window.innerWidth - 416)),
         width: 'min(380px, calc(100vw - 32px))',
         background: 'var(--bg)',
         border: '1px solid var(--border)',

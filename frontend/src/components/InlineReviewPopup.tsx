@@ -86,9 +86,9 @@ export default function InlineReviewPopup({
       ref={popupRef}
       className="fade"
       style={{
-        position: 'absolute',
-        top: position.y,
-        left: Math.max(16, Math.min(position.x, window.innerWidth - 440)),
+        position: 'fixed',
+        top: Math.min(position.y, window.innerHeight - 320),
+        left: Math.max(16, Math.min(position.x, window.innerWidth - 456)),
         width: 'min(420px, calc(100vw - 32px))',
         background: 'var(--paper, #fff)',
         border: `1px solid ${activeMeta.border}`,

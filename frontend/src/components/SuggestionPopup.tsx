@@ -59,9 +59,9 @@ export default function SuggestionPopup({
     <div
       className="sugg-popup fade"
       style={{
-        position: 'absolute',
-        top: position.y,
-        left: Math.max(16, Math.min(position.x, window.innerWidth - 420)),
+        position: 'fixed',
+        top: Math.min(position.y, window.innerHeight - 280),
+        left: Math.max(16, Math.min(position.x, window.innerWidth - 456)),
         width: 'min(420px, calc(100vw - 32px))',
         background: 'var(--bg)',
         border: '1px solid var(--border)',

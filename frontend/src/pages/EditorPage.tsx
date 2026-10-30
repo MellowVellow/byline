@@ -192,8 +192,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           setInlineReviewState({
             findings: matchingFindings,
             position: {
-              x: Math.max(16, Math.min(coords.left + window.scrollX, window.innerWidth - 440)),
-              y: coords.bottom + 8 + window.scrollY,
+              x: Math.max(16, coords.left),
+              y: coords.bottom + 8,
             },
           })
           setSelectionContext(null)
@@ -207,8 +207,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       if (selCtx && editor.view) {
         const coords = editor.view.coordsAtPos(selCtx.to)
         setPopupPos({
-          x: Math.max(16, Math.min(coords.left + window.scrollX, window.innerWidth - 420)),
-          y: coords.bottom + 8 + window.scrollY,
+          x: Math.max(16, coords.left),
+          y: coords.bottom + 8,
         })
       }
     },
@@ -279,8 +279,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           setInlineReviewState({
             findings: matched,
             position: {
-              x: Math.max(16, Math.min(rect.left + window.scrollX, window.innerWidth - 440)),
-              y: rect.bottom + 8 + window.scrollY,
+              x: Math.max(16, rect.left),
+              y: rect.bottom + 8,
             },
           })
           setSelectionContext(null)
@@ -514,8 +514,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       // Calculate popup position directly below cursor
       const coords = editor.view.coordsAtPos(pos)
       setSuggestPopupPos({
-        x: Math.max(16, Math.min(coords.left + window.scrollX, window.innerWidth - 440)),
-        y: coords.bottom + 8 + window.scrollY,
+        x: Math.max(16, coords.left),
+        y: coords.bottom + 8,
       })
 
       blip('done')
@@ -535,8 +535,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
 
       const coords = editor.view.coordsAtPos(pos)
       setSuggestPopupPos({
-        x: Math.max(16, Math.min(coords.left + window.scrollX, window.innerWidth - 440)),
-        y: coords.bottom + 8 + window.scrollY,
+        x: Math.max(16, coords.left),
+        y: coords.bottom + 8,
       })
     } finally {
       setDraftLoading(false)
