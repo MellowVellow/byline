@@ -20,6 +20,12 @@ class SynonymIn(BaseModel):
     context: str = S(4000); level: str = Field(default="General", max_length=40)
     word: str = S(80); sentence: str = S(2000)
 
+class ConnectIn(BaseModel):
+    context: str = S(4000)
+    before: str = S(6000)
+    after: str = S(6000)
+    relation_hint: str = Field(default="auto", max_length=50)
+
 class GrammarIn(BaseModel):
     text: str = S(20000)
 

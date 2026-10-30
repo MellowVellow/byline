@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 import httpx, json
-from ..config import settings, ROOT
+from ..config import settings, ROOT, APPROVED_META_MODELS
 from ..models import DatasetIn, WaitlistIn
 from .common import ok, fail, err
 
@@ -14,7 +14,24 @@ async def health():
             r = await cl.get(settings.languagetool_url.replace("/v2/check", "/v2/languages"))
             lt = r.status_code == 200
     except Exception: pass
-    return ok(meta_configured=bool(settings.meta_api_key), model=settings.meta_model, languagetool=lt)
+    return ok(
+        meta_configured=bool(settings.meta_api_key or settings.openrouter_api_key or settings.baseten_api_key),
+        provider="meta" if settings.meta_api_key else ("openrouter" if settings.openrouter_api_key else ("baseten" if settings.baseten_api_key else "mock")),
+        model=settings.meta_model if settings.meta_api_key else (settings.openrouter_model if settings.openrouter_api_key else "mock:meta-llama-3.3-70b-instruct"),
+        languagetool=lt
+    )
+
+@router.get("/api/models")
+async def get_approved_models():
+    """Return explicit allowlist of Meta-authored models and current runtime active configuration."""
+    return ok(
+        approved_models=sorted(list(APPROVED_META_MODELS)),
+        active_model=settings.meta_model if settings.meta_api_key else (settings.openrouter_model if settings.openrouter_api_key else "meta-llama/llama-3.3-70b-instruct"),
+        active_provider="meta_api" if settings.meta_api_key else ("openrouter" if settings.openrouter_api_key else ("baseten" if settings.baseten_api_key else "mock_engine")),
+        meta_api_available=bool(settings.meta_api_key),
+        openrouter_available=bool(settings.openrouter_api_key),
+        baseten_available=bool(settings.baseten_api_key),
+    )
 
 @router.post("/api/dataset")
 async def dataset(body: DatasetIn):

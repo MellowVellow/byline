@@ -152,3 +152,20 @@ def setup_questions_prompt(goal: str, context: str) -> tuple[str, str]:
             "Questions must name the goal's topic/audience/stakes, never generic filler. One open question max. "
             'JSON: {"questions":[{"id":"q1","question":"...","maps_to":"diction","options":["...","..."]}]}')
     return system, user
+
+
+def connect_prompt(context: str, before: str, after: str, hint: str = "auto") -> tuple[str, str]:
+    system = (
+        "You are Byline's Connect Engine, powered by Meta reasoning models.\n"
+        "- Purpose: Synthesize logical bridges, transitions, and dialectical synthesis between two thoughts.\n"
+        "- Output: Return strictly valid JSON containing exactly 3 distinct connective bridge options.\n"
+        'JSON format: {"options":[{"relation_type":"<Contrast|Cause-Effect|Concession|Evidence-Bridge|Elaboration>","bridge_text":"<synthesized sentence or clause>","rationale":"<one-line explanation of the rhetorical link>"}]}'
+    )
+    user = (
+        f"DOCUMENT GOAL: {context or '(general writing)'}\n"
+        f"RELATION HINT: {hint}\n"
+        f"PRECEDING THOUGHT:\n{fence('BEFORE', before or '(empty)')}\n"
+        f"SUCCEEDING THOUGHT:\n{fence('AFTER', after or '(empty)')}\n"
+        "TASK: Synthesize 3 high-quality connective bridges that link the thoughts naturally."
+    )
+    return system, user

@@ -25,6 +25,7 @@ export const api = {
   reactions: (b: unknown, s?: AbortSignal) => post('/api/reactions', b, s),
   mainIdea: (b: unknown, s?: AbortSignal) => post('/api/main-idea', b, s),
   outline: (b: unknown) => post('/api/outline', b),
+  connect: (b: unknown, s?: AbortSignal) => postRaw('/api/connect', b, s),
   synonyms: (b: unknown) => post('/api/synonyms', b),
   grammar: (b: unknown, s?: AbortSignal) => post('/api/grammar', b, s),
   readings: (b: unknown, s?: AbortSignal) => post('/api/readings', b, s),

@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from .config import cors_list
 from .security import rate_ok
-from .routers import system, complete, annotate, research, setup, lint
+from .routers import system, complete, annotate, research, setup, lint, connect
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="Byline v2")
@@ -28,5 +28,5 @@ async def guard(request: Request, call_next):
     return resp
 
 
-for _router in (system.router, complete.router, annotate.router, research.router, setup.router, lint.router):
+for _router in (system.router, complete.router, annotate.router, research.router, setup.router, lint.router, connect.router):
     app.include_router(_router)

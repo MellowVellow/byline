@@ -1,8 +1,5 @@
 # Byline — Technical Concepts and Architecture Plan
 
-> **Note:** Reconciled with Byline v2 codebase (FastAPI + React 19/TipTap 3 + Meta w/ OpenRouter).
-> Authoritative active document: [docs/plans/TECHNICAL_ARCHITECTURE.md](./docs/plans/TECHNICAL_ARCHITECTURE.md)
-
 ## 1. Purpose
 
 This document defines how Byline should be implemented technically, from a clean codebase to an integrated MVP and future feature expansion.

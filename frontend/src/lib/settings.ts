@@ -8,6 +8,15 @@ export interface AppSettings {
   ai: string; grammar: string; sources: string; wordChoice: string; selection: string; suggest: string
   editorFont: EditorFont; fontSize: number; lineHeight: number; paperWidth: PaperWidth
   density: Density; showWordCount: boolean; showMetrics: boolean; reduceMotion: boolean; spellcheck: boolean
+  // Meta-authored inference settings
+  metaModel: string
+  temperature: number
+  maxTokens: number
+  topP: number
+  reasoningEffort: 'minimal' | 'low' | 'medium'
+  // Writing profile
+  writingTheme: 'neutral' | 'academic' | 'gen-z' | 'buzzword'
+  language: string
 }
 
 /** One preset drives every annotation surface: grammar=Language red, ai=Reader purple, sources=blue, wordChoice=Lint yellow, suggest=Suggest grey. */
@@ -22,6 +31,13 @@ export const COLOR_PRESETS: Record<string, { label: string; ai: string; grammar:
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system', ...COLOR_PRESETS.default, editorFont: 'serif', fontSize: 19, lineHeight: 1.65,
   paperWidth: 'normal', density: 'comfortable', showWordCount: true, showMetrics: true, reduceMotion: false, spellcheck: false,
+  metaModel: 'meta-llama/llama-3.3-70b-instruct',
+  temperature: 0.7,
+  maxTokens: 800,
+  topP: 0.9,
+  reasoningEffort: 'minimal',
+  writingTheme: 'neutral',
+  language: 'en-US',
 }
 const KEY = 'byline.settings.v1'
 const { label: _l, ...presetColors } = COLOR_PRESETS.default; void _l; void presetColors

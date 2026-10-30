@@ -1,8 +1,5 @@
 # Byline — Brand, Pitch, Demo, Storytelling, Documentation, Socials & Testing Strategy
 
-> **Note:** Reconciled with Byline v2 codebase (FastAPI + React 19/TipTap 3 + Meta w/ OpenRouter).
-> Authoritative active document: [docs/plans/STRATEGY_AND_PRESENTATION.md](./docs/plans/STRATEGY_AND_PRESENTATION.md)
-
 ## 1. Strategic Objective
 
 Byline needs more than a working application. It needs a clear identity, a convincing reason to exist, visible evidence that it works, and a story that people can understand quickly.

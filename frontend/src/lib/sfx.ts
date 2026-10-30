@@ -81,3 +81,5 @@ export function sfxStep(n = 0) { notes([SCALE[Math.max(0, Math.min(SCALE.length 
 export function sfxBack() { notes(['E4', 'C4'], 0.06) }
 export function sfxPick() { notes(['G3', 'C4'], 0.06) }
 export function sfxSuccess() { notes(['C4', 'E4', 'G4', 'C5'], 0.06) }
+export function sfxAccept() { blip('accept') }
+export function sfxDismiss() { blip('dismiss') }

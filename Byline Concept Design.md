@@ -1,8 +1,5 @@
 # Byline: Product and Development Plan
 
-> **Note:** Reconciled with Byline v2 codebase (FastAPI + React 19/TipTap 3 + Meta w/ OpenRouter).
-> Authoritative active document: [docs/plans/PRODUCT_AND_DEVELOPMENT.md](./docs/plans/PRODUCT_AND_DEVELOPMENT.md)
-
 ## 1. Product Vision
 
 Byline is an AI-assisted writing workspace that helps people express, connect, and improve their ideas without taking control of their writing.

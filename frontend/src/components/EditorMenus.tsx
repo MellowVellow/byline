@@ -28,7 +28,7 @@ export default function EditorMenus({ editor, onSuggest, onSentenceStarter, coun
         </div></>}
       </div>
       <span className="spacer" />
-      <button className="bar-ai" onMouseDown={e => e.preventDefault()} onClick={onSentenceStarter} title="Insert a transition / sentence starter at caret">Sentence starters <span className="kbd">Ctrl /</span></button>
+      <button className="bar-ai" onMouseDown={e => e.preventDefault()} onClick={onSentenceStarter} title="Connect thoughts with transitions or AI synthesis">Connect <span className="kbd">Ctrl /</span></button>
     </div>
 
     <BubbleMenu editor={editor} className="bubble-menu" options={{ placement: 'top', offset: 8 }}
