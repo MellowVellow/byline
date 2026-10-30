@@ -27,7 +27,7 @@ import { harperService } from '../services/harper-service'
 import { resolveAnchor, applySafeReplacement } from '../editor/anchoring'
 import type { DocumentContext, OutlineNode, ThemeId } from '../domain/document'
 import type { Finding, FindingStatus, Suggestion, Persona } from '../domain/finding'
-import { THEME_DEFINITIONS } from '../domain/writing-profile'
+import { THEME_DEFINITIONS, SUPPORTED_LANGUAGES } from '../domain/writing-profile'
 import { loadSettings, saveSettings, type AppSettings } from '../lib/settings'
 import { api } from '../lib/api'
 import { GOLDEN_PATH_SAMPLE_DOC, GOLDEN_PATH_SAMPLE_CONTEXT } from '../lib/fallback'
@@ -139,6 +139,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [suggestPopupPos, setSuggestPopupPos] = useState<{ x: number; y: number } | null>(null)
   const [draftLoading, setDraftLoading] = useState(false)
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
+  const [langMenuOpen, setLangMenuOpen] = useState(false)
 
   // Initialize TipTap Editor with AnchorDecorations
   const editor = useEditor({
@@ -331,12 +332,18 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     setExpandingSection(null)
   }
 
-  // Close theme dropdown on Escape or clicking outside
+  // Close theme & language dropdown on Escape or clicking outside
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setThemeMenuOpen(false) }
-    const handleClick = (e: MouseEvent) => {
-      if (themeMenuOpen && document.querySelector('.editor-bar') && !document.querySelector('.editor-bar')?.contains(e.target as Node)) {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
         setThemeMenuOpen(false)
+        setLangMenuOpen(false)
+      }
+    }
+    const handleClick = (e: MouseEvent) => {
+      if ((themeMenuOpen || langMenuOpen) && document.querySelector('.editor-bar') && !document.querySelector('.editor-bar')?.contains(e.target as Node)) {
+        setThemeMenuOpen(false)
+        setLangMenuOpen(false)
       }
     }
     addEventListener('keydown', handleKey)
@@ -345,7 +352,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       removeEventListener('keydown', handleKey)
       document.removeEventListener('mousedown', handleClick)
     }
-  }, [themeMenuOpen])
+  }, [themeMenuOpen, langMenuOpen])
 
   // Subscribe to unified findings
   useEffect(() => {
@@ -1291,7 +1298,10 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               <div style={{ position: 'relative' }}>
                 <button
                   type="button"
-                  onClick={() => setThemeMenuOpen(v => !v)}
+                  onClick={() => {
+                    setThemeMenuOpen(v => !v)
+                    setLangMenuOpen(false)
+                  }}
                   title="Writing theme"
                   style={{ padding: '2px 10px', fontSize: 12, minHeight: 28 }}
                 >
@@ -1328,6 +1338,59 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
                       >
                         <div style={{ fontWeight: appSettings.writingTheme === th.id ? 700 : 500, fontSize: 13, color: 'var(--ink)' }}>{th.name}</div>
                         <div style={{ fontSize: 11, color: 'var(--muted)' }}>{th.tagline}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Document Language dropdown */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLangMenuOpen(v => !v)
+                    setThemeMenuOpen(false)
+                  }}
+                  title="Document language"
+                  style={{ padding: '2px 10px', fontSize: 12, minHeight: 28 }}
+                >
+                  Lang: {SUPPORTED_LANGUAGES.find(l => l.code === (appSettings.language || 'en-US'))?.label.split(' ')[0] || 'English'} <span style={{ fontSize: 10, opacity: 0.7 }}>▾</span>
+                </button>
+                {langMenuOpen && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: '100%',
+                      background: 'var(--paper)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius)',
+                      boxShadow: 'var(--shadow-pop)',
+                      zIndex: 110,
+                      minWidth: 190,
+                      padding: '6px 0',
+                      marginTop: 4,
+                      maxHeight: 260,
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {SUPPORTED_LANGUAGES.map(lang => (
+                      <button
+                        key={lang.code}
+                        type="button"
+                        onClick={() => {
+                          setAppSettings(s => { const next = { ...s, language: lang.code }; saveSettings(next); return next })
+                          setContext(c => ({ ...c, language: lang.code }))
+                          setLangMenuOpen(false)
+                        }}
+                        style={{
+                          width: '100%', padding: '8px 12px', textAlign: 'left', background: appSettings.language === lang.code ? 'var(--hover)' : 'transparent',
+                          border: 'none', cursor: 'pointer', minHeight: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        }}
+                      >
+                        <span style={{ fontWeight: appSettings.language === lang.code ? 700 : 500, fontSize: 13, color: 'var(--ink)' }}>{lang.label}</span>
+                        <span style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase' }}>{lang.code}</span>
                       </button>
                     ))}
                   </div>

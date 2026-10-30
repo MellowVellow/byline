@@ -73,43 +73,42 @@ export function saveSettings(s: AppSettings) { localStorage.setItem(KEY, JSON.st
 
 export interface Shortcut { keys: string; action: string; context?: string }
 export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
-  { group: 'AI writing', items: [
-    { keys: 'Ctrl/⌘ Space', action: 'Suggest — request ghost completions at caret', context: 'Editor' },
-    { keys: 'Ctrl/⌘ /', action: 'Sentence starters — open transition-phrase menu', context: 'Editor' },
-    { keys: 'Tab', action: 'Accept highlighted suggestion / apply highlighted fix', context: 'Suggestion or popup open' },
+  { group: 'AI Drafting & Assistance', items: [
+    { keys: 'Ctrl/⌘ Space', action: 'Suggest — request contextual ghost completions at caret', context: 'Editor' },
+    { keys: 'Ctrl/⌘ /', action: 'Sentence starters — open transition phrases & connect menu', context: 'Editor' },
     { keys: '1 – 3', action: 'Accept suggestion #N', context: 'Suggestions open' },
-    { keys: '↑ / ↓', action: 'Cycle suggestions', context: 'Suggestions open' },
-    { keys: '`', action: 'Reroll — fresh suggestion options', context: 'Suggestions open' },
-    { keys: 'Esc', action: 'Dismiss suggestions', context: 'Suggestions open' },
-    { keys: 'Double-click word', action: 'Synonyms for word', context: 'Editor' },
-    { keys: '1 – 3 / Tab', action: 'Pick synonym #N / first synonym', context: 'Synonyms open' },
+    { keys: 'Tab', action: 'Accept first suggestion', context: 'Suggestions open' },
+    { keys: 'Alt + R / `', action: 'Reroll — generate fresh suggestion options', context: 'Suggestions open' },
+    { keys: 'Esc', action: 'Dismiss suggestions / clear selection', context: 'Suggestions open' },
+    { keys: 'Double-click word', action: 'Synonyms & vocabulary explorer for selected word', context: 'Editor' },
   ] },
-  { group: 'Sentence starters menu', items: [
-    { keys: 'Type', action: 'Filter categories / phrases', context: 'Menu open' },
-    { keys: '1 – 9, 0', action: 'Pick row #N (0 = 10th)', context: 'Menu open' },
-    { keys: 'Tab / Enter', action: 'Pick first matching row', context: 'Menu open' },
-    { keys: 'Backspace', action: 'Edit filter text', context: 'Menu open' },
-    { keys: 'Ctrl/⌘ / or Esc', action: 'Close menu', context: 'Menu open' },
+  { group: 'Inline Review & Edit Mode', items: [
+    { keys: 'Click underline', action: 'Inspect issue & suggestions popup below cursor', context: 'Edit mode' },
+    { keys: 'Select text', action: 'Open contextual inline assistance popup below selection', context: 'Edit mode' },
+    { keys: 'Tab', action: 'Cycle next tab when multiple color categories overlap on text', context: 'Inline popup open' },
+    { keys: 'Enter / Click Accept', action: 'Apply suggested revision safely into draft text', context: 'Inline popup open' },
+    { keys: 'Esc', action: 'Dismiss inline review popup', context: 'Inline popup open' },
   ] },
-  { group: 'Issues, reader & lint popups', items: [
-    { keys: 'Click underline', action: 'Open stacked fixes for overlapping issues', context: 'Editing mode' },
-    { keys: 'Tab / Enter', action: 'Apply fix, else advance to next layer (grammar → word choice → source → reader)', context: 'Popup open' },
-    { keys: 'Esc', action: 'Close popup', context: 'Popup open' },
+  { group: 'Independent Outline & Structure', items: [
+    { keys: 'Drag Handle ⠿', action: 'Reorder sections or nest into hierarchy (Godot / Notion style)', context: 'Outline panel' },
+    { keys: 'Double-click title', action: 'Rename section title inline', context: 'Outline panel' },
+    { keys: '+ button', action: 'Add a new section directly below', context: 'Outline panel' },
+    { keys: 'Insert in Doc', action: 'Explicitly insert outline heading or expand proposed draft section', context: 'Outline panel' },
   ] },
-  { group: 'Formatting (TipTap)', items: [
+  { group: 'Formatting & Typography', items: [
     { keys: 'Ctrl/⌘ B / I / U', action: 'Bold / italic / underline', context: 'Editor' },
     { keys: 'Ctrl/⌘ Shift X', action: 'Strikethrough', context: 'Editor' },
     { keys: 'Ctrl/⌘ E', action: 'Inline code', context: 'Editor' },
-    { keys: 'Ctrl/⌘ Shift H', action: 'Highlight', context: 'Editor' },
-    { keys: 'Ctrl/⌘ Alt 1 – 3', action: 'Heading 1 – 3', context: 'Editor' },
+    { keys: 'Ctrl/⌘ Shift H', action: 'Highlight mark', context: 'Editor' },
+    { keys: 'Ctrl/⌘ Alt 1 – 3', action: 'Heading levels 1 – 3', context: 'Editor' },
     { keys: 'Ctrl/⌘ Shift 7 / 8', action: 'Numbered / bullet list', context: 'Editor' },
     { keys: 'Ctrl/⌘ Shift B', action: 'Blockquote', context: 'Editor' },
-    { keys: '/', action: 'Block menu on empty line — heading, list, quote, code, divider', context: 'Empty block' },
+    { keys: '/', action: 'Block menu on empty line (heading, list, quote, divider)', context: 'Empty block' },
   ] },
-  { group: 'General', items: [
-    { keys: 'Ctrl/⌘ Z', action: 'Undo', context: 'Editor' },
-    { keys: 'Ctrl/⌘ Shift Z / Ctrl Y', action: 'Redo', context: 'Editor' },
-    { keys: 'Ctrl/⌘ ,', action: 'Open Settings', context: 'App' },
-    { keys: 'Esc', action: 'Close Settings / rule library', context: 'Dialog open' },
+  { group: 'General & Application', items: [
+    { keys: 'Ctrl/⌘ Z', action: 'Undo edit', context: 'Editor' },
+    { keys: 'Ctrl/⌘ Shift Z / Ctrl Y', action: 'Redo edit', context: 'Editor' },
+    { keys: 'Ctrl/⌘ ,', action: 'Open Workspace Settings', context: 'App' },
+    { keys: 'Esc', action: 'Close modal / cancel active operation', context: 'Dialog open' },
   ] },
 ]
