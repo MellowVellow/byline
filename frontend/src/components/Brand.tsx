@@ -20,7 +20,7 @@ export function Logo({ height = 28 }: { height?: number }) {
   }, [])
 
   const fontSize = Math.round(height * 0.82)
-  const dotSize = Math.max(3.5, Math.round(height * 0.13))
+  const dotSize = Math.max(3, Math.round(height * 0.12))
 
   return (
     <a
@@ -40,6 +40,7 @@ export function Logo({ height = 28 }: { height?: number }) {
           fontSize: `${fontSize}px`,
           fontWeight: 600,
           letterSpacing: '-0.02em',
+          lineHeight: 1,
           display: 'inline-flex',
           alignItems: 'baseline',
           position: 'relative',
@@ -48,25 +49,27 @@ export function Logo({ height = 28 }: { height?: number }) {
         <span style={{ color: 'var(--ink)' }}>By</span>
         <span
           style={{
-            display: 'inline-flex',
-            flexDirection: 'column',
-            alignItems: 'center',
             position: 'relative',
+            display: 'inline-block',
+            color: 'var(--muted)',
+            fontWeight: 500,
+            lineHeight: 1,
           }}
         >
-          <span style={{ color: 'var(--muted)', fontWeight: 400 }}>line</span>
-          {/* 4 circles below line to act as underline */}
+          line
+          {/* 4 circles snug below the 4 letters of "line" as an underline */}
           <span
             aria-hidden="true"
             style={{
               position: 'absolute',
-              bottom: `-${dotSize + 2}px`,
+              bottom: '1px',
               left: 0,
               right: 0,
-              display: 'flex',
-              justifyContent: 'space-between',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              justifyItems: 'center',
               alignItems: 'center',
-              padding: '0 1px',
+              pointerEvents: 'none',
             }}
           >
             <span

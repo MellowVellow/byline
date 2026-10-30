@@ -385,17 +385,18 @@ input[type=range]{accent-color:var(--ink);padding:0;border:none;background:trans
 .section h2:first-child{margin-top:0}
 .section p{margin:0 0 14px;text-wrap:pretty}
 footer.section{padding-top:20px;border-top:1px solid var(--border)}
-@media(max-width:700px){
-  .topbar{padding:9px 12px;gap:8px;flex-wrap:wrap}
-  .layout{padding:10px;gap:10px}
-  .paper{padding:24px 16px 24px 42px;min-height:60vh;background:linear-gradient(90deg,transparent 0 30px,color-mix(in srgb,var(--proof) 38%,transparent) 30px,color-mix(in srgb,var(--proof) 38%,transparent) 31px,transparent 31px),var(--paper)}
-  .paper.paged{padding:32px 18px 32px 44px;background:linear-gradient(90deg,transparent 0 32px,color-mix(in srgb,var(--proof) 38%,transparent) 32px,color-mix(in srgb,var(--proof) 38%,transparent) 33px,transparent 33px),var(--paper)}
-  .ProseMirror{font-size:17px;min-height:52vh}
-  .hero p{font-size:16px}
-  .waitlist input{flex-basis:100%;max-width:none}
-  .waitlist .btn,.waitlist button{flex:1 1 auto}
-  .demo-steps span{white-space:normal}
-  .metric{white-space:normal}
+@media(max-width:768px){
+  .topbar{padding:0 8px;gap:6px;flex-wrap:nowrap;height:48px;min-height:48px}
+  .layout{padding:4px 6px;gap:0}
+  .paper{padding:20px 14px 20px 32px;min-height:60vh}
+  .paper.paged{padding:24px 14px 24px 36px}
+  .desktop-only-btn{display:none !important}
+  .mobile-only-btn{display:inline-flex !important}
+  .editor-bar{overflow-x:auto;flex-wrap:nowrap;padding:4px 6px;scrollbar-width:none}
+  .editor-bar::-webkit-scrollbar{display:none}
+}
+@media(min-width:769px){
+  .mobile-only-btn{display:none !important}
 }
 @media(max-width:1100px){.rail-scroll{max-height:none}}
 

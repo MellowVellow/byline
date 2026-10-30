@@ -50,6 +50,51 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [rightOpen, setRightOpen] = useState(false)
   const [triggerReviewCounter, setTriggerReviewCounter] = useState(0)
 
+  // Mobile Responsiveness & Merged Drawer (swipe right to open)
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth <= 768
+  })
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+  const [mobileTab, setMobileTab] = useState<'outline' | 'review'>('outline')
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!isMobile) return
+    const touch = e.touches[0]
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() }
+  }
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!isMobile || !touchStartRef.current) return
+    const touch = e.changedTouches[0]
+    const deltaX = touch.clientX - touchStartRef.current.x
+    const deltaY = touch.clientY - touchStartRef.current.y
+    const elapsed = Date.now() - touchStartRef.current.time
+    touchStartRef.current = null
+
+    // Predominantly horizontal swipe within 600ms
+    if (Math.abs(deltaY) < 75 && elapsed < 600) {
+      if (deltaX > 45 && !mobileDrawerOpen) {
+        // Swipe to right to open merged drawer
+        blip('open')
+        setMobileDrawerOpen(true)
+      } else if (deltaX < -45 && mobileDrawerOpen) {
+        // Swipe to left to close merged drawer
+        blip('toggle')
+        setMobileDrawerOpen(false)
+      }
+    }
+  }
+
   // Active Outline Node & Highlighted Finding Card
   const [activeOutlineNodeId, setActiveOutlineNodeId] = useState<string | null>(null)
   const [highlightedFindingId, setHighlightedFindingId] = useState<string | null>(null)
@@ -1094,7 +1139,10 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     setMode(newMode)
     if (newMode === 'editing') {
       setRightOpen(true)
+      setMobileTab('review')
       setTriggerReviewCounter(c => c + 1)
+    } else {
+      setMobileTab('outline')
     }
   }
 
@@ -1121,7 +1169,12 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   }
 
   return (
-    <div className="byline-app-container" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--bg)' }}>
+    <div
+      className="byline-app-container"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--bg)' }}
+    >
       {/* 1. Top Navigation Bar (Centered Mode, Exposable Theme, Light/Dark) */}
       <TopNavigation
         mode={mode}
@@ -1130,75 +1183,80 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenMetrics={() => setMetricsOpen(true)}
         editor={editor}
+        onToggleMobileDrawer={() => setMobileDrawerOpen(v => !v)}
+        mobileDrawerOpen={mobileDrawerOpen}
+        findingsCount={findings.filter(f => f.status === 'open' || f.status === 'stale').length}
       />
 
-      {/* 2. Three-Part Workspace Layout with Expandable Rails */}
+      {/* 2. Three-Part Workspace Layout with Expandable Rails (Desktop) or Full Paper (Mobile) */}
       <div
         className="layout"
         style={{
           display: 'grid',
-          gridTemplateColumns: `${leftOpen ? '300px' : '44px'} minmax(0, 1fr) ${rightOpen ? '300px' : '44px'}`,
+          gridTemplateColumns: isMobile ? '1fr' : `${leftOpen ? '300px' : '44px'} minmax(0, 1fr) ${rightOpen ? '300px' : '44px'}`,
           flex: 1,
           height: 'calc(100vh - 48px)',
           overflow: 'hidden',
-          padding: 8,
-          gap: 10,
+          padding: isMobile ? '4px 6px' : 8,
+          gap: isMobile ? 0 : 10,
         }}
       >
-        {/* Left Rail: Intent (Context & Outline) */}
-        <aside
-          className="rail"
-          style={{
-            height: '100%',
-            overflow: 'hidden',
-            background: 'var(--dock)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-lg)',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          {leftOpen ? (
-            <IntentDock
-              context={context}
-              onContextChange={setContext}
-              outline={outline}
-              onOutlineChange={setOutline}
-              editor={editor}
-              onInsertTitleAtCursor={handleInsertTitleAtCursor}
-              onCopyOutlineContent={handleCopyOutlineContent}
-              onExpandSection={handleOpenExpandSection}
-              onToggleCollapse={() => setLeftOpen(false)}
-            />
-          ) : (
-            <div className="rail-strip" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 0' }}>
-              <button
-                type="button"
-                onClick={() => setLeftOpen(true)}
-                title="Expand Intent Dock"
-                style={{ width: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700 }}
-              >
-                ›
-              </button>
-              <button
-                type="button"
-                onClick={() => setLeftOpen(true)}
-                title="Outline"
-                style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--blue)' }}
-              >
-                O
-              </button>
-              <button
-                type="button"
-                onClick={() => setLeftOpen(true)}
-                title="Context"
-                style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}
-              >
-                C
-              </button>
-            </div>
-          )}
-        </aside>
+        {/* Left Rail: Intent (Context & Outline) — Desktop only */}
+        {!isMobile && (
+          <aside
+            className="rail"
+            style={{
+              height: '100%',
+              overflow: 'hidden',
+              background: 'var(--dock)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-lg)',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            {leftOpen ? (
+              <IntentDock
+                context={context}
+                onContextChange={setContext}
+                outline={outline}
+                onOutlineChange={setOutline}
+                editor={editor}
+                onInsertTitleAtCursor={handleInsertTitleAtCursor}
+                onCopyOutlineContent={handleCopyOutlineContent}
+                onExpandSection={handleOpenExpandSection}
+                onToggleCollapse={() => setLeftOpen(false)}
+              />
+            ) : (
+              <div className="rail-strip" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 0' }}>
+                <button
+                  type="button"
+                  onClick={() => setLeftOpen(true)}
+                  title="Expand Intent Dock"
+                  style={{ width: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700 }}
+                >
+                  ›
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeftOpen(true)}
+                  title="Outline"
+                  style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--blue)' }}
+                >
+                  O
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeftOpen(true)}
+                  title="Context"
+                  style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}
+                >
+                  C
+                </button>
+              </div>
+            )}
+          </aside>
+        )}
 
         {/* Center: Expression (Paper Editor) */}
         <main
@@ -1215,21 +1273,26 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             className="editor-bar"
             style={{
               position: 'sticky',
-              top: 8,
+              top: isMobile ? 0 : 8,
               zIndex: 10,
-              padding: '6px 12px',
+              padding: isMobile ? '4px 6px' : '6px 12px',
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius)',
               background: 'var(--dock)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
+              justifyContent: isMobile ? 'flex-start' : 'space-between',
               gap: 8,
               margin: '0 0 8px 0',
+              overflowX: 'auto',
+              whiteSpace: 'nowrap',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              flexShrink: 0,
             }}
           >
             {/* Formatting Actions */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
               <button
                 type="button"
                 onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
@@ -1297,9 +1360,9 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             </div>
 
             {/* Drafting Tools: Assist Granularity, Suggest & Connect */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
               {/* Granularity Selector */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                 <span className="meta" style={{ fontSize: 11 }}>Assist:</span>
                 {(['Hint', 'Phrase', 'Sentence', 'Question'] as AssistGranularity[]).map(gran => (
                   <button
@@ -1313,11 +1376,6 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
                   </button>
                 ))}
               </div>
-
-              {/* Word count */}
-              <span className="metric" style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 10, marginRight: 10, whiteSpace: 'nowrap' }}>
-                {counts.words} words
-              </span>
 
               {/* Theme dropdown */}
               <div style={{ position: 'relative' }}>
@@ -1556,85 +1614,263 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         </main>
 
         {/* Right Rail: Reflection (Unified Findings across 4 Personas) */}
-        <aside
-          ref={rightRailRef}
-          className="rail right-rail"
-          style={{
-            height: '100%',
-            overflow: 'hidden',
-            background: 'var(--dock)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-lg)',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          {rightOpen ? (
-            <ReviewDock
-              findings={findings}
-              onStatusChange={(id, st) => globalAnalysisService.updateStatus(id, st)}
-              onRerollFinding={handleRerollFinding}
-              onRunAnalysis={handleRunFullAnalysis}
-              onRunGrammar={handleRunGrammar}
-              onRunResearch={handleRunResearch}
-              onRunPersona={handleRunPersona}
-              analyzing={analyzing}
-              editor={editor}
-              highlightedFindingId={highlightedFindingId}
-              onToggleCollapse={() => setRightOpen(false)}
-              triggerReviewCounter={triggerReviewCounter}
-              grammarNotice={grammarNotice}
-              selectedPersona={selectedPersona}
-              onPersonaChange={setSelectedPersona}
-              visiblePersonas={visiblePersonas}
-              onVisibilityChange={setVisiblePersonas}
+        {/* Right Rail: Desktop only */}
+        {!isMobile && (
+          <aside
+            ref={rightRailRef}
+            className="rail right-rail"
+            style={{
+              height: '100%',
+              overflow: 'hidden',
+              background: 'var(--dock)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-lg)',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            {rightOpen ? (
+              <ReviewDock
+                findings={findings}
+                onStatusChange={(id, st) => globalAnalysisService.updateStatus(id, st)}
+                onRerollFinding={handleRerollFinding}
+                onRunAnalysis={handleRunFullAnalysis}
+                onRunGrammar={handleRunGrammar}
+                onRunResearch={handleRunResearch}
+                onRunPersona={handleRunPersona}
+                analyzing={analyzing}
+                editor={editor}
+                highlightedFindingId={highlightedFindingId}
+                onToggleCollapse={() => setRightOpen(false)}
+                triggerReviewCounter={triggerReviewCounter}
+                grammarNotice={grammarNotice}
+                selectedPersona={selectedPersona}
+                onPersonaChange={setSelectedPersona}
+                visiblePersonas={visiblePersonas}
+                onVisibilityChange={setVisiblePersonas}
+              />
+            ) : (
+              <div className="rail-strip" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 0' }}>
+                <button
+                  type="button"
+                  onClick={() => setRightOpen(true)}
+                  title="Expand Review Dock"
+                  style={{ width: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700 }}
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRightOpen(true)}
+                  title="Grammar"
+                  style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--lt)' }}
+                >
+                  Gr
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRightOpen(true)}
+                  title="Reader"
+                  style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--ai)' }}
+                >
+                  Re
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRightOpen(true)}
+                  title="Supervisor"
+                  style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--yellow)' }}
+                >
+                  Su
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRightOpen(true)}
+                  title="Researcher"
+                  style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--blue)' }}
+                >
+                  Rs
+                </button>
+              </div>
+            )}
+          </aside>
+        )}
+      </div>
+
+      {/* Mobile Merged Drawer (Swipe right anywhere to open) */}
+      {isMobile && (
+        <>
+          {mobileDrawerOpen && (
+            <div
+              role="presentation"
+              onClick={() => setMobileDrawerOpen(false)}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0, 0, 0, 0.45)',
+                backdropFilter: 'blur(2px)',
+                zIndex: 199,
+              }}
             />
-          ) : (
-            <div className="rail-strip" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 0' }}>
+          )}
+
+          <aside
+            className="mobile-merged-drawer"
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              bottom: 0,
+              width: 'min(360px, 88vw)',
+              background: 'var(--dock)',
+              borderRight: '1px solid var(--border)',
+              boxShadow: mobileDrawerOpen ? '0 10px 40px rgba(0,0,0,0.45)' : 'none',
+              zIndex: 200,
+              display: 'flex',
+              flexDirection: 'column',
+              transform: mobileDrawerOpen ? 'translateX(0)' : 'translateX(-100%)',
+              transition: 'transform 0.24s cubic-bezier(0.16, 1, 0.3, 1)',
+              pointerEvents: mobileDrawerOpen ? 'auto' : 'none',
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                padding: '10px 14px',
+                borderBottom: '1px solid var(--border)',
+                background: 'var(--paper)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>Workspace Navigation</span>
+              </div>
               <button
                 type="button"
-                onClick={() => setRightOpen(true)}
-                title="Expand Review Dock"
-                style={{ width: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700 }}
+                onClick={() => setMobileDrawerOpen(false)}
+                title="Close Drawer"
+                style={{ padding: '2px 8px', minHeight: 26, fontSize: 13, cursor: 'pointer' }}
               >
-                ‹
-              </button>
-              <button
-                type="button"
-                onClick={() => setRightOpen(true)}
-                title="Grammar"
-                style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--lt)' }}
-              >
-                Gr
-              </button>
-              <button
-                type="button"
-                onClick={() => setRightOpen(true)}
-                title="Reader"
-                style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--ai)' }}
-              >
-                Re
-              </button>
-              <button
-                type="button"
-                onClick={() => setRightOpen(true)}
-                title="Supervisor"
-                style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--yellow)' }}
-              >
-                Su
-              </button>
-              <button
-                type="button"
-                onClick={() => setRightOpen(true)}
-                title="Researcher"
-                style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--blue)' }}
-              >
-                Rs
+                ✕
               </button>
             </div>
-          )}
-        </aside>
-      </div>
+
+            {/* Segmented Tab Controls: Context & Outline vs Review */}
+            <div
+              role="tablist"
+              style={{
+                display: 'flex',
+                borderBottom: '1px solid var(--border)',
+                background: 'var(--dock)',
+                padding: '6px 8px 0',
+                gap: 4,
+              }}
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mobileTab === 'outline'}
+                onClick={() => { blip('select'); setMobileTab('outline') }}
+                style={{
+                  flex: 1,
+                  padding: '6px 10px',
+                  fontSize: 12,
+                  fontWeight: mobileTab === 'outline' ? 700 : 500,
+                  background: mobileTab === 'outline' ? 'var(--paper)' : 'transparent',
+                  border: '1px solid var(--border)',
+                  borderBottom: mobileTab === 'outline' ? '1px solid var(--paper)' : '1px solid var(--border)',
+                  borderTopLeftRadius: 'var(--radius, 4px)',
+                  borderTopRightRadius: 'var(--radius, 4px)',
+                  cursor: 'pointer',
+                  color: mobileTab === 'outline' ? 'var(--ink)' : 'var(--muted)',
+                  marginBottom: -1,
+                }}
+              >
+                📑 Outline & Notes
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mobileTab === 'review'}
+                onClick={() => { blip('select'); setMobileTab('review') }}
+                style={{
+                  flex: 1,
+                  padding: '6px 10px',
+                  fontSize: 12,
+                  fontWeight: mobileTab === 'review' ? 700 : 500,
+                  background: mobileTab === 'review' ? 'var(--paper)' : 'transparent',
+                  border: '1px solid var(--border)',
+                  borderBottom: mobileTab === 'review' ? '1px solid var(--paper)' : '1px solid var(--border)',
+                  borderTopLeftRadius: 'var(--radius, 4px)',
+                  borderTopRightRadius: 'var(--radius, 4px)',
+                  cursor: 'pointer',
+                  color: mobileTab === 'review' ? 'var(--ink)' : 'var(--muted)',
+                  marginBottom: -1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                <span>🔍 Review</span>
+                {findings.filter(f => f.status === 'open' || f.status === 'stale').length > 0 && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: '1px 5px',
+                      borderRadius: 10,
+                      background: 'var(--ai)',
+                      color: '#fff',
+                    }}
+                  >
+                    {findings.filter(f => f.status === 'open' || f.status === 'stale').length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {mobileTab === 'outline' ? (
+                <IntentDock
+                  context={context}
+                  onContextChange={setContext}
+                  outline={outline}
+                  onOutlineChange={setOutline}
+                  editor={editor}
+                  onInsertTitleAtCursor={handleInsertTitleAtCursor}
+                  onCopyOutlineContent={handleCopyOutlineContent}
+                  onExpandSection={handleOpenExpandSection}
+                  onToggleCollapse={() => setMobileDrawerOpen(false)}
+                />
+              ) : (
+                <ReviewDock
+                  findings={findings}
+                  onStatusChange={(id, st) => globalAnalysisService.updateStatus(id, st)}
+                  onRerollFinding={handleRerollFinding}
+                  onRunAnalysis={handleRunFullAnalysis}
+                  onRunGrammar={handleRunGrammar}
+                  onRunResearch={handleRunResearch}
+                  onRunPersona={handleRunPersona}
+                  analyzing={analyzing}
+                  editor={editor}
+                  highlightedFindingId={highlightedFindingId}
+                  onToggleCollapse={() => setMobileDrawerOpen(false)}
+                  triggerReviewCounter={triggerReviewCounter}
+                  grammarNotice={grammarNotice}
+                  selectedPersona={selectedPersona}
+                  onPersonaChange={setSelectedPersona}
+                  visiblePersonas={visiblePersonas}
+                  onVisibilityChange={setVisiblePersonas}
+                />
+              )}
+            </div>
+          </aside>
+        </>
+      )}
 
       {/* Connect Modal */}
       <ConnectModal

@@ -172,7 +172,7 @@ export default function SettingsMenu({
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
-                  {Object.entries(COLOR_PRESETS).filter(([k]) => k !== 'default').map(([k, p]) => {
+                  {Object.entries(COLOR_PRESETS).filter(([k]) => !['default', 'ocean', 'forest'].includes(k)).map(([k, p]) => {
                     const isSelected =
                       settings.grammar === p.grammar &&
                       settings.ai === p.ai &&
