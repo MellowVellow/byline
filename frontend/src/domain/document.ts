@@ -19,7 +19,9 @@ export interface OutlineNode {
   id: string
   title: string
   description?: string
+  notes?: string
   parentId?: string
+  sectionId?: string
   order: number
 }
 

@@ -8,7 +8,7 @@ export function getTheme(): 'light' | 'dark' {
 export function Logo({ height = 30 }: { height?: number }) {
   const [t, setT] = useState(getTheme())
   useEffect(() => { const f = () => setT(getTheme()); addEventListener('byline-theme', f); return () => removeEventListener('byline-theme', f) }, [])
-  return <a href="/" aria-label="Byline home" style={{ display: 'inline-flex' }}><img src={t === 'dark' ? '/logo-dark.png' : '/logo-light.png'} alt="Byline" style={{ height, width: 'auto', display: 'block' }} /></a>
+  return <a href="/" aria-label="Byline home" style={{ display: 'inline-flex' }}><img src={t === 'dark' ? '/darklogo.png' : '/lightlogo.png'} alt="Byline" style={{ height, width: 'auto', display: 'block' }} /></a>
 }
 export function ThemeToggle() {
   const [t, setT] = useState(getTheme())
@@ -17,6 +17,6 @@ export function ThemeToggle() {
     document.documentElement.dataset.theme = n; localStorage.setItem('byline.theme', n); setT(n); dispatchEvent(new Event('byline-theme'))
   }
   return <button className="icon-btn" onClick={toggle} title={t === 'dark' ? 'Switch to light' : 'Switch to dark'} aria-label="Toggle theme">
-    <img src={t === 'dark' ? '/icon-dark.png' : '/icon-light.png'} alt="" style={{ width: 22, height: 22, objectFit: 'cover', borderRadius: 5, display: 'block' }} />
+    <img src={t === 'dark' ? '/darkmodeico.png' : '/lightmodeico.png'} alt="" style={{ width: 22, height: 22, objectFit: 'cover', borderRadius: 5, display: 'block' }} />
   </button>
 }

@@ -7,25 +7,30 @@ import { Logo } from './Brand'
 export interface TopNavigationProps {
   mode: 'drafting' | 'editing'
   onModeChange: (m: 'drafting' | 'editing') => void
-  wordCount: number
-  charCount: number
   onOpenSetup: () => void
   onOpenSettings: () => void
   editor: Editor | null
-  themeName: string
 }
 
 export default function TopNavigation({
   mode,
   onModeChange,
-  wordCount,
-  charCount,
   onOpenSetup,
   onOpenSettings,
   editor,
-  themeName,
 }: TopNavigationProps) {
   const [exportOpen, setExportOpen] = useState(false)
+  const [isDark, setIsDark] = useState(() => document.documentElement.dataset.theme === 'dark')
+
+  const toggleTheme = () => {
+    const next = isDark ? 'light' : 'dark'
+    document.documentElement.dataset.theme = next
+    localStorage.setItem('byline.theme', next)
+    setIsDark(!isDark)
+    blip('toggle')
+    // Notify Logo and other theme listeners
+    try { dispatchEvent(new Event('byline-theme')) } catch { }
+  }
 
   const handleExport = (format: ExportFormat) => {
     blip('select')
@@ -36,130 +41,162 @@ export default function TopNavigation({
   }
 
   return (
-    <header className="topbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', height: 48 }}>
-      {/* Left: Brand & Mode Switcher */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Logo height={22} />
-          <span style={{ fontFamily: '"Source Serif 4", serif', fontStyle: 'italic', fontSize: 18, fontWeight: 700, color: 'var(--ink-5, #2C2523)' }}>
-            Byline
-          </span>
-        </div>
-
-        {/* Draft vs. Editing Mode Switcher */}
-        <div className="mode-toggle" role="group" aria-label="Editor view mode" style={{ display: 'flex', background: 'var(--paper-2)', padding: 2, borderRadius: 6 }}>
-          <button
-            type="button"
-            className={mode === 'drafting' ? 'active' : ''}
-            style={{ padding: '4px 12px', fontSize: 13, fontWeight: mode === 'drafting' ? 600 : 400, borderRadius: 4, border: 'none', cursor: 'pointer' }}
-            onClick={() => { sfxPick(); onModeChange('drafting') }}
-          >
-            Draft Mode
-          </button>
-          <button
-            type="button"
-            className={mode === 'editing' ? 'active' : ''}
-            style={{ padding: '4px 12px', fontSize: 13, fontWeight: mode === 'editing' ? 600 : 400, borderRadius: 4, border: 'none', cursor: 'pointer' }}
-            onClick={() => { sfxPick(); onModeChange('editing') }}
-          >
-            Editing Mode
-          </button>
-        </div>
-
-        {/* Active Theme Badge */}
-        <span
-          style={{
-            fontSize: 11,
-            padding: '3px 8px',
-            background: 'var(--paper-2)',
-            border: '1px solid var(--ink-2)',
-            borderRadius: 12,
-            color: 'var(--ink-4)',
-            textTransform: 'capitalize',
-          }}
-        >
-          Theme: {themeName}
-        </span>
+    <header className="topbar" style={{ display: 'flex', alignItems: 'center', position: 'relative', padding: '0 16px', height: 48 }}>
+      {/* 1. Left: Brand logo */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <Logo height={24} />
       </div>
 
-      {/* Right: Actions, Counts, Export */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {/* Word Count */}
-        <span style={{ fontSize: 12, color: 'var(--ink-4)', fontVariantNumeric: 'tabular-nums' }}>
-          {wordCount} words · {charCount} chars
-        </span>
+      {/* 2. Center: Mode Switcher — true center of screen */}
+      <div
+        style={{
+          position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+          display: 'flex', justifyContent: 'center', width: 'auto',
+          pointerEvents: 'auto',
+        }}
+      >
+        <div className="mode-switch" role="group" aria-label="Editor view mode" style={{
+          position: 'relative',
+          width: 210,
+          height: 40,
+          borderRadius: 20,
+          border: '1px solid var(--border)',
+          background: 'var(--dock)',
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          boxSizing: 'border-box',
+        }}>
+          {/* Sliding thumb */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 3,
+              left: mode === 'drafting' ? 3 : 107,
+              width: 100,
+              height: 34,
+              borderRadius: 16,
+              background: mode === 'drafting' ? 'var(--ink)' : 'var(--blue)',
+              boxShadow: mode === 'editing'
+                ? '0 0 14px color-mix(in srgb, var(--blue) 45%, transparent), 0 4px 8px rgba(0,0,0,0.15)'
+                : '0 0 14px color-mix(in srgb, var(--ink) 25%, transparent)',
+              transition: 'left 0.35s cubic-bezier(0.23, 1, 0.32, 1), background 0.25s ease, box-shadow 0.25s ease',
+              zIndex: 1,
+              pointerEvents: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+          {/* Labels */}
+          <button
+            type="button"
+            className={`mode-btn ${mode === 'drafting' ? 'active' : ''}`}
+            style={{
+              width: '50%',
+              padding: '0',
+              fontSize: 13,
+              fontWeight: 700,
+              borderRadius: 0,
+              border: 'none',
+              background: 'transparent',
+              color: mode === 'drafting' ? 'var(--bg)' : 'var(--ink-3)',
+              cursor: 'pointer',
+              transition: 'color 0.25s ease',
+              zIndex: 2,
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxSizing: 'border-box',
+            }}
+            onClick={() => { sfxPick(); onModeChange('drafting') }}
+          >
+            Draft
+          </button>
+          <button
+            type="button"
+            className={`mode-btn ${mode === 'editing' ? 'active' : ''}`}
+            style={{
+              width: '50%',
+              padding: '0',
+              fontSize: 13,
+              fontWeight: 700,
+              borderRadius: 0,
+              border: 'none',
+              background: 'transparent',
+              color: mode === 'editing' ? 'var(--bg)' : 'var(--ink-3)',
+              cursor: 'pointer',
+              transition: 'color 0.25s ease',
+              zIndex: 2,
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxSizing: 'border-box',
+            }}
+            onClick={() => { sfxPick(); onModeChange('editing') }}
+          >
+            Edit
+          </button>
+        </div>
+      </div>
 
-        {/* Setup / Document Button */}
+      {/* 3. Right: Actions — pinned to right edge */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginLeft: 'auto', zIndex: 10 }}>
+        {/* Setup Wizard */}
         <button
           type="button"
           onClick={() => { blip('open'); onOpenSetup() }}
-          style={{
-            padding: '5px 10px',
-            background: 'transparent',
-            border: '1px solid var(--ink-2)',
-            borderRadius: 4,
-            fontSize: 12,
-            color: 'var(--ink-5)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-          }}
+          title="Open Setup Questionnaire & Templates"
+          style={{ padding: '2px 10px', fontSize: 12, minHeight: 28 }}
         >
-          <span>✦ Setup & Templates</span>
+          ✦ Setup
         </button>
 
-        {/* Export Dropdown */}
+        {/* Export popup menu */}
         <div style={{ position: 'relative' }}>
           <button
             type="button"
             onClick={() => setExportOpen(v => !v)}
-            style={{
-              padding: '5px 10px',
-              background: 'transparent',
-              border: '1px solid var(--ink-2)',
-              borderRadius: 4,
-              fontSize: 12,
-              color: 'var(--ink-5)',
-              cursor: 'pointer',
-            }}
+            style={{ padding: '2px 10px', fontSize: 12, minHeight: 28 }}
           >
             Export ▾
           </button>
 
           {exportOpen && (
             <div
+              className="fade"
               style={{
                 position: 'absolute',
                 right: 0,
-                top: 32,
-                background: 'var(--paper-1, #fff)',
-                border: '1px solid var(--ink-2, #D9CEBE)',
-                borderRadius: 6,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                zIndex: 100,
-                minWidth: 150,
+                top: '100%',
+                background: 'var(--paper)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)',
+                boxShadow: 'var(--shadow-pop)',
+                zIndex: 110,
+                minWidth: 160,
                 padding: '4px 0',
+                marginTop: 4,
               }}
             >
               <button
                 type="button"
                 onClick={() => handleExport('docx')}
-                style={{ width: '100%', padding: '6px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}
+                style={{ width: '100%', padding: '7px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, minHeight: 'auto' }}
               >
-                Word Document (.docx)
+                Word (.docx)
               </button>
               <button
                 type="button"
                 onClick={() => handleExport('markdown')}
-                style={{ width: '100%', padding: '6px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}
+                style={{ width: '100%', padding: '7px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, minHeight: 'auto' }}
               >
                 Markdown (.md)
               </button>
               <button
                 type="button"
                 onClick={() => handleExport('txt')}
-                style={{ width: '100%', padding: '6px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}
+                style={{ width: '100%', padding: '7px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, minHeight: 'auto' }}
               >
                 Plain Text (.txt)
               </button>
@@ -167,22 +204,30 @@ export default function TopNavigation({
           )}
         </div>
 
+        {/* Dark / Light Mode Toggle — icon matches home page Brand.tsx */}
+        <button
+          type="button"
+          onClick={toggleTheme}
+          title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          aria-label={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          style={{ padding: '2px 4px', minHeight: 28, display: 'inline-flex', alignItems: 'center', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--paper)' }}
+        >
+          <img
+            src={isDark ? '/icon-dark.png' : '/icon-light.png'}
+            alt=""
+            style={{ width: 20, height: 20, objectFit: 'cover', borderRadius: 4, display: 'block' }}
+          />
+        </button>
+
         {/* Settings Button */}
         <button
           type="button"
           onClick={() => { blip('open'); onOpenSettings() }}
           title="Settings (Ctrl + ,)"
-          style={{
-            padding: '5px 8px',
-            background: 'transparent',
-            border: '1px solid var(--ink-2)',
-            borderRadius: 4,
-            fontSize: 13,
-            cursor: 'pointer',
-            color: 'var(--ink-5)',
-          }}
+          aria-label="Settings"
+          style={{ padding: '2px 8px', fontSize: 12.5, minHeight: 28 }}
         >
-          ⚙ Settings
+          ⚙
         </button>
       </div>
     </header>

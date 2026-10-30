@@ -1,20 +1,40 @@
 import React, { useState } from 'react'
 import type { DocumentContext, OutlineNode, ThemeId } from '../domain/document'
-import { sfxPick, sfxSuccess } from '../lib/sfx'
-import '../styles/setup-wizard.css'
+import {
+  COLOR_PRESETS,
+  DEFAULT_SETTINGS,
+  type AppSettings,
+  type EditorFont,
+  type PaperWidth,
+  type Density,
+} from '../lib/settings'
+import { THEME_DEFINITIONS, SUPPORTED_LANGUAGES } from '../domain/writing-profile'
+import { sfxPick, sfxSuccess, blip } from '../lib/sfx'
+import { Logo } from './Brand'
 
 export interface SetupResult {
   context: DocumentContext
   outline: OutlineNode[]
   initialHtml?: string
   theme?: ThemeId
+  settings?: Partial<AppSettings>
 }
 
 export interface SetupWizardProps {
   isOpen: boolean
   onClose: () => void
   onComplete: (result: SetupResult) => void
+  initialSettings?: AppSettings
 }
+
+const APPROVED_META_MODELS = [
+  { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Meta Llama 3.3 70B Instruct (Primary frontier reasoning)', provider: 'OpenRouter' },
+  { id: 'meta-llama/llama-3.1-70b-instruct', label: 'Meta Llama 3.1 70B Instruct (High capability)', provider: 'OpenRouter' },
+  { id: 'meta-llama/llama-3.1-8b-instruct', label: 'Meta Llama 3.1 8B Instruct (Ultra-fast latency)', provider: 'OpenRouter' },
+  { id: 'muse-spark-1.3', label: 'Muse Spark 1.3 (Meta Model API)', provider: 'Meta API' },
+  { id: 'muse-glimmer-30b', label: 'Muse Glimmer 30B (Meta Model API)', provider: 'Meta API' },
+  { id: 'meta-llama/Llama-3.3-70B-Instruct', label: 'Meta Llama 3.3 70B (Baseten Hosted)', provider: 'Baseten' },
+]
 
 const TEMPLATES: Array<{
   id: string
@@ -69,7 +89,7 @@ const TEMPLATES: Array<{
   },
   {
     id: 'report',
-    name: 'Technical / Strategic Report',
+    name: 'Strategic / Policy Brief',
     description: 'Executive briefing framing operational challenges, architecture, and phased implementation.',
     defaultContext: {
       topic: 'Decarbonizing Regional Logistics Corridors',
@@ -86,27 +106,45 @@ const TEMPLATES: Array<{
   },
 ]
 
-export default function SetupWizard({ isOpen, onClose, onComplete }: SetupWizardProps) {
-  const [step, setStep] = useState<'survey' | 'template'>('survey')
+export default function SetupWizard({ isOpen, onClose, onComplete, initialSettings }: SetupWizardProps) {
+  const [currentStep, setCurrentStep] = useState(0)
 
-  // Survey answers
+  // Questionnaire responses
   const [docType, setDocType] = useState('Essay')
-  const [purpose, setPurpose] = useState('Argue or persuade')
-  const [audience, setAudience] = useState('General audience')
-  const [topic, setTopic] = useState('')
+  const [otherDocType, setOtherDocType] = useState('')
 
-  // Template selection
+  const [purpose, setPurpose] = useState('Argue or persuade')
+  const [otherPurpose, setOtherPurpose] = useState('')
+
+  const [audience, setAudience] = useState('General audience')
+  const [otherAudience, setOtherAudience] = useState('')
+
+  const [topic, setTopic] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState('argumentative')
+
+  // Misc Settings (from Settings Menu)
+  const [docLanguage, setDocLanguage] = useState(initialSettings?.language || 'en-US')
+  const [writingTheme, setWritingTheme] = useState<ThemeId>(initialSettings?.writingTheme || 'neutral')
+  const [autoApplyGrammar, setAutoApplyGrammar] = useState(initialSettings?.autoApplyGrammar ?? false)
+  const [colorPresetKey, setColorPresetKey] = useState('default')
+  const [metaModel, setMetaModel] = useState(initialSettings?.metaModel || 'meta-llama/llama-3.3-70b-instruct')
+  const [temperature, setTemperature] = useState(initialSettings?.temperature ?? 0.7)
+  const [reasoningEffort, setReasoningEffort] = useState<'minimal' | 'low' | 'medium'>(initialSettings?.reasoningEffort || 'minimal')
+  const [editorFont, setEditorFont] = useState<EditorFont>(initialSettings?.editorFont || 'serif')
+  const [fontSize, setFontSize] = useState(initialSettings?.fontSize || 19)
+  const [paperWidth, setPaperWidth] = useState<PaperWidth>(initialSettings?.paperWidth || 'normal')
+  const [density, setDensity] = useState<Density>(initialSettings?.density || 'comfortable')
 
   if (!isOpen) return null
 
-  const handleNextToTemplates = () => {
-    sfxPick()
-    setStep('template')
-  }
+  const totalSteps = 7
 
-  const handleApplyPreset = (templateId: string) => {
-    const tpl = TEMPLATES.find(t => t.id === templateId) || TEMPLATES[0]
+  const effectiveDocType = docType === 'Other' ? (otherDocType.trim() || 'Custom Document') : docType
+  const effectivePurpose = purpose === 'Other' ? (otherPurpose.trim() || 'Custom Purpose') : purpose
+  const effectiveAudience = audience === 'Other' ? (otherAudience.trim() || 'Custom Audience') : audience
+
+  const handleLaunchDemoPreset = () => {
+    const tpl = TEMPLATES[0] // Rail argument
     sfxSuccess()
     onComplete({
       context: tpl.defaultContext,
@@ -117,287 +155,1017 @@ export default function SetupWizard({ isOpen, onClose, onComplete }: SetupWizard
     onClose()
   }
 
-  const handleCompleteCustom = () => {
-    const tpl = TEMPLATES.find(t => t.id === selectedTemplateId) || TEMPLATES[0]
-    sfxSuccess()
-    onComplete({
-      context: {
-        topic: topic || tpl.defaultContext.topic,
-        purpose: purpose || tpl.defaultContext.purpose,
-        audience: audience || tpl.defaultContext.audience,
-        keyIdeas: tpl.defaultContext.keyIdeas,
-        constraints: tpl.defaultContext.constraints,
-      },
-      outline: tpl.defaultOutline,
-      initialHtml: tpl.sampleHtml,
-      theme: 'neutral',
-    })
-    onClose()
+  const handleNext = () => {
+    sfxPick()
+    if (currentStep < totalSteps - 1) {
+      setCurrentStep(s => s + 1)
+    } else {
+      handleFinish()
+    }
   }
 
-  const handleBlankDocument = () => {
+  const handleBack = () => {
+    blip('select')
+    if (currentStep > 0) {
+      setCurrentStep(s => s - 1)
+    }
+  }
+
+  const handleFinish = (overrideBlank = false) => {
     sfxSuccess()
-    onComplete({
-      context: {
-        topic: topic || 'Untitled writing',
-        purpose: purpose || 'Explain or explore an idea',
-        audience: audience || 'General readers',
-      },
-      outline: [
-        { id: 'sec-1', title: '1. Introduction', description: 'Establish the core thesis or topic.', order: 1 },
-        { id: 'sec-2', title: '2. Supporting Content', description: 'Develop the key arguments or narrative.', order: 2 },
-        { id: 'sec-3', title: '3. Conclusion', description: 'Summarize implications.', order: 3 },
-      ],
-      initialHtml: '<p></p>',
-      theme: 'neutral',
-    })
+    const selectedPreset = COLOR_PRESETS[colorPresetKey] || COLOR_PRESETS.default
+    const partialSettings: Partial<AppSettings> = {
+      language: docLanguage,
+      writingTheme,
+      autoApplyGrammar,
+      metaModel,
+      temperature,
+      reasoningEffort,
+      editorFont,
+      fontSize,
+      paperWidth,
+      density,
+      ai: selectedPreset.ai,
+      grammar: selectedPreset.grammar,
+      sources: selectedPreset.sources,
+      wordChoice: selectedPreset.wordChoice,
+      suggest: selectedPreset.suggest,
+      selection: selectedPreset.selection,
+    }
+
+    if (overrideBlank) {
+      onComplete({
+        context: {
+          topic: topic || 'Untitled writing',
+          purpose: effectivePurpose,
+          audience: effectiveAudience,
+        },
+        outline: [
+          { id: 'sec-1', title: '1. Introduction', description: 'Establish the core thesis or premise.', order: 1 },
+          { id: 'sec-2', title: '2. Main Arguments', description: 'Develop supporting points and evidence.', order: 2 },
+          { id: 'sec-3', title: '3. Conclusion', description: 'Synthesize conclusions.', order: 3 },
+        ],
+        initialHtml: '<p></p>',
+        theme: writingTheme,
+        settings: partialSettings,
+      })
+    } else {
+      const tpl = TEMPLATES.find(t => t.id === selectedTemplateId) || TEMPLATES[0]
+      onComplete({
+        context: {
+          topic: topic || tpl.defaultContext.topic,
+          purpose: effectivePurpose,
+          audience: effectiveAudience,
+          keyIdeas: tpl.defaultContext.keyIdeas,
+          constraints: tpl.defaultContext.constraints,
+        },
+        outline: tpl.defaultOutline,
+        initialHtml: tpl.sampleHtml,
+        theme: writingTheme,
+        settings: partialSettings,
+      })
+    }
     onClose()
   }
 
   return (
-    <div className="wz-back" onMouseDown={onClose}>
-      <div className="wz-card" role="dialog" aria-modal="true" onMouseDown={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="wz-row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontFamily: '"Source Serif 4", serif', fontStyle: 'italic', fontSize: 18, fontWeight: 600, color: '#A93226' }}>
-              Byline
-            </span>
-            <span style={{ fontSize: 12, color: 'var(--ink-4)', textTransform: 'uppercase', letterSpacing: 1 }}>
-              Document Setup
-            </span>
-          </div>
-          <button className="wz-icon" aria-label="Close" onClick={onClose}>
-            ✕
-          </button>
+    <div
+      className="fade"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        background: 'var(--bg)',
+        color: 'var(--ink)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+      role="dialog"
+      aria-modal="true"
+    >
+      {/* Top Bar inside Fullscreen Wizard */}
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px 32px',
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--paper)',
+          height: 54,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Logo height={24} />
+          <span style={{ fontFamily: '"Source Serif 4", serif', fontStyle: 'italic', fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}>
+            Byline Setup
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 8 }}>
+            Step {currentStep + 1} of {totalSteps}
+          </span>
         </div>
 
-        {/* Quick Demo Preset Banner */}
-        <div
-          style={{
-            background: 'var(--paper-2, #FBF6EE)',
-            border: '1px solid var(--ink-2, #D9CEBE)',
-            borderRadius: 6,
-            padding: '10px 14px',
-            marginBottom: 16,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink-5, #2C2523)' }}>
-              Evaluate Hackathon Golden Path
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--ink-4, #73685F)' }}>
-              1-click pre-populated draft with verified Meta AI reflections, Connect, and paraphrase.
-            </div>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
-            onClick={() => handleApplyPreset('argumentative')}
+            type="button"
+            onClick={handleLaunchDemoPreset}
             style={{
-              padding: '6px 12px',
-              background: '#A93226',
-              color: '#fff',
+              padding: '5px 12px',
+              background: 'var(--lt)',
+              color: 'var(--bg)',
               border: 'none',
-              borderRadius: 4,
-              cursor: 'pointer',
+              borderRadius: 'var(--radius)',
               fontWeight: 600,
-              fontSize: 12,
-              whiteSpace: 'nowrap',
+              fontSize: 12.5,
+              cursor: 'pointer',
             }}
           >
-            Launch Demo Preset →
-          </button>
-        </div>
-
-        {/* Steps Navigation */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <button
-            className={`wz-chip ${step === 'survey' ? 'on' : ''}`}
-            onClick={() => setStep('survey')}
-          >
-            1. Survey (Intent)
+            ✦ Quick Demo Preset (1-Click)
           </button>
           <button
-            className={`wz-chip ${step === 'template' ? 'on' : ''}`}
-            onClick={() => setStep('template')}
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: '1px solid var(--border)',
+              padding: '4px 10px',
+              fontSize: 12,
+              borderRadius: 'var(--radius)',
+              cursor: 'pointer',
+            }}
           >
-            2. Template & Outline
+            Exit to Editor <span className="kbd">Esc</span>
           </button>
         </div>
+      </header>
 
-        {/* Step 1: Survey */}
-        {step === 'survey' && (
-          <div style={{ display: 'grid', gap: 14 }}>
+      {/* Progress Bar */}
+      <div style={{ width: '100%', height: 3, background: 'var(--border)' }}>
+        <div
+          style={{
+            height: '100%',
+            width: `${((currentStep + 1) / totalSteps) * 100}%`,
+            background: 'var(--ai)',
+            transition: 'width 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+        />
+      </div>
+
+      {/* Main Single Question Stage */}
+      <main
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px 24px 60px',
+          maxWidth: 720,
+          margin: '0 auto',
+          width: '100%',
+          overflowY: 'auto',
+        }}
+      >
+        {/* Step 0: Document Format */}
+        {currentStep === 0 && (
+          <div key="step-0" className="fade" style={{ width: '100%', display: 'grid', gap: 20, textAlign: 'center' }}>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-4)', textTransform: 'uppercase' }}>
+              <span className="kind-label" style={{ color: 'var(--ai)' }}>Step 1 of 7</span>
+              <h1 style={{ fontFamily: '"Source Serif 4", serif', fontSize: 32, margin: '8px 0', fontWeight: 700 }}>
                 What are you writing?
-              </label>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                {['Essay', 'Report', 'Article', 'Story', 'Other'].map(opt => (
-                  <button
-                    key={opt}
-                    type="button"
-                    className={`wz-pill ${docType === opt ? 'active' : ''}`}
-                    onClick={() => { setDocType(opt); sfxPick() }}
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
+              </h1>
+              <p style={{ color: 'var(--muted)', fontSize: 15, margin: 0 }}>
+                Select the format closest to your intended piece.
+              </p>
             </div>
 
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+              {['Essay', 'Report', 'Article', 'Story', 'Other'].map(opt => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => {
+                    setDocType(opt)
+                    sfxPick()
+                    if (opt !== 'Other') setCurrentStep(1)
+                  }}
+                  style={{
+                    padding: '16px 12px',
+                    borderRadius: 'var(--radius-lg)',
+                    border: docType === opt ? '2px solid var(--ai)' : '1px solid var(--border)',
+                    background: docType === opt ? 'var(--dock)' : 'var(--paper)',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    color: 'var(--ink)',
+                    cursor: 'pointer',
+                    boxShadow: 'var(--shadow-paper)',
+                  }}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+
+            {/* Other Input Box */}
+            {docType === 'Other' && (
+              <div className="fade" style={{ textAlign: 'left', marginTop: 4 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
+                  Specify your custom format:
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={otherDocType}
+                  placeholder="e.g. Grant proposal, Book chapter, Manifesto, Op-ed, Technical memo…"
+                  onChange={e => setOtherDocType(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleNext() }}
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    fontSize: 15,
+                    borderRadius: 'var(--radius)',
+                    border: '1px solid var(--border)',
+                    background: 'var(--paper)',
+                    color: 'var(--ink)',
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 1: Purpose */}
+        {currentStep === 1 && (
+          <div key="step-1" className="fade" style={{ width: '100%', display: 'grid', gap: 20, textAlign: 'center' }}>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-4)', textTransform: 'uppercase' }}>
+              <span className="kind-label" style={{ color: 'var(--ai)' }}>Step 2 of 7</span>
+              <h1 style={{ fontFamily: '"Source Serif 4", serif', fontSize: 32, margin: '8px 0', fontWeight: 700 }}>
                 What are you trying to accomplish?
-              </label>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                {['Explain', 'Argue or persuade', 'Inform', 'Analyze', 'Narrate'].map(opt => (
-                  <button
-                    key={opt}
-                    type="button"
-                    className={`wz-pill ${purpose === opt ? 'active' : ''}`}
-                    onClick={() => { setPurpose(opt); sfxPick() }}
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
+              </h1>
+              <p style={{ color: 'var(--muted)', fontSize: 15, margin: 0 }}>
+                Your core authorial intent will ground Supervisor and Reader reflection.
+              </p>
             </div>
 
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+              {['Explain', 'Argue or persuade', 'Inform', 'Analyze', 'Narrate', 'Other'].map(opt => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => {
+                    setPurpose(opt)
+                    sfxPick()
+                    if (opt !== 'Other') setCurrentStep(2)
+                  }}
+                  style={{
+                    padding: '16px 12px',
+                    borderRadius: 'var(--radius-lg)',
+                    border: purpose === opt ? '2px solid var(--ai)' : '1px solid var(--border)',
+                    background: purpose === opt ? 'var(--dock)' : 'var(--paper)',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    color: 'var(--ink)',
+                    cursor: 'pointer',
+                    boxShadow: 'var(--shadow-paper)',
+                  }}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+
+            {/* Other Input Box */}
+            {purpose === 'Other' && (
+              <div className="fade" style={{ textAlign: 'left', marginTop: 4 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
+                  Specify your authorial purpose:
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={otherPurpose}
+                  placeholder="e.g. Inspire action, Debunk a common misconception, Reflect on personal experience…"
+                  onChange={e => setOtherPurpose(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleNext() }}
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    fontSize: 15,
+                    borderRadius: 'var(--radius)',
+                    border: '1px solid var(--border)',
+                    background: 'var(--paper)',
+                    color: 'var(--ink)',
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 2: Audience */}
+        {currentStep === 2 && (
+          <div key="step-2" className="fade" style={{ width: '100%', display: 'grid', gap: 20, textAlign: 'center' }}>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-4)', textTransform: 'uppercase' }}>
+              <span className="kind-label" style={{ color: 'var(--ai)' }}>Step 3 of 7</span>
+              <h1 style={{ fontFamily: '"Source Serif 4", serif', fontSize: 32, margin: '8px 0', fontWeight: 700 }}>
                 Who will read it?
-              </label>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                {['General audience', 'Students', 'Academic audience', 'Professionals'].map(opt => (
-                  <button
-                    key={opt}
-                    type="button"
-                    className={`wz-pill ${audience === opt ? 'active' : ''}`}
-                    onClick={() => { setAudience(opt); sfxPick() }}
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
+              </h1>
+              <p style={{ color: 'var(--muted)', fontSize: 15, margin: 0 }}>
+                Shapes vocabulary complexity, sentence rhythm, and background assumptions.
+              </p>
             </div>
 
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+              {['General audience', 'Students', 'Academic audience', 'Professionals', 'Other'].map(opt => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => {
+                    setAudience(opt)
+                    sfxPick()
+                    if (opt !== 'Other') setCurrentStep(3)
+                  }}
+                  style={{
+                    padding: '16px 12px',
+                    borderRadius: 'var(--radius-lg)',
+                    border: audience === opt ? '2px solid var(--ai)' : '1px solid var(--border)',
+                    background: audience === opt ? 'var(--dock)' : 'var(--paper)',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    color: 'var(--ink)',
+                    cursor: 'pointer',
+                    boxShadow: 'var(--shadow-paper)',
+                  }}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+
+            {/* Other Input Box */}
+            {audience === 'Other' && (
+              <div className="fade" style={{ textAlign: 'left', marginTop: 4 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
+                  Specify your target audience:
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={otherAudience}
+                  placeholder="e.g. Venture investors, Municipal city planners, Non-native English speakers…"
+                  onChange={e => setOtherAudience(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleNext() }}
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    fontSize: 15,
+                    borderRadius: 'var(--radius)',
+                    border: '1px solid var(--border)',
+                    background: 'var(--paper)',
+                    color: 'var(--ink)',
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 3: Topic / Thesis */}
+        {currentStep === 3 && (
+          <div key="step-3" className="fade" style={{ width: '100%', display: 'grid', gap: 20, textAlign: 'center' }}>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-4)', textTransform: 'uppercase' }}>
-                What is it about? (Topic or thesis)
-              </label>
+              <span className="kind-label" style={{ color: 'var(--ai)' }}>Step 4 of 7</span>
+              <h1 style={{ fontFamily: '"Source Serif 4", serif', fontSize: 32, margin: '8px 0', fontWeight: 700 }}>
+                What is it about?
+              </h1>
+              <p style={{ color: 'var(--muted)', fontSize: 15, margin: 0 }}>
+                State the central topic, question, or thesis in your own words.
+              </p>
+            </div>
+
+            <div style={{ textAlign: 'left', marginTop: 10 }}>
               <input
-                className="wz-input"
-                style={{ marginTop: 4 }}
+                type="text"
+                autoFocus
                 value={topic}
                 placeholder="e.g. Evaluating high-speed rail investment in North America…"
                 onChange={e => setTopic(e.target.value)}
-              />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
-              <button
-                type="button"
-                onClick={handleBlankDocument}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--ink-4)',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  textDecoration: 'underline',
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleNext()
+                  }
                 }}
-              >
-                Skip to Blank Document
-              </button>
-              <button
-                type="button"
-                className="wz-btn-primary"
-                onClick={handleNextToTemplates}
-              >
-                Choose Template & Outline →
-              </button>
+                style={{
+                  width: '100%',
+                  padding: '16px 18px',
+                  fontSize: 18,
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--paper)',
+                  color: 'var(--ink)',
+                  boxShadow: 'var(--shadow-paper)',
+                }}
+              />
             </div>
           </div>
         )}
 
-        {/* Step 2: Template Selection */}
-        {step === 'template' && (
-          <div style={{ display: 'grid', gap: 14 }}>
-            <div style={{ fontSize: 13, color: 'var(--ink-4)' }}>
-              Templates provide an editable starting outline and context structure. You can edit every node inside the workspace.
+        {/* Step 4: Outline Template */}
+        {currentStep === 4 && (
+          <div key="step-4" className="fade" style={{ width: '100%', display: 'grid', gap: 20 }}>
+            <div style={{ textAlign: 'center' }}>
+              <span className="kind-label" style={{ color: 'var(--ai)' }}>Step 5 of 7</span>
+              <h1 style={{ fontFamily: '"Source Serif 4", serif', fontSize: 30, margin: '8px 0', fontWeight: 700 }}>
+                Choose a Starting Outline
+              </h1>
+              <p style={{ color: 'var(--muted)', fontSize: 14, margin: 0 }}>
+                Templates provide an initial structure you can edit anytime in the Intent dock.
+              </p>
             </div>
 
-            <div style={{ display: 'grid', gap: 10 }}>
+            <div style={{ display: 'grid', gap: 10, marginTop: 4 }}>
               {TEMPLATES.map(t => (
                 <div
                   key={t.id}
-                  onClick={() => { setSelectedTemplateId(t.id); sfxPick() }}
+                  onClick={() => {
+                    setSelectedTemplateId(t.id)
+                    sfxPick()
+                  }}
                   style={{
-                    padding: '12px 14px',
-                    borderRadius: 6,
-                    border: selectedTemplateId === t.id ? '2px solid #A93226' : '1px solid var(--ink-2)',
-                    background: selectedTemplateId === t.id ? 'var(--paper-2)' : 'var(--paper-1)',
+                    padding: '14px 16px',
+                    borderRadius: 'var(--radius-lg)',
+                    border: selectedTemplateId === t.id ? '2px solid var(--ai)' : '1px solid var(--border)',
+                    background: selectedTemplateId === t.id ? 'var(--dock)' : 'var(--paper)',
                     cursor: 'pointer',
+                    boxShadow: 'var(--shadow-paper)',
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-5)' }}>{t.name}</span>
+                    <strong style={{ fontSize: 15, color: 'var(--ink)' }}>{t.name}</strong>
                     {selectedTemplateId === t.id && (
-                      <span style={{ fontSize: 12, color: '#A93226', fontWeight: 600 }}>Selected</span>
+                      <span style={{ fontSize: 12, color: 'var(--ai)', fontWeight: 700 }}>Selected ✓</span>
                     )}
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-4)', marginTop: 4 }}>{t.description}</div>
-                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
-                    {t.defaultOutline.map(node => (
+                  <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 4 }}>{t.description}</div>
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 }}>
+                    {t.defaultOutline.map(n => (
                       <span
-                        key={node.id}
-                        style={{
-                          fontSize: 11,
-                          padding: '2px 6px',
-                          background: 'var(--ink-1, #EDE4D8)',
-                          borderRadius: 3,
-                          color: 'var(--ink-5)',
-                        }}
+                        key={n.id}
+                        className="kbd"
+                        style={{ fontSize: 11, background: 'var(--border)', color: 'var(--ink)' }}
                       >
-                        {node.title}
+                        {n.title}
                       </span>
                     ))}
                   </div>
                 </div>
               ))}
             </div>
+          </div>
+        )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
-              <button
-                type="button"
-                className="wz-btn-secondary"
-                onClick={() => setStep('survey')}
+        {/* Step 5: Document Language & Writing Theme */}
+        {currentStep === 5 && (
+          <div key="step-5" className="fade" style={{ width: '100%', display: 'grid', gap: 20 }}>
+            <div style={{ textAlign: 'center' }}>
+              <span className="kind-label" style={{ color: 'var(--ai)' }}>Step 6 of 7</span>
+              <h1 style={{ fontFamily: '"Source Serif 4", serif', fontSize: 30, margin: '8px 0', fontWeight: 700 }}>
+                Language & Writing Theme
+              </h1>
+              <p style={{ color: 'var(--muted)', fontSize: 14, margin: 0 }}>
+                Configures the regional spelling rules and stylistic voice for AI completions.
+              </p>
+            </div>
+
+            {/* Language Selector */}
+            <div style={{ background: 'var(--paper)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px 16px' }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: 6 }}>
+                Primary Document Language
+              </label>
+              <select
+                value={docLanguage}
+                onChange={e => setDocLanguage(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', fontSize: 14, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--dock)', color: 'var(--ink)' }}
               >
-                ← Back to Survey
-              </button>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  type="button"
-                  className="wz-btn-secondary"
-                  onClick={handleBlankDocument}
-                >
-                  Start Blank
-                </button>
-                <button
-                  type="button"
-                  className="wz-btn-primary"
-                  onClick={handleCompleteCustom}
-                >
-                  Enter Workspace →
-                </button>
+                {SUPPORTED_LANGUAGES.map(l => (
+                  <option key={l.code} value={l.code}>{l.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Writing Theme Cards */}
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: 8 }}>
+                Writing Theme Register
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
+                {Object.values(THEME_DEFINITIONS).map(th => (
+                  <div
+                    key={th.id}
+                    onClick={() => { setWritingTheme(th.id); sfxPick() }}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: 'var(--radius)',
+                      border: writingTheme === th.id ? '2px solid var(--ai)' : '1px solid var(--border)',
+                      background: writingTheme === th.id ? 'var(--dock)' : 'var(--paper)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: 14, color: 'var(--ink)' }}>{th.name}</strong>
+                      {writingTheme === th.id && <span style={{ fontSize: 11, color: 'var(--ai)', fontWeight: 700 }}>Active ✓</span>}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>{th.tagline}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-4)', marginTop: 6, fontStyle: 'italic' }}>
+                      “{th.sampleTone}”
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Auto-apply Grammar Fixes */}
+            <div
+              onClick={() => { setAutoApplyGrammar(v => !v); sfxPick() }}
+              role="switch"
+              aria-checked={autoApplyGrammar}
+              style={{
+                display: 'flex', alignItems: 'flex-start', gap: 14, cursor: 'pointer',
+                padding: '14px 16px', borderRadius: 'var(--radius)',
+                border: autoApplyGrammar ? '2px solid var(--grammar, #C0281F)' : '1px solid var(--border)',
+                background: autoApplyGrammar ? 'var(--dock)' : 'var(--paper)',
+              }}
+            >
+              <div
+                style={{
+                  flex: 'none', width: 40, height: 22, borderRadius: 99, marginTop: 1,
+                  background: autoApplyGrammar ? 'var(--grammar, #C0281F)' : 'var(--border)',
+                  position: 'relative', transition: 'background .18s ease',
+                }}
+              >
+                <span
+                  style={{
+                    position: 'absolute', top: 2, left: autoApplyGrammar ? 20 : 2,
+                    width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                    transition: 'left .18s ease', boxShadow: '0 1px 2px rgba(0,0,0,.2)',
+                  }}
+                />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <strong style={{ fontSize: 13.5, color: 'var(--ink)' }}>Automatically apply grammar fixes</strong>
+                  <span className="kind-label" style={{ color: 'var(--grammar, #C0281F)' }}>Grammar</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, lineHeight: 1.5 }}>
+                  In editing mode, spelling and grammar corrections apply as you write — corrected text
+                  pops green, then fades into normal text so the change is never silent.
+                </div>
               </div>
             </div>
           </div>
         )}
-      </div>
+        {/* Step 6: Merged Long Scrollable Settings Overview */}
+        {currentStep === 6 && (
+          <div key="step-6" className="fade" style={{ width: '100%', minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 0, overflow: 'hidden' }}>
+            {/* Scrollable settings content */}
+            <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 100, display: 'grid', gap: 18 }}>
+              <div style={{ textAlign: 'center', paddingTop: 8 }}>
+                <span className="kind-label" style={{ color: 'var(--ai)' }}>Step 7 of 7 · Writing Settings Overview</span>
+                <h1 style={{ fontFamily: '"Source Serif 4", serif', fontSize: 30, margin: '8px 0', fontWeight: 700 }}>
+                  Configure Your Workspace
+                </h1>
+                <p style={{ color: 'var(--muted)', fontSize: 14, margin: 0 }}>
+                  Colors, AI engine, typography — everything shown below applies to your document.
+                </p>
+              </div>
+
+              {/* Colors & Persona Palette */}
+              <div style={{ background: 'var(--paper)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', display: 'grid', gap: 12, boxShadow: 'var(--shadow-paper)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--ai)' }} />
+                  <strong style={{ fontSize: 13, color: 'var(--ink)' }}>Colors & Persona Palette</strong>
+                  <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>Annotation colors</span>
+                </div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {Object.entries(COLOR_PRESETS).map(([key, p]) => (
+                    <div
+                      key={key}
+                      onClick={() => { setColorPresetKey(key); sfxPick() }}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 'var(--radius)',
+                        border: colorPresetKey === key ? '2px solid var(--ai)' : '1px solid var(--border)',
+                        background: colorPresetKey === key ? 'var(--dock)' : 'var(--paper)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <div>
+                        <strong style={{ fontSize: 13, color: 'var(--ink)' }}>{p.label} Palette</strong>
+                        <div style={{ display: 'flex', gap: 10, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: 'var(--muted)' }}>
+                            <span style={{ width: 9, height: 9, borderRadius: '50%', background: p.grammar }} /> Grammar
+                          </span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: 'var(--muted)' }}>
+                            <span style={{ width: 9, height: 9, borderRadius: '50%', background: p.ai }} /> Reader
+                          </span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: 'var(--muted)' }}>
+                            <span style={{ width: 9, height: 9, borderRadius: '50%', background: p.wordChoice }} /> Supervisor
+                          </span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: 'var(--muted)' }}>
+                            <span style={{ width: 9, height: 9, borderRadius: '50%', background: p.sources }} /> Researcher
+                          </span>
+                        </div>
+                      </div>
+                      {colorPresetKey === key && <span style={{ fontSize: 11.5, color: 'var(--ai)', fontWeight: 700 }}>Selected ✓</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Meta AI Inference Engine */}
+              <div style={{ background: 'var(--paper)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', display: 'grid', gap: 12, boxShadow: 'var(--shadow-paper)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--blue)' }} />
+                  <strong style={{ fontSize: 13, color: 'var(--ink)' }}>Meta AI Inference Engine</strong>
+                  <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>Model & parameters</span>
+                </div>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: 4 }}>
+                      Approved Meta Model
+                    </label>
+                    <select
+                      value={metaModel}
+                      onChange={e => setMetaModel(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', fontSize: 13, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--dock)', color: 'var(--ink)' }}
+                    >
+                      {APPROVED_META_MODELS.map(m => (
+                        <option key={m.id} value={m.id}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 3 }}>
+                      <label style={{ fontWeight: 600, color: 'var(--ink)' }}>Temperature</label>
+                      <span className="kbd" style={{ fontSize: 11 }}>{temperature.toFixed(2)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.0"
+                      max="1.0"
+                      step="0.05"
+                      value={temperature}
+                      onChange={e => setTemperature(parseFloat(e.target.value))}
+                      style={{ width: '100%', accentColor: 'var(--ai)' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: 'var(--muted)' }}>
+                      <span>0.0 Deterministic</span>
+                      <span>1.0 Creative</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: 4 }}>
+                      Reasoning Effort
+                    </label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {(['minimal', 'low', 'medium'] as const).map(effort => (
+                        <button
+                          key={effort}
+                          type="button"
+                          onClick={() => setReasoningEffort(effort)}
+                          style={{
+                            flex: 1,
+                            padding: '8px 12px',
+                            borderRadius: 4,
+                            border: reasoningEffort === effort ? '2px solid var(--ai)' : '1px solid var(--border)',
+                            background: reasoningEffort === effort ? 'var(--dock)' : 'var(--paper)',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            textTransform: 'capitalize',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {effort}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Editor UI & Typography */}
+              <div style={{ background: 'var(--paper)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', display: 'grid', gap: 12, boxShadow: 'var(--shadow-paper)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--yellow)' }} />
+                  <strong style={{ fontSize: 13, color: 'var(--ink)' }}>Editor UI & Typography</strong>
+                  <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>Paper & layout</span>
+                </div>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: 4 }}>
+                      Typeface Family
+                    </label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {(
+                        [
+                          ['serif', 'Serif (Source Serif 4)'],
+                          ['sans', 'Sans (Inter)'],
+                          ['mono', 'Mono (Menlo)'],
+                        ] as [EditorFont, string][]
+                      ).map(([fKey, label]) => (
+                        <button
+                          key={fKey}
+                          type="button"
+                          onClick={() => setEditorFont(fKey)}
+                          style={{
+                            flex: 1,
+                            padding: '10px 12px',
+                            borderRadius: 4,
+                            border: editorFont === fKey ? '2px solid var(--ai)' : '1px solid var(--border)',
+                            background: editorFont === fKey ? 'var(--dock)' : 'var(--paper)',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: 4 }}>
+                      Paper Width
+                    </label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {(
+                        [
+                          ['narrow', 'Narrow (58ch)'],
+                          ['normal', 'Normal (70ch)'],
+                          ['wide', 'Wide (88ch)'],
+                        ] as [PaperWidth, string][]
+                      ).map(([wKey, label]) => (
+                        <button
+                          key={wKey}
+                          type="button"
+                          onClick={() => setPaperWidth(wKey)}
+                          style={{
+                            flex: 1,
+                            padding: '8px 12px',
+                            borderRadius: 4,
+                            border: paperWidth === wKey ? '2px solid var(--ai)' : '1px solid var(--border)',
+                            background: paperWidth === wKey ? 'var(--dock)' : 'var(--paper)',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: 4 }}>
+                      Layout Density
+                    </label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {(['comfortable', 'compact'] as Density[]).map(d => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setDensity(d)}
+                          style={{
+                            flex: 1,
+                            padding: '8px 12px',
+                            borderRadius: 4,
+                            border: density === d ? '2px solid var(--ai)' : '1px solid var(--border)',
+                            background: density === d ? 'var(--dock)' : 'var(--paper)',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            textTransform: 'capitalize',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {d}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Language & Grammar (moved from step 5 for completeness) */}
+              <div style={{ background: 'var(--paper)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', display: 'grid', gap: 12, boxShadow: 'var(--shadow-paper)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--grammar)' }} />
+                  <strong style={{ fontSize: 13, color: 'var(--ink)' }}>Language & Grammar</strong>
+                  <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>Spelling & auto-fix</span>
+                </div>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: 4 }}>
+                      Primary Document Language
+                    </label>
+                    <select
+                      value={docLanguage}
+                      onChange={e => setDocLanguage(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', fontSize: 13, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--dock)', color: 'var(--ink)' }}
+                    >
+                      {SUPPORTED_LANGUAGES.map(l => (
+                        <option key={l.code} value={l.code}>{l.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div
+                    onClick={() => { setAutoApplyGrammar(v => !v); sfxPick() }}
+                    role="switch"
+                    aria-checked={autoApplyGrammar}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
+                      padding: '10px 0', borderRadius: 'var(--radius)',
+                      border: '1px solid var(--border)',
+                      background: 'transparent',
+                    }}
+                  >
+                    <div
+                      style={{
+                        flex: 'none', width: 44, height: 24, borderRadius: 99,
+                        background: autoApplyGrammar ? 'var(--grammar, #C0281F)' : 'var(--border)',
+                        position: 'relative', transition: 'background .18s ease',
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: 'absolute', top: 3, left: autoApplyGrammar ? 23 : 3,
+                          width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                          transition: 'left .18s ease', boxShadow: '0 1px 2px rgba(0,0,0,.2)',
+                        }}
+                      />
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <strong style={{ fontSize: 13, color: 'var(--ink)' }}>Automatically apply grammar fixes</strong>
+                        <span className="kind-label" style={{ color: 'var(--grammar, #C0281F)' }}>Grammar</span>
+                      </div>
+                      <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 2, lineHeight: 1.4 }}>
+                        In editing mode, spelling and grammar corrections apply as you write.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Review Configuration Summary */}
+              <div style={{ background: 'var(--dock)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '20px 24px', display: 'grid', gap: 14, boxShadow: 'var(--shadow-paper)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 2 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--yellow)' }} />
+                  <strong style={{ fontSize: 13, color: 'var(--ink)' }}>Review Your Configuration</strong>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+                  <div>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.04em' }}>
+                      Document Format & Purpose
+                    </span>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', marginTop: 2 }}>
+                      {effectiveDocType} — {effectivePurpose}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.04em' }}>
+                      Audience & Language
+                    </span>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', marginTop: 2 }}>
+                      {effectiveAudience} ({docLanguage})
+                    </div>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.04em' }}>
+                      Writing Theme Register
+                    </span>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', marginTop: 2 }}>
+                      {THEME_DEFINITIONS[writingTheme]?.name || 'Neutral'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.04em' }}>
+                      Color Palette
+                    </span>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', marginTop: 2 }}>
+                      {COLOR_PRESETS[colorPresetKey]?.label || 'Byline'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.04em' }}>
+                      Grammar Fixes
+                    </span>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', marginTop: 2 }}>
+                      {autoApplyGrammar ? 'Auto-apply while editing' : 'Suggest only'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.04em' }}>
+                      Meta AI Model
+                    </span>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', marginTop: 2 }}>
+                      {APPROVED_META_MODELS.find(m => m.id === metaModel)?.label.split('(')[0] || metaModel}
+                      <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 6 }}>(T={temperature.toFixed(2)})</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.04em' }}>
+                      Typography & Layout
+                    </span>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', marginTop: 2 }}>
+                      {editorFont} • {paperWidth} width • {density}
+                    </div>
+                  </div>
+                </div>
+
+                {topic && (
+                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 6 }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.04em' }}>
+                      Working Thesis / Topic
+                    </span>
+                    <div style={{ fontSize: 13.5, fontStyle: 'italic', color: 'var(--ink)', marginTop: 2 }}>
+                      “{topic}”
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Final Action Buttons (sticky at bottom of scrollable area)} */}
+            <div style={{ padding: '24px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', background: 'var(--bg)', position: 'sticky', bottom: 0, zIndex: 10 }}>
+              <button
+                type="button"
+                onClick={() => handleFinish(true)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--muted)',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  textDecoration: 'underline',
+                  padding: 0,
+                }}
+              >
+                Skip template & start with blank page
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleFinish(false)}
+                className="primary"
+                style={{ padding: '12px 28px', fontSize: 15, fontWeight: 700, minHeight: 46 }}
+              >
+                ✦ Enter Workspace →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Global Navigation Footer */}
+        {currentStep < 6 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: 28 }}>
+            <button
+              type="button"
+              disabled={currentStep === 0}
+              onClick={handleBack}
+              style={{
+                padding: '8px 16px',
+                fontSize: 13,
+                visibility: currentStep === 0 ? 'hidden' : 'visible',
+              }}
+            >
+              ← Back
+            </button>
+            <button
+              type="button"
+              onClick={handleNext}
+              className="primary"
+              style={{ padding: '8px 20px', fontSize: 13 }}
+            >
+              Next →
+            </button>
+          </div>
+        )}
+      </main>
     </div>
   )
 }

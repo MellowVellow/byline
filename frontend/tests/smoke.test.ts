@@ -29,11 +29,12 @@ describe('quote anchoring', () => {
     ]
     anchorStore.ranges = new Map([['p1', r], ['v1', r]])
     syncAnchors(ed as any)
-    const spans = ed.view.dom.querySelectorAll('[data-anchor-id]')
+    const spans = ed.view.dom.querySelectorAll('[data-anchor-ids]')
     const classes = [...spans].map(s => s.className).join(' ')
-    // stacked cutting: yellow fully covers purple on identical range -> purple not drawn
-    expect(classes).not.toContain('anch-reaction')
-    expect(classes).toContain('anch-vocabulary')
+    // overlapping layers merge into a single gradient underline
+    expect(classes).toContain('anch-merged')
+    expect(spans[0].getAttribute('data-anchor-ids')).toContain('p1')
+    expect(spans[0].getAttribute('data-anchor-ids')).toContain('v1')
     ed.destroy()
   })
   it('keyboard Tab handler is capture-registered (smoke: editor editable)', () => {

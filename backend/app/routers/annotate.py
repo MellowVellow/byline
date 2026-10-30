@@ -1,10 +1,7 @@
 from fastapi import APIRouter
-import httpx
 from .. import llm, prompts
-from ..config import settings
-from ..models import TextIn, SynonymIn, GrammarIn
+from ..models import TextIn, SynonymIn
 from ..quote import filter_anchored
-from ..grammar_filter import filter_matches
 from ..services.annotate_service import enrich_alternatives
 from .common import ok, fail, err, meta
 
@@ -67,16 +64,4 @@ async def synonyms(body: SynonymIn):
         if body.sentence and body.word:
             words = [w for w in words if w.lower() != body.word.lower()]
         return ok(synonyms=words, model=model, usage=usage, meta=meta("synonyms", s, u, usage, model, 0, 0.5, 600))
-    except Exception as e: return err(e)
-
-@router.post("/api/grammar")
-async def grammar(body: GrammarIn):
-    try:
-        async with httpx.AsyncClient(timeout=8) as cl:
-            r = await cl.post(settings.languagetool_url, data={"text": body.text, "language": "en-US", "level": "picky"})
-            r.raise_for_status(); d = r.json()
-        matches = [{"from": m["offset"], "to": m["offset"] + m["length"], "message": m.get("message", ""),
-                    "replacements": [x["value"] for x in m.get("replacements", [])[:3]],
-                    "rule": (m.get("rule") or {}).get("id", "")} for m in d.get("matches", [])]
-        return ok(matches=filter_matches(body.text, matches), meta={"endpoint":"grammar","model":"LanguageTool","ms":0,"usage":{"in":0,"out":0,"reasoning":0},"params":{"temperature":0,"max_tokens":0,"reasoning_effort":""},"prompt":{"system":"LanguageTool /v2/check level=picky","user":body.text[:20000]}})
     except Exception as e: return err(e)

@@ -267,6 +267,14 @@ export default function SettingsMenu({
                   ))}
                 </select>
               </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontWeight: 500 }}>
+                <input
+                  type="checkbox"
+                  checked={settings.autoApplyGrammar}
+                  onChange={e => set({ autoApplyGrammar: e.target.checked })}
+                />
+                Automatically apply grammar fixes in editing mode
+              </label>
             </div>
           )}
 

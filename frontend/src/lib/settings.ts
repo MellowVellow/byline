@@ -17,6 +17,8 @@ export interface AppSettings {
   // Writing profile
   writingTheme: 'neutral' | 'academic' | 'gen-z' | 'buzzword'
   language: string
+  // Grammar auto-apply
+  autoApplyGrammar: boolean
 }
 
 /** One preset drives every annotation surface: grammar=Language red, ai=Reader purple, sources=blue, wordChoice=Lint yellow, suggest=Suggest grey. */
@@ -38,6 +40,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   reasoningEffort: 'minimal',
   writingTheme: 'neutral',
   language: 'en-US',
+  autoApplyGrammar: false,
 }
 const KEY = 'byline.settings.v1'
 const { label: _l, ...presetColors } = COLOR_PRESETS.default; void _l; void presetColors

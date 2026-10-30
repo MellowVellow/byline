@@ -2,66 +2,45 @@ import React, { useState } from 'react'
 import type { DocumentContext, OutlineNode } from '../domain/document'
 import type { Editor } from '@tiptap/react'
 import { blip, sfxPick } from '../lib/sfx'
+import OutlineEditor from './OutlineEditor'
 
 export interface IntentDockProps {
   context: DocumentContext
   onContextChange: (ctx: DocumentContext) => void
   outline: OutlineNode[]
   onOutlineChange: (nodes: OutlineNode[]) => void
-  editor: Editor | null
+  editor?: Editor | null
+  activeNodeId?: string | null
+  onNodeClick?: (node: OutlineNode) => void
+  onToggleCollapse?: () => void
+  onInsertHeading?: (title: string, level: 1 | 2 | 3, parentId?: string | null) => void
+  onInsertTitleAtCursor?: (title: string) => void
+  onCopyOutlineContent?: (node: OutlineNode) => void
+  onExpandSection?: (node: OutlineNode) => void
 }
 
+/**
+ * Left Dock: Intent & Outline
+ * Houses the independent Outline planning space and Document Context.
+ * Outline changes do not automatically mutate the main draft.
+ */
 export default function IntentDock({
   context,
   onContextChange,
   outline,
   onOutlineChange,
-  editor,
+  onToggleCollapse,
+  onInsertHeading,
+  onInsertTitleAtCursor,
+  onCopyOutlineContent,
+  onExpandSection,
 }: IntentDockProps) {
-  const [activeTab, setActiveTab] = useState<'context' | 'outline'>('context')
+  const [activeTab, setActiveTab] = useState<'context' | 'outline'>('outline')
   const [newKeyIdea, setNewKeyIdea] = useState('')
+  const [newConstraint, setNewConstraint] = useState('')
 
-  // Outline node navigation: scroll editor to matching heading text
-  const navigateToNode = (node: OutlineNode) => {
-    blip('select')
-    if (!editor) return
-
-    const { doc } = editor.state
-    let targetPos = -1
-
-    // Check headings first
-    doc.descendants((pmNode, pos) => {
-      if (pmNode.isBlock && pmNode.textContent.toLowerCase().includes(node.title.toLowerCase())) {
-        targetPos = pos
-        return false
-      }
-    })
-
-    if (targetPos >= 0) {
-      editor.chain().setTextSelection(targetPos).scrollIntoView().run()
-    }
-  }
-
-  const addOutlineNode = () => {
-    const nextOrder = outline.length + 1
-    const newNode: OutlineNode = {
-      id: `sec-${Date.now()}`,
-      title: `${nextOrder}. New Section`,
-      description: 'Describe the intended goal of this section…',
-      order: nextOrder,
-    }
-    onOutlineChange([...outline, newNode])
-    sfxPick()
-  }
-
-  const removeOutlineNode = (id: string) => {
-    onOutlineChange(outline.filter(n => n.id !== id))
-    sfxPick()
-  }
-
-  const updateOutlineNode = (id: string, patch: Partial<OutlineNode>) => {
-    onOutlineChange(outline.map(n => (n.id === id ? { ...n, ...patch } : n)))
-  }
+  // Map legacy onInsertHeading to onInsertTitleAtCursor if not explicitly provided
+  const handleInsertTitle = onInsertTitleAtCursor || (onInsertHeading ? (title: string) => onInsertHeading(title, 2, null) : undefined)
 
   const addKeyIdea = () => {
     if (!newKeyIdea.trim()) return
@@ -76,44 +55,107 @@ export default function IntentDock({
     onContextChange({ ...context, keyIdeas })
   }
 
-  return (
-    <aside className="dock dock-left" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* Dock Header & Tabs */}
-      <div style={{ padding: '12px 14px 8px', borderBottom: '1px solid var(--ink-2)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--ink-4)' }}>
-            Intent
-          </span>
-          <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>Writer Control</span>
-        </div>
+  const addConstraint = () => {
+    if (!newConstraint.trim()) return
+    const constraints = [...(context.constraints || []), newConstraint.trim()]
+    onContextChange({ ...context, constraints })
+    setNewConstraint('')
+    sfxPick()
+  }
 
-        <div className="dock-tabs" style={{ display: 'flex', gap: 6 }}>
-          <button
-            type="button"
-            className={activeTab === 'context' ? 'active' : ''}
-            onClick={() => setActiveTab('context')}
-            style={{ flex: 1, padding: '4px 0', fontSize: 12 }}
-          >
-            Context ({context.topic ? '1' : '0'})
-          </button>
-          <button
-            type="button"
-            className={activeTab === 'outline' ? 'active' : ''}
-            onClick={() => setActiveTab('outline')}
-            style={{ flex: 1, padding: '4px 0', fontSize: 12 }}
-          >
-            Outline ({outline.length})
-          </button>
+  const removeConstraint = (index: number) => {
+    const constraints = (context.constraints || []).filter((_, i) => i !== index)
+    onContextChange({ ...context, constraints })
+  }
+
+  return (
+    <div className="dock" style={{ height: '100%', display: 'flex', flexDirection: 'column', margin: 0, padding: 12 }}>
+      {/* Dock Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
+          <span className="swatch" style={{ background: 'var(--pencil, #1765CC)' }} />
+          Intent & Outline
+        </h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span className="meta" style={{ fontSize: 11 }}>
+            {activeTab === 'context' ? 'Context' : `${outline.length} ${outline.length === 1 ? 'section' : 'sections'}`}
+          </span>
+          {onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              title="Collapse Intent Dock"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--muted)',
+                cursor: 'pointer',
+                padding: '2px 6px',
+                minHeight: 'auto',
+                fontSize: 13,
+                fontWeight: 700,
+              }}
+            >
+              ‹
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Dock Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'grid', gap: 14 }}>
-        {/* Tab 1: Context */}
+      {/* Dock Tabs */}
+      <div className="dock-tabs" style={{ marginBottom: 10 }}>
+        <button
+          type="button"
+          className={activeTab === 'outline' ? 'active' : ''}
+          onClick={() => {
+            blip('select')
+            setActiveTab('outline')
+          }}
+          style={{ flex: 1, justifyContent: 'center' }}
+        >
+          Outline
+          <span className="tab-badge">{outline.length}</span>
+        </button>
+        <button
+          type="button"
+          className={activeTab === 'context' ? 'active' : ''}
+          onClick={() => {
+            blip('select')
+            setActiveTab('context')
+          }}
+          style={{ flex: 1, justifyContent: 'center' }}
+        >
+          Context
+          <span className="tab-badge">{context.topic ? '1' : '0'}</span>
+        </button>
+      </div>
+
+      {/* Scrollable Tab Content */}
+      <div
+        className="rail-scroll"
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          paddingRight: 4,
+          paddingBottom: 12,
+          overflowWrap: 'break-word',
+          minHeight: 0,
+        }}
+      >
+        {activeTab === 'outline' && (
+          <OutlineEditor
+            outline={outline}
+            onOutlineChange={onOutlineChange}
+            onInsertTitleAtCursor={handleInsertTitle}
+            onCopyOutlineContent={onCopyOutlineContent}
+            onExpandSection={onExpandSection}
+          />
+        )}
+
         {activeTab === 'context' && (
-          <div style={{ display: 'grid', gap: 12 }}>
+          <div style={{ display: 'grid', gap: 10 }}>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-4)', textTransform: 'uppercase' }}>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>
                 Topic / Thesis
               </label>
               <textarea
@@ -121,82 +163,142 @@ export default function IntentDock({
                 value={context.topic || ''}
                 placeholder="What is this piece about?"
                 onChange={e => onContextChange({ ...context, topic: e.target.value })}
-                style={{ width: '100%', padding: '6px 8px', fontSize: 13, borderRadius: 4, border: '1px solid var(--ink-2)', background: 'var(--paper-1)', color: 'var(--ink-5)', marginTop: 4, resize: 'vertical' }}
+                style={{ width: '100%', minHeight: 48, resize: 'vertical', overflowWrap: 'break-word', whiteSpace: 'normal', minWidth: 0 }}
               />
             </div>
-
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-4)', textTransform: 'uppercase' }}>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>
                 Purpose / Goal
               </label>
               <input
                 type="text"
                 value={context.purpose || ''}
-                placeholder="e.g. Argue, explain, or persuade"
+                placeholder="e.g. Argue, explain, or analyze"
                 onChange={e => onContextChange({ ...context, purpose: e.target.value })}
-                style={{ width: '100%', padding: '6px 8px', fontSize: 13, borderRadius: 4, border: '1px solid var(--ink-2)', background: 'var(--paper-1)', color: 'var(--ink-5)', marginTop: 4 }}
+                style={{ width: '100%', overflowWrap: 'break-word', whiteSpace: 'normal', minWidth: 0 }}
               />
             </div>
-
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-4)', textTransform: 'uppercase' }}>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>
                 Audience
               </label>
               <input
                 type="text"
                 value={context.audience || ''}
-                placeholder="Who will read this?"
+                placeholder="Target readers"
                 onChange={e => onContextChange({ ...context, audience: e.target.value })}
-                style={{ width: '100%', padding: '6px 8px', fontSize: 13, borderRadius: 4, border: '1px solid var(--ink-2)', background: 'var(--paper-1)', color: 'var(--ink-5)', marginTop: 4 }}
+                style={{ width: '100%', overflowWrap: 'break-word', whiteSpace: 'normal', minWidth: 0 }}
               />
             </div>
-
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-4)', textTransform: 'uppercase' }}>
-                Background & Stakes
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>
+                Background
               </label>
               <textarea
                 rows={2}
                 value={context.background || ''}
-                placeholder="Underlying premises or context"
+                placeholder="Stakes, context, or assignment constraints"
                 onChange={e => onContextChange({ ...context, background: e.target.value })}
-                style={{ width: '100%', padding: '6px 8px', fontSize: 13, borderRadius: 4, border: '1px solid var(--ink-2)', background: 'var(--paper-1)', color: 'var(--ink-5)', marginTop: 4, resize: 'vertical' }}
+                style={{ width: '100%', minHeight: 44, resize: 'vertical', overflowWrap: 'break-word', whiteSpace: 'normal', minWidth: 0 }}
               />
             </div>
-
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-4)', textTransform: 'uppercase' }}>
-                Key Ideas & Assertions
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>
+                Key Ideas
               </label>
-              <div style={{ display: 'grid', gap: 6, marginTop: 4 }}>
+              <div style={{ display: 'grid', gap: 5, marginTop: 4 }}>
                 {(context.keyIdeas || []).map((idea, idx) => (
-                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, background: 'var(--paper-2)', padding: '4px 8px', borderRadius: 4 }}>
-                    <span style={{ color: 'var(--ink-4)' }}>•</span>
-                    <span style={{ flex: 1, color: 'var(--ink-5)' }}>{idea}</span>
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontSize: 12.5,
+                      background: 'var(--paper)',
+                      border: '1px solid var(--border)',
+                      padding: '4px 8px',
+                      borderRadius: 'var(--radius)',
+                      minWidth: 0,
+                    }}
+                  >
+                    <span style={{ color: 'var(--muted)', fontSize: 10 }}>•</span>
+                    <span style={{ flex: 1, color: 'var(--ink)' }}>{idea}</span>
                     <button
                       type="button"
                       onClick={() => removeKeyIdea(idx)}
-                      style={{ background: 'none', border: 'none', color: 'var(--ink-4)', cursor: 'pointer', fontSize: 11 }}
+                      style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0, minHeight: 'auto', fontSize: 12 }}
                     >
                       ✕
                     </button>
                   </div>
                 ))}
-
-                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                <div style={{ display: 'flex', gap: 5, marginTop: 4 }}>
                   <input
                     type="text"
                     value={newKeyIdea}
-                    placeholder="Add an assertion or point…"
+                    placeholder="Add an assertion…"
                     onChange={e => setNewKeyIdea(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addKeyIdea() } }}
-                    style={{ flex: 1, padding: '4px 8px', fontSize: 12, borderRadius: 4, border: '1px solid var(--ink-2)', background: 'var(--paper-1)', color: 'var(--ink-5)' }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addKeyIdea()
+                      }
+                    }}
+                    style={{ flex: 1, minHeight: 32, fontSize: 12, minWidth: 0 }}
                   />
-                  <button
-                    type="button"
-                    onClick={addKeyIdea}
-                    style={{ padding: '4px 8px', fontSize: 12, borderRadius: 4, border: '1px solid var(--ink-2)', background: 'var(--paper-2)', cursor: 'pointer' }}
+                  <button type="button" onClick={addKeyIdea} style={{ minHeight: 32, padding: '4px 10px', fontSize: 12 }}>
+                    + Add
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>
+                Constraints / Relevant Facts
+              </label>
+              <div style={{ display: 'grid', gap: 5, marginTop: 4 }}>
+                {(context.constraints || []).map((idea, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontSize: 12.5,
+                      background: 'var(--paper)',
+                      border: '1px solid var(--border)',
+                      padding: '4px 8px',
+                      borderRadius: 'var(--radius)',
+                      minWidth: 0,
+                    }}
                   >
+                    <span style={{ color: 'var(--muted)', fontSize: 10 }}>•</span>
+                    <span style={{ flex: 1, color: 'var(--ink)' }}>{idea}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeConstraint(idx)}
+                      style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0, minHeight: 'auto', fontSize: 12 }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 5, marginTop: 4 }}>
+                  <input
+                    type="text"
+                    value={newConstraint}
+                    placeholder="Add a constraint…"
+                    onChange={e => setNewConstraint(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addConstraint()
+                      }
+                    }}
+                    style={{ flex: 1, minHeight: 32, fontSize: 12, minWidth: 0 }}
+                  />
+                  <button type="button" onClick={addConstraint} style={{ minHeight: 32, padding: '4px 10px', fontSize: 12 }}>
                     + Add
                   </button>
                 </div>
@@ -204,99 +306,7 @@ export default function IntentDock({
             </div>
           </div>
         )}
-
-        {/* Tab 2: Outline */}
-        {activeTab === 'outline' && (
-          <div style={{ display: 'grid', gap: 12 }}>
-            <div style={{ fontSize: 12, color: 'var(--ink-4)' }}>
-              Editable outline nodes. Click a node to navigate to its associated section in the editor.
-            </div>
-
-            <div style={{ display: 'grid', gap: 10 }}>
-              {outline.map(node => (
-                <div
-                  key={node.id}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: 6,
-                    border: '1px solid var(--ink-2)',
-                    background: 'var(--paper-1)',
-                    display: 'grid',
-                    gap: 6,
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <input
-                      type="text"
-                      value={node.title}
-                      onChange={e => updateOutlineNode(node.id, { title: e.target.value })}
-                      style={{
-                        fontWeight: 600,
-                        fontSize: 13,
-                        color: 'var(--ink-5)',
-                        border: 'none',
-                        background: 'transparent',
-                        padding: 0,
-                        width: '80%',
-                      }}
-                    />
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button
-                        type="button"
-                        onClick={() => navigateToNode(node)}
-                        title="Jump to section in editor"
-                        style={{ background: 'none', border: 'none', color: '#1765CC', cursor: 'pointer', fontSize: 12 }}
-                      >
-                        ↗
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeOutlineNode(node.id)}
-                        title="Delete node"
-                        style={{ background: 'none', border: 'none', color: 'var(--ink-4)', cursor: 'pointer', fontSize: 12 }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-
-                  <input
-                    type="text"
-                    value={node.description || ''}
-                    placeholder="Section objective or prompt…"
-                    onChange={e => updateOutlineNode(node.id, { description: e.target.value })}
-                    style={{
-                      fontSize: 12,
-                      color: 'var(--ink-4)',
-                      border: 'none',
-                      borderBottom: '1px dashed var(--ink-2)',
-                      background: 'transparent',
-                      padding: '2px 0',
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={addOutlineNode}
-              style={{
-                padding: '8px 12px',
-                background: 'var(--paper-2)',
-                border: '1px dashed var(--ink-2)',
-                borderRadius: 6,
-                fontSize: 13,
-                color: 'var(--ink-5)',
-                cursor: 'pointer',
-                textAlign: 'center',
-              }}
-            >
-              + Add Section Node
-            </button>
-          </div>
-        )}
       </div>
-    </aside>
+    </div>
   )
 }

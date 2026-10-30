@@ -36,6 +36,8 @@ export interface Finding {
   documentId: string
   persona: Persona
   kind: FindingKind
+  category?: string
+  ruleId?: string
   anchor: TextAnchor
   explanation: string
   suggestions: Suggestion[]

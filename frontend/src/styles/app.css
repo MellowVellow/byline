@@ -38,7 +38,8 @@
   .proof-sheet h2{font-size:21px}
   .paper{padding:24px 18px 24px 42px;background:linear-gradient(90deg,transparent 0 30px,color-mix(in srgb,var(--proof) 38%,transparent) 30px,color-mix(in srgb,var(--proof) 38%,transparent) 31px,transparent 31px),var(--paper)}
 }
-.paper{background:linear-gradient(90deg,transparent 0 26px,color-mix(in srgb,var(--proof) 38%,transparent) 26px,color-mix(in srgb,var(--proof) 38%,transparent) 27px,transparent 27px),var(--paper);border:1px solid var(--border);border-radius:var(--radius-lg);min-height:70vh;padding:30px 38px}
+.paper{background:linear-gradient(90deg,transparent 0 26px,color-mix(in srgb,var(--proof) 38%,transparent) 26px,color-mix(in srgb,var(--proof) 38%,transparent) 27px,transparent 27px),var(--paper);border:1px solid var(--border);border-radius:var(--radius-lg);min-height:70vh;height:auto;padding:30px 38px;box-sizing:border-box}
+.paper .ProseMirror{max-width:none;margin:0;min-height:60vh;width:100%}
 .dual-editors{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
 .dual-editors .paper{min-height:50vh;padding:22px 24px}
 .dual-editors .ProseMirror{max-width:none;min-height:44vh;font-size:16px}
@@ -217,6 +218,38 @@ button:disabled{opacity:.4;cursor:default}
 .footnote-ref{color:var(--ai);cursor:pointer;font-weight:700}
 .footnotes{max-width:var(--paper-w,70ch);margin:24px auto 0;font-size:13px;color:var(--muted);line-height:1.55}
 .footnotes hr{border:none;border-top:1px solid var(--border);width:38%;margin:0 0 8px}
+/* Grammar auto-apply pop animation: pops green, then fades cleanly into normal text */
+.grammar-auto-pop {
+  display: inline;
+  color: #15803D !important;
+  background-color: color-mix(in srgb, #16A34A 25%, transparent) !important;
+  border-bottom: 2px solid #16A34A !important;
+  border-radius: 3px;
+  padding: 0 2px;
+  animation: grammarPopFade 1.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes grammarPopFade {
+  0% {
+    color: #15803D;
+    background-color: color-mix(in srgb, #16A34A 45%, transparent);
+    box-shadow: 0 0 10px rgba(22, 163, 74, 0.5);
+    text-shadow: 0 0 8px rgba(22, 163, 74, 0.3);
+  }
+  50% {
+    color: #15803D;
+    background-color: color-mix(in srgb, #16A34A 20%, transparent);
+    border-bottom-color: #16A34A;
+  }
+  100% {
+    color: inherit;
+    background-color: transparent;
+    border-bottom-color: transparent;
+    box-shadow: none;
+    text-shadow: none;
+  }
+}
+
 .editor-bar button.active{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 input[type=range]{accent-color:var(--ink);padding:0;border:none;background:transparent}
 .spinner{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);border-top-color:var(--ai);display:inline-block;flex:none;animation:spin .7s linear infinite;vertical-align:-2px;margin-left:6px}

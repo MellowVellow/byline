@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import type { Editor } from '@tiptap/react'
 import { api } from '../lib/api'
-import { applySafeReplacement, type ResolvedRange } from '../editor/anchoring'
-import { blip, sfxAccept, sfxPick } from '../lib/sfx'
+import { blip, sfxAccept } from '../lib/sfx'
 
 export interface ParaphrasePopupProps {
   editor: Editor | null
@@ -14,6 +13,7 @@ export interface ParaphrasePopupProps {
   } | null
   documentGoal: string
   theme: string
+  position: { x: number; y: number }
   onClose: () => void
 }
 
@@ -24,6 +24,7 @@ export default function ParaphrasePopup({
   selectionContext,
   documentGoal,
   theme,
+  position,
   onClose,
 }: ParaphrasePopupProps) {
   const [loading, setLoading] = useState(false)
@@ -60,9 +61,12 @@ export default function ParaphrasePopup({
       if (res?.ok && Array.isArray(res.synonyms) && res.synonyms.length > 0) {
         setOptions(res.synonyms.slice(0, 3))
       } else {
-        // Fallback contextual alternatives
         if (selectedMode === 'shorten') {
-          setOptions([sel.split(' ').slice(0, Math.max(1, Math.floor(sel.split(' ').length / 2))).join(' ') || sel, 'concise phrasing', 'direct summary'])
+          setOptions([
+            sel.split(' ').slice(0, Math.max(1, Math.floor(sel.split(' ').length / 2))).join(' ') || sel,
+            'concise phrasing',
+            'direct summary',
+          ])
         } else {
           setOptions([
             `distinctly ${sel}`,
@@ -82,10 +86,7 @@ export default function ParaphrasePopup({
   const handleApplyOption = (text: string) => {
     if (!editor || !selectionContext) return
 
-    // Apply safe transaction to the selected range
     const { from, to, selectedText } = selectionContext
-
-    // Verify current text
     const currentSlice = editor.state.doc.textBetween(from, to)
     if (currentSlice.trim() !== selectedText.trim()) {
       alert('Selected text was modified during request. Edit aborted safely.')
@@ -102,7 +103,6 @@ export default function ParaphrasePopup({
     }
   }
 
-  // Keyboard shortcut listener for 1, 2, 3 and Escape
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -122,118 +122,111 @@ export default function ParaphrasePopup({
 
   return (
     <div
+      className="sugg-popup fade"
       style={{
-        position: 'fixed',
-        bottom: 24,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        background: 'var(--paper-1, #fff)',
-        border: '1px solid var(--ink-2, #D9CEBE)',
-        borderRadius: 8,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-        padding: '12px 16px',
-        zIndex: 100,
-        maxWidth: 520,
-        width: '90%',
+        position: 'absolute',
+        top: position.y,
+        left: Math.max(16, Math.min(position.x, window.innerWidth - 400)),
+        width: 'min(380px, calc(100vw - 32px))',
+        background: 'var(--bg)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+        boxShadow: 'var(--shadow-pop)',
+        padding: '10px 12px',
+        zIndex: 150,
         display: 'grid',
-        gap: 10,
+        gap: 8,
       }}
     >
       {/* Header and Modes */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#A93226' }}>
-            Selection Alternatives
+          <span className="kind-label" style={{ color: 'var(--lt)' }}>
+            Alternatives
           </span>
-          <span style={{ fontSize: 11, color: 'var(--ink-4)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span className="meta" style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             “{selectionContext.selectedText}”
           </span>
         </div>
         <button
           type="button"
           onClick={onClose}
-          style={{ background: 'none', border: 'none', color: 'var(--ink-4)', cursor: 'pointer', fontSize: 14 }}
+          style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0, minHeight: 'auto', fontSize: 13 }}
         >
           ✕
         </button>
       </div>
 
       {/* Mode Buttons */}
-      <div style={{ display: 'flex', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 5 }}>
         <button
           type="button"
-          className={`wz-pill ${mode === 'paraphrase' ? 'active' : ''}`}
+          className={mode === 'paraphrase' ? 'primary' : ''}
           onClick={() => runParaphrase('paraphrase')}
-          style={{ fontSize: 11, padding: '3px 10px' }}
+          style={{ padding: '2px 8px', fontSize: 11.5, minHeight: 26 }}
         >
           Paraphrase
         </button>
         <button
           type="button"
-          className={`wz-pill ${mode === 'shorten' ? 'active' : ''}`}
+          className={mode === 'shorten' ? 'primary' : ''}
           onClick={() => runParaphrase('shorten')}
-          style={{ fontSize: 11, padding: '3px 10px' }}
+          style={{ padding: '2px 8px', fontSize: 11.5, minHeight: 26 }}
         >
           Shorten
         </button>
         <button
           type="button"
-          className={`wz-pill ${mode === 'tone' ? 'active' : ''}`}
+          className={mode === 'tone' ? 'primary' : ''}
           onClick={() => runParaphrase('tone')}
-          style={{ fontSize: 11, padding: '3px 10px' }}
+          style={{ padding: '2px 8px', fontSize: 11.5, minHeight: 26 }}
         >
-          Adapt Tone ({theme})
+          {theme}
         </button>
       </div>
 
-      {/* Alternatives */}
+      {/* Alternatives list */}
       {loading ? (
-        <div style={{ fontSize: 12, color: 'var(--ink-4)', padding: '10px 0', textAlign: 'center' }}>
+        <div className="meta" style={{ padding: '8px 0', textAlign: 'center' }}>
           Generating alternatives via Meta reasoning model…
         </div>
       ) : errorMsg ? (
-        <div style={{ fontSize: 12, color: '#C0281F' }}>{errorMsg}</div>
+        <div style={{ fontSize: 12, color: 'var(--lt)' }}>{errorMsg}</div>
       ) : (
-        <div style={{ display: 'grid', gap: 6 }}>
+        <div style={{ display: 'grid', gap: 4 }}>
           {options.map((opt, idx) => (
             <div
               key={idx}
+              className="sugg-row"
               onClick={() => handleApplyOption(opt)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '6px 10px',
-                borderRadius: 4,
-                border: '1px solid var(--ink-2)',
-                background: 'var(--paper-2)',
+                padding: '6px 8px',
+                borderRadius: 'var(--radius)',
+                border: '1px solid var(--border)',
+                background: 'var(--paper)',
                 cursor: 'pointer',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ink-5)' }}>
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    background: '#A93226',
-                    color: '#fff',
-                    borderRadius: 3,
-                    padding: '1px 5px',
-                  }}
-                >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--ink)' }}>
+                <span className="num" style={{ color: 'var(--lt)', fontWeight: 700 }}>
                   {idx + 1}
                 </span>
-                <span>{opt}</span>
+                <span className="quote-serif" style={{ fontSize: 13.5 }}>{opt}</span>
               </div>
-              <span style={{ fontSize: 11, color: '#1765CC', fontWeight: 600 }}>Accept</span>
+              <span className="meta" style={{ color: 'var(--blue)', fontWeight: 600, fontSize: 11 }}>
+                Accept
+              </span>
             </div>
           ))}
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--ink-4)', marginTop: 2 }}>
-        <span>Press <kbd style={{ padding: '1px 4px', border: '1px solid var(--ink-2)', borderRadius: 2 }}>1</kbd>, <kbd style={{ padding: '1px 4px', border: '1px solid var(--ink-2)', borderRadius: 2 }}>2</kbd>, or <kbd style={{ padding: '1px 4px', border: '1px solid var(--ink-2)', borderRadius: 2 }}>3</kbd> to accept</span>
-        <span><kbd style={{ padding: '1px 4px', border: '1px solid var(--ink-2)', borderRadius: 2 }}>Esc</kbd> to cancel</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: 'var(--muted)', marginTop: 2 }}>
+        <span>Press <span className="kbd">1</span>, <span className="kbd">2</span>, or <span className="kbd">3</span></span>
+        <span><span className="kbd">Esc</span> to dismiss</span>
       </div>
     </div>
   )

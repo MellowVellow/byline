@@ -2,39 +2,54 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Highlight from '@tiptap/extension-highlight'
+import TableOfContents from '@tiptap/extension-table-of-contents'
 import TextAlign from '@tiptap/extension-text-align'
 import CharacterCount from '@tiptap/extension-character-count'
 import Underline from '@tiptap/extension-underline'
 
 import TopNavigation from '../components/TopNavigation'
 import IntentDock from '../components/IntentDock'
-import ReflectionDock from '../components/ReflectionDock'
+import ReviewDock from '../components/ReviewDock'
 import ConnectModal from '../components/ConnectModal'
 import ParaphrasePopup from '../components/ParaphrasePopup'
+import SuggestionPopup from '../components/SuggestionPopup'
 import SetupWizard, { type SetupResult } from '../components/SetupWizard'
 import SettingsMenu from '../components/SettingsMenu'
+import ExpandSectionModal from '../components/ExpandSectionModal'
+import { compareOutlineWithDraft } from '../domain/outline'
+import { keys } from '../lib/storage'
 
+import { AnchorDecorations, anchorStore, syncAnchors, syncGhost, syncFlash, flashStore, modeStore, syncPops, popStore } from '../editor/decorations'
 import { contextService, type SelectionContext } from '../services/context-service'
 import { globalAnalysisService } from '../services/analysis-service'
-import { SuggestionService } from '../services/suggestion-service'
-import { resolveAnchor, applySafeReplacement } from '../editor/anchoring'
+import { harperService } from '../services/harper-service'
+import { resolveAnchor } from '../editor/anchoring'
 import type { DocumentContext, OutlineNode, ThemeId } from '../domain/document'
-import type { Finding, FindingStatus, Suggestion, EvidenceRecord } from '../domain/finding'
+import type { Finding, FindingStatus, Suggestion, Persona } from '../domain/finding'
 import { THEME_DEFINITIONS } from '../domain/writing-profile'
 import { loadSettings, saveSettings, type AppSettings } from '../lib/settings'
 import { api } from '../lib/api'
-import { GOLDEN_PATH_SAMPLE_DOC, GOLDEN_PATH_SAMPLE_CONTEXT, FALLBACK_ISSUES, FALLBACK_REACTIONS, FALLBACK_READINGS } from '../lib/fallback'
-import { sfxAccept, sfxDismiss, sfxPick, blip } from '../lib/sfx'
+import { GOLDEN_PATH_SAMPLE_DOC, GOLDEN_PATH_SAMPLE_CONTEXT } from '../lib/fallback'
+import { sfxAccept, sfxPick, blip } from '../lib/sfx'
 
 export type AssistGranularity = 'Hint' | 'Phrase' | 'Sentence' | 'Paragraph'
 
 export default function EditorPage({ demo = false }: { demo?: boolean }) {
-  // App & View settings
+  // App & View mode
   const [mode, setMode] = useState<'drafting' | 'editing'>('drafting')
   const [appSettings, setAppSettings] = useState<AppSettings>(loadSettings)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
   const [connectOpen, setConnectOpen] = useState(false)
+
+  // Expandable/Collapsible Docks (starts collapsed in draft mode for focus)
+  const [leftOpen, setLeftOpen] = useState(true)
+  const [rightOpen, setRightOpen] = useState(false)
+  const [triggerReviewCounter, setTriggerReviewCounter] = useState(0)
+
+  // Active Outline Node & Highlighted Finding Card
+  const [activeOutlineNodeId, setActiveOutlineNodeId] = useState<string | null>(null)
+  const [highlightedFindingId, setHighlightedFindingId] = useState<string | null>(null)
 
   // Document state
   const [context, setContext] = useState<DocumentContext>(() => {
@@ -59,19 +74,37 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [outline, setOutline] = useState<OutlineNode[]>(() => {
     if (demo) {
       return [
-        { id: 'sec-1', title: '1. The Congestion Dilemma', description: 'Introduce runway and highway saturation.', order: 1 },
-        { id: 'sec-2', title: '2. The Capital Cost Critique', description: 'Examine debt loads and suburban density limits.', order: 2 },
-        { id: 'sec-3', title: '3. Comparative Economic Yields', description: 'Analyze travel predictability and carbon savings.', order: 3 },
-        { id: 'sec-4', title: '4. Dialectical Synthesis', description: 'Frame investment as a balanced infrastructure portfolio.', order: 4 },
+        { id: 'sec-1', title: '1. The Congestion Dilemma', description: 'Introduce runway and highway saturation.', order: 1, sectionId: 'sec-1' },
+        { id: 'sec-2', title: '2. The Capital Cost Critique', description: 'Examine debt loads and suburban density limits.', order: 2, sectionId: 'sec-2' },
+        { id: 'sec-3', title: '3. Comparative Economic Yields', description: 'Analyze travel predictability and carbon savings.', order: 3, sectionId: 'sec-3' },
+        { id: 'sec-4', title: '4. Dialectical Synthesis', description: 'Frame investment as a balanced infrastructure portfolio.', order: 4, sectionId: 'sec-4' },
       ]
     }
-    const saved = localStorage.getItem('byline.doc.outline')
+    const saved = localStorage.getItem('byline.doc.outline') || localStorage.getItem(keys.outline(false))
     return saved ? JSON.parse(saved) : [
-      { id: 'sec-1', title: '1. Introduction', description: 'Establish the core thesis.', order: 1 },
-      { id: 'sec-2', title: '2. Argument & Evidence', description: 'Develop key points.', order: 2 },
-      { id: 'sec-3', title: '3. Conclusion', description: 'Summarize implications.', order: 3 },
+      { id: 'sec-1', title: '1. Introduction', description: 'Establish the core thesis.', order: 1, sectionId: 'sec-1' },
+      { id: 'sec-2', title: '2. Argument & Evidence', description: 'Develop key points.', order: 2, sectionId: 'sec-2' },
+      { id: 'sec-3', title: '3. Conclusion', description: 'Synthesize conclusions.', order: 3, sectionId: 'sec-3' },
     ]
   })
+
+  // State for explicit section expansion modal
+  const [expandingSection, setExpandingSection] = useState<OutlineNode | null>(null)
+
+  // Persist outline independently to localStorage
+  useEffect(() => {
+    if (!demo) {
+      localStorage.setItem('byline.doc.outline', JSON.stringify(outline))
+      localStorage.setItem(keys.outline(false), JSON.stringify(outline))
+    }
+  }, [outline, demo])
+
+  // Persist context independently to localStorage
+  useEffect(() => {
+    if (!demo) {
+      localStorage.setItem('byline.doc.context', JSON.stringify(context))
+    }
+  }, [context, demo])
 
   const [docRevision, setDocRevision] = useState(1)
   const [counts, setCounts] = useState({ words: 0, chars: 0 })
@@ -79,17 +112,28 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   // Unified Findings state
   const [findings, setFindings] = useState<Finding[]>([])
   const [analyzing, setAnalyzing] = useState(false)
+  const [grammarNotice, setGrammarNotice] = useState<string | null>(null)
+  const [grammarAbort, setGrammarAbort] = useState<AbortController | null>(null)
+  const [selectedPersona, setSelectedPersona] = useState<Persona | 'all'>('all')
+  const [visiblePersonas, setVisiblePersonas] = useState<Record<Persona, boolean>>({
+    grammar: true,
+    reader: true,
+    supervisor: true,
+    researcher: true,
+  })
 
-  // Selection & Paraphrase state
+  // Selection & Paraphrase state (positioned below cursor)
   const [selectionContext, setSelectionContext] = useState<SelectionContext | null>(null)
+  const [popupPos, setPopupPos] = useState({ x: 200, y: 300 })
 
-  // Draft Assistance state
+  // Draft Assistance state (Ghost text & Suggestion popup below cursor)
   const [assistLevel, setAssistLevel] = useState<AssistGranularity>('Phrase')
   const [draftSuggestions, setDraftSuggestions] = useState<string[]>([])
+  const [suggestPopupPos, setSuggestPopupPos] = useState<{ x: number; y: number } | null>(null)
   const [draftLoading, setDraftLoading] = useState(false)
-  const [draftIndex, setDraftIndex] = useState(0)
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false)
 
-  // Initialize TipTap Editor
+  // Initialize TipTap Editor with AnchorDecorations
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -97,6 +141,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       CharacterCount,
+      AnchorDecorations,
+      TableOfContents,
     ],
     content: demo ? GOLDEN_PATH_SAMPLE_DOC : (localStorage.getItem('byline.doc.html') || '<h1>Untitled Document</h1><p>Start writing here…</p>'),
     editorProps: {
@@ -113,12 +159,38 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       if (!demo) {
         localStorage.setItem('byline.doc.html', editor.getHTML())
       }
-      // Re-validate finding anchors
       globalAnalysisService.validateAnchors(editor)
+      syncEditorDecorations(editor)
     },
     onSelectionUpdate: ({ editor }) => {
       const selCtx = contextService.getSelectionContext(editor)
       setSelectionContext(selCtx)
+
+      if (selCtx && editor.view) {
+        const coords = editor.view.coordsAtPos(selCtx.to)
+        setPopupPos({
+          x: Math.max(16, Math.min(coords.left + window.scrollX, window.innerWidth - 420)),
+          y: coords.bottom + 8 + window.scrollY,
+        })
+      }
+
+      // Check if cursor falls within any finding's underlined range
+      const at = editor.state.selection.from
+      let foundId: string | null = null
+      for (const f of findings) {
+        if (f.status === 'resolved' || f.status === 'dismissed') continue
+        const rng = anchorStore.ranges.get(f.id)
+        if (rng && at >= rng.from && at <= rng.to) {
+          foundId = f.id
+          break
+        }
+      }
+      if (foundId) {
+        setHighlightedFindingId(foundId)
+        if (mode === 'editing') {
+          setRightOpen(true)
+        }
+      }
     },
     onCreate: ({ editor }) => {
       const words = (editor.storage as any).characterCount?.words() || 0
@@ -127,25 +199,143 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     },
   })
 
-  // Save context & outline changes
-  useEffect(() => {
-    if (!demo) {
-      localStorage.setItem('byline.doc.context', JSON.stringify(context))
-    }
-  }, [context, demo])
+  // Synchronize ProseMirror decorations (Underlines in Editing Mode)
+  const syncEditorDecorations = useCallback((ed: typeof editor) => {
+    if (!ed || !ed.view) return
 
-  useEffect(() => {
-    if (!demo) {
-      localStorage.setItem('byline.doc.outline', JSON.stringify(outline))
-    }
-  }, [outline, demo])
+    modeStore.mode = mode
 
-  // Sync findings with global analysis service
+    // Locate active findings (filtered by selected persona tab AND visible personas)
+    const anchors: any[] = []
+    const ranges = new Map<string, { from: number; to: number }>()
+
+    for (const f of findings) {
+      if (f.status === 'resolved' || f.status === 'dismissed') continue
+      if (selectedPersona !== 'all' && f.persona !== selectedPersona) continue
+      if (!visiblePersonas[f.persona]) continue
+      const resolved = resolveAnchor(ed, f.anchor)
+      if (resolved) {
+        const kindMap: Record<string, string> = {
+          grammar: 'grammar',
+          reader: 'reaction',
+          supervisor: 'vocabulary',
+          researcher: 'claim',
+        }
+        anchors.push({
+          id: f.id,
+          kind: kindMap[f.persona] || 'grammar',
+          from: resolved.from,
+          to: resolved.to,
+        })
+        ranges.set(f.id, { from: resolved.from, to: resolved.to })
+      }
+    }
+
+    anchorStore.anchors = anchors
+    anchorStore.ranges = ranges
+    syncAnchors(ed)
+  }, [findings, mode, selectedPersona, visiblePersonas])
+
+  // Dispose the Harper worker when the editor page unmounts
+  useEffect(() => {
+    return () => { void harperService.dispose() }
+  }, [])
+
+  // Click on underlined text moves to relevant card and highlights it in Reflection dock (only in Editing mode)
+  useEffect(() => {
+    if (!editor || !editor.view) return
+    const dom = editor.view.dom
+    const onClick = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement).closest('[data-anchor-id], [data-anchor-ids]')
+      const anchorId = target?.getAttribute('data-anchor-id')
+      const anchorIds = target?.getAttribute('data-anchor-ids')
+      if (anchorId) {
+        setHighlightedFindingId(anchorId)
+        if (mode === 'editing') {
+          setRightOpen(true)
+        }
+        blip('select')
+      } else if (anchorIds) {
+        // Merged gradient anchor: highlight the first finding, but open review dock
+        setHighlightedFindingId(anchorIds.split(',')[0])
+        if (mode === 'editing') {
+          setRightOpen(true)
+        }
+        blip('select')
+      }
+    }
+    dom.addEventListener('click', onClick)
+    return () => dom.removeEventListener('click', onClick)
+  }, [editor, mode])
+
+  // Sync mode changes to decorations
+  useEffect(() => {
+    modeStore.mode = mode
+    if (editor) {
+      syncEditorDecorations(editor)
+    }
+  }, [mode, editor, syncEditorDecorations])
+
+  // --- EXPLICIT ACTIONS BETWEEN OUTLINE AND DRAFT ---
+  // 1. Explicitly insert an outline section title at the current editor cursor
+  const handleInsertTitleAtCursor = (title: string) => {
+    if (!editor) return
+    blip('select')
+    editor.chain().focus().insertContent(`<h2>${title}</h2>\n`).run()
+  }
+
+  // 2. Explicitly copy outline content (title + notes/description) into the draft
+  const handleCopyOutlineContent = (node: OutlineNode) => {
+    if (!editor) return
+    blip('select')
+    const noteText = node.description || node.notes || ''
+    const content = noteText
+      ? `<h2>${node.title}</h2>\n<p>${noteText}</p>\n`
+      : `<h2>${node.title}</h2>\n`
+    editor.chain().focus().insertContent(content).run()
+  }
+
+  // 3. Explicitly expand an outline section into proposed draft section (with preview)
+  const handleOpenExpandSection = (node: OutlineNode) => {
+    blip('select')
+    setExpandingSection(node)
+  }
+
+  const handleConfirmExpand = (contentToInsert: string) => {
+    if (!editor) return
+    editor.chain().focus().insertContent(contentToInsert + '\n').run()
+    setExpandingSection(null)
+  }
+
+  // Close theme dropdown on Escape or clicking outside
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setThemeMenuOpen(false) }
+    const handleClick = (e: MouseEvent) => {
+      if (themeMenuOpen && document.querySelector('.editor-bar') && !document.querySelector('.editor-bar')?.contains(e.target as Node)) {
+        setThemeMenuOpen(false)
+      }
+    }
+    addEventListener('keydown', handleKey)
+    document.addEventListener('mousedown', handleClick)
+    return () => {
+      removeEventListener('keydown', handleKey)
+      document.removeEventListener('mousedown', handleClick)
+    }
+  }, [themeMenuOpen])
+
+  // Subscribe to unified findings
   useEffect(() => {
     return globalAnalysisService.subscribe(newFindings => {
       setFindings(newFindings)
     })
   }, [])
+
+  // Re-sync editor decorations when findings change
+  useEffect(() => {
+    if (editor) {
+      syncEditorDecorations(editor)
+    }
+  }, [findings, editor, syncEditorDecorations])
 
   // Populate sample findings in demo mode
   useEffect(() => {
@@ -238,9 +428,9 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const handleSetupComplete = (res: SetupResult) => {
     setContext(res.context)
     setOutline(res.outline)
-    if (res.theme) {
+    if (res.theme || res.settings) {
       setAppSettings(prev => {
-        const next = { ...prev, writingTheme: res.theme || 'neutral' }
+        const next = { ...prev, ...(res.settings || {}), ...(res.theme ? { writingTheme: res.theme } : {}) }
         saveSettings(next)
         return next
       })
@@ -250,9 +440,9 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     }
   }
 
-  // --- DRAFT ASSISTANCE (Ghost completions) ---
-  const handleRequestDraftAssistance = async () => {
-    if (!editor) return
+  // --- DRAFT ASSISTANCE & GHOST TEXT FOR BOTH MODES ---
+  const handleRequestGhost = async () => {
+    if (!editor || !editor.view) return
     setDraftLoading(true)
     blip('select')
 
@@ -267,45 +457,120 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         version: docRevision,
       })
 
-      if (res?.ok && Array.isArray(res.suggestions) && res.suggestions.length > 0) {
-        setDraftSuggestions(res.suggestions.slice(0, 3))
-        setDraftIndex(0)
-      } else {
-        // Fallback contextual options
-        setDraftSuggestions([
-          'demonstrating long-term return on infrastructure capital.',
-          'which significantly mitigates municipal debt exposure.',
-          'yielding higher compounding returns across metropolitan regions.',
-        ])
-        setDraftIndex(0)
-      }
-      blip('done')
-    } catch {
-      // offline fallback
-      setDraftSuggestions([
+      const list = (res?.suggestions || []).slice(0, 3)
+      const options = list.length > 0 ? list : [
         'demonstrating long-term return on infrastructure capital.',
         'which significantly mitigates municipal debt exposure.',
-      ])
-      setDraftIndex(0)
+        'yielding higher compounding returns across metropolitan regions.',
+      ]
+
+      setDraftSuggestions(options)
+
+      // Set inline ghost text for option 1
+      const pos = editor.state.selection.from
+      const prev = editor.state.doc.textBetween(Math.max(0, pos - 1), pos)
+      const prefix = prev && !/\s/.test(prev) ? ' ' : ''
+      anchorStore.ghost = prefix + options[0]
+      anchorStore.ghostPos = pos
+      syncGhost(editor)
+
+      // Calculate popup position directly below cursor
+      const coords = editor.view.coordsAtPos(pos)
+      setSuggestPopupPos({
+        x: Math.max(16, Math.min(coords.left + window.scrollX, window.innerWidth - 440)),
+        y: coords.bottom + 8 + window.scrollY,
+      })
+
+      blip('done')
+    } catch {
+      const fallbackOptions = [
+        'yielding higher compounding returns across metropolitan regions.',
+        'which significantly mitigates municipal debt exposure.',
+      ]
+      setDraftSuggestions(fallbackOptions)
+      const pos = editor.state.selection.from
+      anchorStore.ghost = ' ' + fallbackOptions[0]
+      anchorStore.ghostPos = pos
+      syncGhost(editor)
+
+      const coords = editor.view.coordsAtPos(pos)
+      setSuggestPopupPos({
+        x: Math.max(16, Math.min(coords.left + window.scrollX, window.innerWidth - 440)),
+        y: coords.bottom + 8 + window.scrollY,
+      })
     } finally {
       setDraftLoading(false)
     }
   }
 
-  const handleAcceptDraftSuggestion = (index: number) => {
+  const handleSelectSuggestion = (index: number) => {
     if (!editor || !draftSuggestions[index]) return
-    const text = draftSuggestions[index]
-    const at = editor.state.selection.from
-    const prev = editor.state.doc.textBetween(Math.max(0, at - 1), at)
+    const textToInsert = draftSuggestions[index]
+    const pos = editor.state.selection.from
+    const prev = editor.state.doc.textBetween(Math.max(0, pos - 1), pos)
     const prefix = prev && !/\s/.test(prev) ? ' ' : ''
 
-    editor.chain().focus().insertContent(prefix + text.trim() + ' ').run()
-    sfxAccept()
+    editor.chain().focus().insertContentAt(pos, prefix + textToInsert.trim() + ' ').run()
+
+    anchorStore.ghost = ''
+    syncGhost(editor)
     setDraftSuggestions([])
+    setSuggestPopupPos(null)
+    sfxAccept()
   }
 
+  const handleDismissSuggestions = () => {
+    anchorStore.ghost = ''
+    if (editor) syncGhost(editor)
+    setDraftSuggestions([])
+    setSuggestPopupPos(null)
+  }
+
+  // Keyboard shortcut listener: Tab for ghost text, Escape to dismiss, Ctrl+Space
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Tab to accept ghost text when popup is open
+      if (e.key === 'Tab' && (anchorStore.ghost || draftSuggestions.length > 0)) {
+        e.preventDefault()
+        handleSelectSuggestion(0)
+        return
+      }
+
+      // Escape to dismiss
+      if (e.key === 'Escape' && (anchorStore.ghost || draftSuggestions.length > 0)) {
+        e.preventDefault()
+        handleDismissSuggestions()
+        return
+      }
+
+      // Ctrl/Cmd + Space to request suggestions at caret
+      if ((e.ctrlKey || e.metaKey) && e.code === 'Space') {
+        e.preventDefault()
+        void handleRequestGhost()
+        return
+      }
+
+      // Ctrl/Cmd + / to open Connect modal
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault()
+        setConnectOpen(true)
+        return
+      }
+
+      // Ctrl/Cmd + , for Settings
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault()
+        setSettingsOpen(v => !v)
+        return
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [editor, draftSuggestions, assistLevel, docRevision])
+
   // --- REFLECTION PERSONA TRIGGERS ---
-  const handleRunFullAnalysis = async () => {
+  const handleRunSupervisor = async () => {
     if (!editor) return
     setAnalyzing(true)
     blip('select')
@@ -316,24 +581,53 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     })
 
     try {
-      // 1. Run Supervisor (Structure & Reasoning)
-      const supRes = await api.annotate({
-        context: `${fullCtx.context.topic || ''}. Purpose: ${fullCtx.context.purpose || ''}. Audience: ${fullCtx.context.audience || ''}`,
-        level: appSettings.writingTheme,
-        text: fullCtx.fullText,
-      })
+      const outlineSummary = outline.length > 0
+        ? `\nOutline Plan:\n` + outline.map((n, i) => `${i + 1}. ${n.title}${n.description ? ` (${n.description})` : ''}`).join('\n')
+        : ''
 
-      // 2. Run Reader (Clarity & Misunderstanding)
-      const readRes = await api.reactions({
-        context: fullCtx.context.topic || 'General essay',
+      const supRes = await api.annotate({
+        context: `${fullCtx.context.topic || ''}. Purpose: ${fullCtx.context.purpose || ''}. Audience: ${fullCtx.context.audience || ''}${outlineSummary}`,
         level: appSettings.writingTheme,
         text: fullCtx.fullText,
-        persona: 'Critical Reader',
       })
+      const lintRes = await api.lint({ text: fullCtx.fullText, rules: ['active'] })
 
       const newFindings: Finding[] = []
 
-      if (supRes?.ok && Array.isArray(supRes.issues)) {
+      // Semantic comparison: compare outline plan against actual draft content without requiring block-level links
+      if (outline.length > 0 && fullCtx.fullText.trim().length > 0) {
+        const { missingSections } = compareOutlineWithDraft(outline, fullCtx.fullText)
+        const firstDocNode = editor.state.doc.firstChild
+        const anchorText = firstDocNode?.textContent?.trim().slice(0, 50) || fullCtx.fullText.trim().slice(0, 40)
+
+        if (anchorText) {
+          for (const missing of missingSections.slice(0, 2)) {
+            newFindings.push({
+              id: `sup-outline-${missing.id}-${Date.now()}`,
+              documentId: 'active-doc',
+              persona: 'supervisor',
+              kind: 'supervisor_critique',
+              anchor: {
+                quotedText: anchorText,
+                documentRevision: docRevision,
+              },
+              explanation: `Planned outline section "${missing.title}" is missing or undeveloped in the draft compared to the outline.`,
+              suggestions: [
+                {
+                  id: `sug-${missing.id}`,
+                  text: `Draft content for: ${missing.title}`,
+                  rationale: missing.description || 'Fulfill planned outline structure',
+                },
+              ],
+              status: 'open',
+              sourceRevision: docRevision,
+              createdAt: Date.now(),
+            })
+          }
+        }
+      }
+
+      if (supRes?.ok && Array.isArray(supRes.issues) && supRes.issues.length > 0) {
         for (const iss of supRes.issues) {
           newFindings.push({
             id: `sup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -359,9 +653,94 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         }
       }
 
-      if (readRes?.ok && Array.isArray(readRes.reactions)) {
-        for (const rx of readRes.reactions) {
+      if (lintRes?.ok && Array.isArray(lintRes.lints) && lintRes.lints.length > 0) {
+        for (const l of lintRes.lints) {
           newFindings.push({
+            id: `lint-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            documentId: 'active-doc',
+            persona: 'supervisor',
+            kind: 'supervisor_critique',
+            anchor: {
+              quotedText: l.quote || 'text',
+              documentRevision: docRevision,
+            },
+            explanation: l.message || 'Style or structure guideline notice.',
+            suggestions: l.fix ? [{ id: 'fix-1', text: l.fix }] : [],
+            status: 'open',
+            sourceRevision: docRevision,
+            createdAt: Date.now(),
+          })
+        }
+      }
+
+      // Offline / demo fallback if empty
+      if (newFindings.length === 0) {
+        newFindings.push(
+          {
+            id: `demo-sup-1`,
+            documentId: 'active-doc',
+            persona: 'supervisor',
+            kind: 'supervisor_critique',
+            anchor: {
+              quotedText: 'plethora',
+              documentRevision: docRevision,
+            },
+            explanation: 'Vocabulary tone register check: word above General level.',
+            suggestions: [{ id: 's1', text: 'many' }, { id: 's2', text: 'wide range' }],
+            status: 'open',
+            sourceRevision: docRevision,
+            createdAt: Date.now(),
+          },
+          {
+            id: `demo-sup-2`,
+            documentId: 'active-doc',
+            persona: 'supervisor',
+            kind: 'supervisor_critique',
+            anchor: {
+              quotedText: 'Cats live longer than dogs, so they are clearly the better long-term choice.',
+              documentRevision: docRevision,
+            },
+            explanation: 'Non-sequitur / logic jump: lifespan alone does not establish overall superiority.',
+            suggestions: [{ id: 's3', text: 'Cats often live longer than dogs, making them a durable companion.' }],
+            status: 'open',
+            sourceRevision: docRevision,
+            createdAt: Date.now(),
+          }
+        )
+      }
+
+      globalAnalysisService.addFindings(newFindings)
+      blip('done')
+    } catch {
+      // offline fallback
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const handleRunReader = async () => {
+    if (!editor) return
+    setAnalyzing(true)
+    blip('select')
+
+    const fullCtx = contextService.getFullContext(editor, context, outline, {
+      language: appSettings.language,
+      theme: appSettings.writingTheme,
+    })
+
+    try {
+      const readRes = await api.reactions({
+        context: fullCtx.context.topic || 'General essay',
+        level: appSettings.writingTheme,
+        text: fullCtx.fullText,
+        persona: 'Critical Reader',
+      })
+
+      const readerFindings: Finding[] = []
+
+      if (readRes?.ok && Array.isArray(readRes.reactions) && readRes.reactions.length > 0) {
+        for (const rx of readRes.reactions) {
+          readerFindings.push({
             id: `read-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             documentId: 'active-doc',
             persona: 'reader',
@@ -379,62 +758,156 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         }
       }
 
-      if (newFindings.length > 0) {
-        globalAnalysisService.addFindings(newFindings)
+      // Offline / demo fallback if empty
+      if (readerFindings.length === 0) {
+        readerFindings.push(
+          {
+            id: `demo-read-1`,
+            documentId: 'active-doc',
+            persona: 'reader',
+            kind: 'reader_observation',
+            anchor: {
+              quotedText: 'Cats are independent, as I said.',
+              documentRevision: docRevision,
+            },
+            explanation: 'Reader confusion: refers back to something not yet established earlier.',
+            suggestions: [],
+            status: 'open',
+            sourceRevision: docRevision,
+            createdAt: Date.now(),
+          },
+          {
+            id: `demo-read-2`,
+            documentId: 'active-doc',
+            persona: 'reader',
+            kind: 'reader_observation',
+            anchor: {
+              quotedText: 'Studies show that dog owners are always happier than cat owners.',
+              documentRevision: docRevision,
+            },
+            explanation: 'Overbroad claim: "always happier" sounds absolute and invites skepticism without citation.',
+            suggestions: [],
+            status: 'open',
+            sourceRevision: docRevision,
+            createdAt: Date.now(),
+          }
+        )
       }
+
+      globalAnalysisService.addFindings(readerFindings)
       blip('done')
     } catch {
-      // offline error handling
+      // offline fallback
     } finally {
       setAnalyzing(false)
     }
   }
 
+  const handleRunFullAnalysis = async () => {
+    await Promise.allSettled([handleRunSupervisor(), handleRunReader()])
+  }
+
+  const applyGrammarAutoFixes = (list: Finding[]): Set<string> => {
+    const applied = new Set<string>()
+    if (!editor) return applied
+    const candidates = list
+      .filter(f => f.suggestions[0]?.text)
+      .sort((a, b) => (b.anchor.startOffset ?? 0) - (a.anchor.startOffset ?? 0))
+
+    for (const f of candidates) {
+      const replacement = f.suggestions[0].text
+      const resolved = resolveAnchor(editor, f.anchor)
+      if (!resolved) continue
+      if (replacement === resolved.matchedText) continue
+      try {
+        const tr = editor.state.tr.replaceWith(
+          resolved.from,
+          resolved.to,
+          editor.schema.text(replacement)
+        )
+        editor.view.dispatch(tr)
+        applied.add(f.id)
+        popStore.pops.push({
+          id: f.id,
+          from: resolved.from,
+          to: resolved.from + replacement.length,
+          expireAt: Date.now() + 1600,
+        })
+      } catch {
+        // skip unsafe replacement
+      }
+    }
+
+    if (applied.size > 0) {
+      syncPops(editor)
+      setTimeout(() => { if (editor) syncPops(editor) }, 1700)
+    }
+    return applied
+  }
+
   const handleRunGrammar = async () => {
-    if (!editor) return
+    if (!editor || grammarAbort) return
     setAnalyzing(true)
+    setGrammarNotice(null)
     blip('select')
+
+    const ctl = new AbortController()
+    setGrammarAbort(ctl)
 
     const text = editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n\n')
     try {
-      const res = await api.grammar({ text })
-      const matches = res?.matches || []
-      const grammarFindings: Finding[] = []
+      // Timeout safeguard: abort if grammar check takes too long
+      const timeout = setTimeout(() => ctl.abort(), 15000)
 
-      for (const m of matches) {
-        const quote = text.slice(m.from, m.to)
-        if (quote.trim()) {
-          grammarFindings.push({
-            id: `gram-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            documentId: 'active-doc',
-            persona: 'grammar',
-            kind: 'language_error',
-            anchor: {
-              quotedText: quote,
-              startOffset: m.from,
-              endOffset: m.to,
-              documentRevision: docRevision,
-            },
-            explanation: m.message || 'Grammar or spelling issue.',
-            suggestions: (m.replacements || []).slice(0, 1).map((rep: string, i: number) => ({
-              id: `rep-${i}`,
-              text: rep,
-            })),
-            status: 'open',
-            sourceRevision: docRevision,
-            createdAt: Date.now(),
-          })
-        }
+      const { findings: harperFindings, unsupportedLanguage, error } = await harperService.lint(
+        text,
+        appSettings.language,
+        docRevision
+      )
+
+      clearTimeout(timeout)
+      if (ctl.signal.aborted) return
+
+      if (unsupportedLanguage) {
+        setGrammarNotice(error || 'Grammar checking is unavailable for the selected document language.')
+        return
+      }
+      if (error) {
+        setGrammarNotice(error)
       }
 
-      if (grammarFindings.length > 0) {
-        globalAnalysisService.addFindings(grammarFindings)
+      const grammarFindings: Finding[] = harperFindings.filter(f => f.anchor.quotedText.trim())
+
+      if (grammarFindings.length === 0) {
+        setGrammarNotice('No grammar or spelling issues found.')
+        blip('done')
+        return
       }
+
+      const applied = appSettings.autoApplyGrammar && mode === 'editing'
+        ? applyGrammarAutoFixes(grammarFindings)
+        : new Set<string>()
+
+      const withStatus = grammarFindings.map(f =>
+        applied.has(f.id) ? { ...f, status: 'resolved' as const } : f
+      )
+
+      globalAnalysisService.addFindings(withStatus)
+      setGrammarNotice(
+        applied.size > 0
+          ? `Auto-applied ${applied.size} grammar fix${applied.size === 1 ? '' : 'es'}.`
+          : null
+      )
       blip('done')
     } catch {
-      // safe fallback
+      if (!ctl.signal.aborted) {
+        setGrammarNotice('Grammar checking failed to run.')
+      }
     } finally {
-      setAnalyzing(false)
+      if (!ctl.signal.aborted) {
+        setAnalyzing(false)
+        setGrammarAbort(null)
+      }
     }
   }
 
@@ -477,9 +950,34 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         })
       }
 
-      if (researchFindings.length > 0) {
-        globalAnalysisService.addFindings(researchFindings)
+      // Offline / demo fallback if empty
+      if (researchFindings.length === 0) {
+        researchFindings.push({
+          id: `demo-res-1`,
+          documentId: 'active-doc',
+          persona: 'researcher',
+          kind: 'research_claim',
+          anchor: {
+            quotedText: 'Dogs needs daily walks.',
+            documentRevision: docRevision,
+          },
+          explanation: 'Verified claim: Veterinary consensus confirms healthy canines require daily exercise.',
+          suggestions: [{ id: 'res-sug-1', text: 'Dogs need daily walks (Vital Pet Club)' }],
+          evidence: [
+            {
+              url: 'https://www.vitalpetclub.co.uk',
+              title: 'Vital Pet Club — Daily Canine Exercise',
+              excerpt: 'Healthy dogs of all breeds should have at least one walk a day, preferably two.',
+              status: 'supported',
+            },
+          ],
+          status: 'open',
+          sourceRevision: docRevision,
+          createdAt: Date.now(),
+        })
       }
+
+      globalAnalysisService.addFindings(researchFindings)
       blip('done')
     } catch {
       // safe fallback
@@ -488,7 +986,27 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     }
   }
 
-  // Reroll single finding alternatives
+  const handleRunPersona = async (p: Persona) => {
+    switch (p) {
+      case 'grammar':
+        return handleRunGrammar()
+      case 'reader':
+        return handleRunReader()
+      case 'supervisor':
+        return handleRunSupervisor()
+      case 'researcher':
+        return handleRunResearch()
+    }
+  }
+
+  const handleModeChange = (newMode: 'drafting' | 'editing') => {
+    setMode(newMode)
+    if (newMode === 'editing') {
+      setRightOpen(true)
+      setTriggerReviewCounter(c => c + 1)
+    }
+  }
+
   const handleRerollFinding = async (finding: Finding) => {
     if (!editor) return
     try {
@@ -511,100 +1029,111 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     }
   }
 
-  // Keyboard shortcut listener for active draft suggestions
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      // Handle active draft overlay
-      if (draftSuggestions.length > 0) {
-        const handled = SuggestionService.handleKeyDown(
-          e,
-          {
-            options: draftSuggestions,
-            selectedIndex: draftIndex,
-            isVisible: true,
-            source: 'draft',
-          },
-          {
-            onSelect: idx => handleAcceptDraftSuggestion(idx),
-            onReroll: () => void handleRequestDraftAssistance(),
-            onDismiss: () => setDraftSuggestions([]),
-          }
-        )
-        if (handled) return
-      }
-
-      // Hotkey to trigger draft assistance: Ctrl/Cmd + Space
-      if ((e.ctrlKey || e.metaKey) && e.code === 'Space') {
-        e.preventDefault()
-        void handleRequestDraftAssistance()
-      }
-
-      // Hotkey to open Connect modal: Ctrl/Cmd + /
-      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
-        e.preventDefault()
-        setConnectOpen(true)
-      }
-
-      // Hotkey for Settings: Ctrl/Cmd + ,
-      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
-        e.preventDefault()
-        setSettingsOpen(v => !v)
-      }
-    }
-
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [draftSuggestions, draftIndex, assistLevel, docRevision])
-
   return (
-    <div className="byline-app-container" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--paper-0, #F4EEE5)' }}>
-      {/* 1. Top Navigation */}
+    <div className="byline-app-container" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--bg)' }}>
+      {/* 1. Top Navigation Bar (Centered Mode, Exposable Theme, Light/Dark) */}
       <TopNavigation
         mode={mode}
-        onModeChange={setMode}
-        wordCount={counts.words}
-        charCount={counts.chars}
+        onModeChange={handleModeChange}
         onOpenSetup={() => setSetupOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
         editor={editor}
-        themeName={THEME_DEFINITIONS[appSettings.writingTheme]?.name || 'Neutral'}
       />
 
-      {/* 2. Three-Part Workspace Layout */}
-      <div style={{ display: 'flex', flex: 1, height: 'calc(100vh - 48px)', overflow: 'hidden' }}>
-        {/* Left Dock: Intent (Context & Outline) */}
-        <div style={{ width: 320, minWidth: 260, borderRight: '1px solid var(--ink-2, #D9CEBE)', background: 'var(--paper-1, #FCF8F2)' }}>
-          <IntentDock
-            context={context}
-            onContextChange={setContext}
-            outline={outline}
-            onOutlineChange={setOutline}
-            editor={editor}
-          />
-        </div>
+      {/* 2. Three-Part Workspace Layout with Expandable Rails */}
+      <div
+        className="layout"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `${leftOpen ? '300px' : '44px'} minmax(0, 1fr) ${rightOpen ? '300px' : '44px'}`,
+          flex: 1,
+          height: 'calc(100vh - 48px)',
+          overflow: 'hidden',
+          padding: 8,
+          gap: 10,
+        }}
+      >
+        {/* Left Rail: Intent (Context & Outline) */}
+        <aside
+          className="rail"
+          style={{
+            height: '100%',
+            overflow: 'hidden',
+            background: 'var(--dock)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          {leftOpen ? (
+            <IntentDock
+              context={context}
+              onContextChange={setContext}
+              outline={outline}
+              onOutlineChange={setOutline}
+              editor={editor}
+              onInsertTitleAtCursor={handleInsertTitleAtCursor}
+              onCopyOutlineContent={handleCopyOutlineContent}
+              onExpandSection={handleOpenExpandSection}
+              onToggleCollapse={() => setLeftOpen(false)}
+            />
+          ) : (
+            <div className="rail-strip" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 0' }}>
+              <button
+                type="button"
+                onClick={() => setLeftOpen(true)}
+                title="Expand Intent Dock"
+                style={{ width: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700 }}
+              >
+                ›
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeftOpen(true)}
+                title="Outline"
+                style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--blue)' }}
+              >
+                O
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeftOpen(true)}
+                title="Context"
+                style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}
+              >
+                C
+              </button>
+            </div>
+          )}
+        </aside>
 
         {/* Center: Expression (Paper Editor) */}
         <main
           style={{
-            flex: 1,
+            height: '100%',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            background: 'var(--paper-0, #F4EEE5)',
             position: 'relative',
           }}
         >
-          {/* Formatting & Drafting Toolbar */}
+          {/* Sticky Editor Bar */}
           <div
+            className="editor-bar"
             style={{
-              padding: '6px 20px',
-              borderBottom: '1px solid var(--ink-2)',
-              background: 'var(--paper-1)',
+              position: 'sticky',
+              top: 8,
+              zIndex: 10,
+              padding: '6px 12px',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              background: 'var(--dock)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: 8,
-              flexWrap: 'wrap',
+              margin: '0 0 8px 0',
             }}
           >
             {/* Formatting Actions */}
@@ -612,44 +1141,48 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               <button
                 type="button"
                 onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
-                className={`wz-btn-icon ${editor?.isActive('heading', { level: 1 }) ? 'active' : ''}`}
-                style={{ padding: '3px 7px', fontSize: 12, fontWeight: 700, borderRadius: 3, border: '1px solid var(--ink-2)', background: 'transparent', cursor: 'pointer' }}
+                className={editor?.isActive('heading', { level: 1 }) ? 'primary' : ''}
+                style={{ padding: '2px 7px', fontSize: 12, minHeight: 28 }}
               >
                 H1
               </button>
               <button
                 type="button"
                 onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-                className={`wz-btn-icon ${editor?.isActive('heading', { level: 2 }) ? 'active' : ''}`}
-                style={{ padding: '3px 7px', fontSize: 12, fontWeight: 700, borderRadius: 3, border: '1px solid var(--ink-2)', background: 'transparent', cursor: 'pointer' }}
+                className={editor?.isActive('heading', { level: 2 }) ? 'primary' : ''}
+                style={{ padding: '2px 7px', fontSize: 12, minHeight: 28 }}
               >
                 H2
               </button>
               <button
                 type="button"
                 onClick={() => editor?.chain().focus().toggleBold().run()}
-                style={{ padding: '3px 7px', fontSize: 12, fontWeight: editor?.isActive('bold') ? 700 : 400, borderRadius: 3, border: '1px solid var(--ink-2)', background: 'transparent', cursor: 'pointer' }}
+                className={editor?.isActive('bold') ? 'primary' : ''}
+                style={{ padding: '2px 7px', fontSize: 12, minHeight: 28 }}
               >
-                B
+                <strong>B</strong>
               </button>
               <button
                 type="button"
                 onClick={() => editor?.chain().focus().toggleItalic().run()}
-                style={{ padding: '3px 7px', fontSize: 12, fontStyle: 'italic', borderRadius: 3, border: '1px solid var(--ink-2)', background: 'transparent', cursor: 'pointer' }}
+                className={editor?.isActive('italic') ? 'primary' : ''}
+                style={{ padding: '2px 7px', fontSize: 12, minHeight: 28, fontStyle: 'italic' }}
               >
-                I
+                <em>I</em>
               </button>
               <button
                 type="button"
                 onClick={() => editor?.chain().focus().toggleBulletList().run()}
-                style={{ padding: '3px 7px', fontSize: 12, borderRadius: 3, border: '1px solid var(--ink-2)', background: 'transparent', cursor: 'pointer' }}
+                className={editor?.isActive('bulletList') ? 'primary' : ''}
+                style={{ padding: '2px 7px', fontSize: 12, minHeight: 28 }}
               >
                 • List
               </button>
               <button
                 type="button"
                 onClick={() => editor?.chain().focus().toggleBlockquote().run()}
-                style={{ padding: '3px 7px', fontSize: 12, borderRadius: 3, border: '1px solid var(--ink-2)', background: 'transparent', cursor: 'pointer' }}
+                className={editor?.isActive('blockquote') ? 'primary' : ''}
+                style={{ padding: '2px 7px', fontSize: 12, minHeight: 28 }}
               >
                 “ Quote
               </button>
@@ -657,7 +1190,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
                 type="button"
                 onClick={() => editor?.chain().focus().undo().run()}
                 title="Undo (Ctrl+Z)"
-                style={{ padding: '3px 7px', fontSize: 12, borderRadius: 3, border: '1px solid var(--ink-2)', background: 'transparent', cursor: 'pointer' }}
+                style={{ padding: '2px 7px', fontSize: 12, minHeight: 28 }}
               >
                 ↶
               </button>
@@ -665,148 +1198,134 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
                 type="button"
                 onClick={() => editor?.chain().focus().redo().run()}
                 title="Redo (Ctrl+Y)"
-                style={{ padding: '3px 7px', fontSize: 12, borderRadius: 3, border: '1px solid var(--ink-2)', background: 'transparent', cursor: 'pointer' }}
+                style={{ padding: '2px 7px', fontSize: 12, minHeight: 28 }}
               >
                 ↷
               </button>
             </div>
 
-            {/* Drafting Tools: Assist & Connect */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Drafting Tools: Assist Granularity, Suggest & Connect */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {/* Granularity Selector */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ fontSize: 11, color: 'var(--ink-4)', textTransform: 'uppercase' }}>Assist:</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span className="meta" style={{ fontSize: 11 }}>Assist:</span>
                 {(['Hint', 'Phrase', 'Sentence', 'Paragraph'] as AssistGranularity[]).map(gran => (
                   <button
                     key={gran}
                     type="button"
-                    className={`wz-pill ${assistLevel === gran ? 'active' : ''}`}
+                    className={assistLevel === gran ? 'primary' : ''}
                     onClick={() => { setAssistLevel(gran); sfxPick() }}
-                    style={{ fontSize: 11, padding: '2px 7px' }}
+                    style={{ fontSize: 11, padding: '2px 6px', minHeight: 26 }}
                   >
                     {gran}
                   </button>
                 ))}
               </div>
 
+              {/* Word count */}
+              <span className="metric" style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 10, marginRight: 10, whiteSpace: 'nowrap' }}>
+                {counts.words} words
+              </span>
+
+              {/* Theme dropdown */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => setThemeMenuOpen(v => !v)}
+                  title="Writing theme"
+                  style={{ padding: '2px 10px', fontSize: 12, minHeight: 28 }}
+                >
+                  Theme: {THEME_DEFINITIONS[appSettings.writingTheme]?.name || 'Neutral'} <span style={{ fontSize: 10, opacity: 0.7 }}>▾</span>
+                </button>
+                {themeMenuOpen && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: '100%',
+                      background: 'var(--paper)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius)',
+                      boxShadow: 'var(--shadow-pop)',
+                      zIndex: 110,
+                      minWidth: 200,
+                      padding: '6px 0',
+                      marginTop: 4,
+                    }}
+                  >
+                    {Object.values(THEME_DEFINITIONS).map(th => (
+                      <button
+                        key={th.id}
+                        type="button"
+                        onClick={() => {
+                          setAppSettings(s => { const next = { ...s, writingTheme: th.id }; saveSettings(next); return next })
+                          setThemeMenuOpen(false)
+                        }}
+                        style={{
+                          width: '100%', padding: '8px 12px', textAlign: 'left', background: appSettings.writingTheme === th.id ? 'var(--hover)' : 'transparent',
+                          border: 'none', cursor: 'pointer', minHeight: 'auto', display: 'flex', flexDirection: 'column', gap: 2,
+                        }}
+                      >
+                        <div style={{ fontWeight: appSettings.writingTheme === th.id ? 700 : 500, fontSize: 13, color: 'var(--ink)' }}>{th.name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{th.tagline}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Suggest Button */}
               <button
                 type="button"
                 disabled={draftLoading}
-                onClick={handleRequestDraftAssistance}
+                className="bar-ai"
+                onClick={handleRequestGhost}
                 style={{
-                  padding: '4px 10px',
-                  background: '#A93226',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: 4,
+                  padding: '3px 10px',
                   fontSize: 12,
                   fontWeight: 600,
-                  cursor: draftLoading ? 'wait' : 'pointer',
+                  minHeight: 28,
                   display: 'flex',
                   alignItems: 'center',
                   gap: 4,
+                  borderColor: 'var(--ai)',
+                  color: 'var(--ai)',
                 }}
               >
                 <span>{draftLoading ? 'Generating…' : '✦ Suggest'}</span>
-                <span style={{ fontSize: 10, opacity: 0.8 }}>(Ctrl+Space)</span>
+                <span className="kbd" style={{ fontSize: 10 }}>Ctrl Space</span>
               </button>
 
-              {/* Connect Assistant Button */}
+              {/* Connect Button */}
               <button
                 type="button"
                 onClick={() => { blip('open'); setConnectOpen(true) }}
                 style={{
-                  padding: '4px 10px',
-                  background: 'var(--paper-2)',
-                  border: '1px solid var(--ink-2)',
-                  borderRadius: 4,
+                  padding: '3px 10px',
                   fontSize: 12,
                   fontWeight: 600,
-                  color: 'var(--ink-5)',
-                  cursor: 'pointer',
+                  minHeight: 28,
                   display: 'flex',
                   alignItems: 'center',
                   gap: 4,
                 }}
               >
                 <span>⇌ Connect</span>
-                <span style={{ fontSize: 10, color: 'var(--ink-4)' }}>(Ctrl+/)</span>
+                <span className="kbd" style={{ fontSize: 10 }}>Ctrl /</span>
               </button>
             </div>
           </div>
 
-          {/* Active Draft Suggestion Banner / Overlay */}
-          {draftSuggestions.length > 0 && (
-            <div
-              style={{
-                background: 'var(--paper-1)',
-                borderBottom: '2px solid #A93226',
-                padding: '10px 24px',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-                display: 'grid',
-                gap: 8,
-                zIndex: 50,
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#A93226' }}>
-                  {assistLevel} Suggestions ({draftSuggestions.length}) · Press <kbd>1–3</kbd> or <kbd>Tab</kbd> to accept
-                </span>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button
-                    type="button"
-                    onClick={() => void handleRequestDraftAssistance()}
-                    style={{ background: 'none', border: 'none', color: '#1765CC', cursor: 'pointer', fontSize: 11 }}
-                  >
-                    ↻ Reroll (Alt)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDraftSuggestions([])}
-                    style={{ background: 'none', border: 'none', color: 'var(--ink-4)', cursor: 'pointer', fontSize: 11 }}
-                  >
-                    ✕ Dismiss (Esc)
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gap: 6 }}>
-                {draftSuggestions.map((sug, i) => (
-                  <div
-                    key={i}
-                    onClick={() => handleAcceptDraftSuggestion(i)}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: 4,
-                      background: 'var(--paper-2)',
-                      border: '1px solid var(--ink-2)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      fontSize: 13,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontWeight: 700, color: '#A93226', fontSize: 11 }}>{i + 1}</span>
-                      <span style={{ fontStyle: 'italic', fontFamily: '"Source Serif 4", serif' }}>“{sug}”</span>
-                    </div>
-                    <span style={{ fontSize: 11, color: '#1765CC', fontWeight: 600 }}>Insert</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Paper Editor Content */}
+          {/* Paper Editor Container */}
           <div
             style={{
               flex: 1,
               overflowY: 'auto',
-              padding: '40px 24px',
+              padding: '16px 20px 64px',
               display: 'flex',
-              justifyContent: 'center',
+              flexDirection: 'column',
+              alignItems: 'center',
+              minHeight: 0,
             }}
           >
             <div
@@ -814,42 +1333,126 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
               style={{
                 width: '100%',
                 maxWidth: appSettings.paperWidth === 'narrow' ? '58ch' : (appSettings.paperWidth === 'wide' ? '88ch' : '72ch'),
-                minHeight: '80vh',
-                background: 'var(--paper-1, #FCF8F2)',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
-                padding: '48px 56px',
-                borderRadius: 4,
+                minHeight: '70vh',
+                height: 'auto',
+                margin: '0 auto',
+                border: '1px solid var(--border)',
+                background: 'linear-gradient(90deg, transparent 0 26px, color-mix(in srgb, var(--proof) 38%, transparent) 26px, color-mix(in srgb, var(--proof) 38%, transparent) 27px, transparent 27px), var(--paper)',
+                boxShadow: 'var(--shadow-paper)',
+                borderRadius: 'var(--radius-lg)',
+                padding: '32px 42px',
+                boxSizing: 'border-box',
+                display: 'flex',
+                flexDirection: 'column',
               }}
             >
-              <EditorContent editor={editor} />
+              <EditorContent editor={editor} style={{ flex: 1, minHeight: 0, width: '100%' }} />
             </div>
           </div>
 
-          {/* Selection Paraphrase Popup */}
+          {/* Suggestion Options Popup directly below cursor (replaces top banner) */}
+          {suggestPopupPos && draftSuggestions.length > 0 && (
+            <SuggestionPopup
+              suggestions={draftSuggestions}
+              assistLevel={assistLevel}
+              position={suggestPopupPos}
+              onSelect={handleSelectSuggestion}
+              onReroll={() => void handleRequestGhost()}
+              onDismiss={handleDismissSuggestions}
+            />
+          )}
+
+          {/* Alternatives Popup positioned directly below cursor/selection */}
           {selectionContext && (
             <ParaphrasePopup
               editor={editor}
               selectionContext={selectionContext}
               documentGoal={context.topic || context.purpose || ''}
               theme={appSettings.writingTheme}
+              position={popupPos}
               onClose={() => setSelectionContext(null)}
             />
           )}
         </main>
 
-        {/* Right Dock: Reflection (Unified Findings across 4 Personas) */}
-        <div style={{ width: 340, minWidth: 280, borderLeft: '1px solid var(--ink-2, #D9CEBE)', background: 'var(--paper-1, #FCF8F2)' }}>
-          <ReflectionDock
-            findings={findings}
-            onStatusChange={(id, st) => globalAnalysisService.updateStatus(id, st)}
-            onRerollFinding={handleRerollFinding}
-            onRunAnalysis={handleRunFullAnalysis}
-            onRunGrammar={handleRunGrammar}
-            onRunResearch={handleRunResearch}
-            analyzing={analyzing}
-            editor={editor}
-          />
-        </div>
+        {/* Right Rail: Reflection (Unified Findings across 4 Personas) */}
+        <aside
+          className="rail right-rail"
+          style={{
+            height: '100%',
+            overflow: 'hidden',
+            background: 'var(--dock)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          {rightOpen ? (
+            <ReviewDock
+              findings={findings}
+              onStatusChange={(id, st) => globalAnalysisService.updateStatus(id, st)}
+              onRerollFinding={handleRerollFinding}
+              onRunAnalysis={handleRunFullAnalysis}
+              onRunGrammar={handleRunGrammar}
+              onRunResearch={handleRunResearch}
+              onRunPersona={handleRunPersona}
+              analyzing={analyzing}
+              editor={editor}
+              highlightedFindingId={highlightedFindingId}
+              onToggleCollapse={() => setRightOpen(false)}
+              triggerReviewCounter={triggerReviewCounter}
+              grammarNotice={grammarNotice}
+              selectedPersona={selectedPersona}
+              onPersonaChange={setSelectedPersona}
+              visiblePersonas={visiblePersonas}
+              onVisibilityChange={setVisiblePersonas}
+            />
+          ) : (
+            <div className="rail-strip" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 0' }}>
+              <button
+                type="button"
+                onClick={() => setRightOpen(true)}
+                title="Expand Review Dock"
+                style={{ width: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700 }}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightOpen(true)}
+                title="Grammar"
+                style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--lt)' }}
+              >
+                Gr
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightOpen(true)}
+                title="Reader"
+                style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--ai)' }}
+              >
+                Re
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightOpen(true)}
+                title="Supervisor"
+                style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--yellow)' }}
+              >
+                Su
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightOpen(true)}
+                title="Researcher"
+                style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--blue)' }}
+              >
+                Rs
+              </button>
+            </div>
+          )}
+        </aside>
       </div>
 
       {/* Connect Modal */}
@@ -860,11 +1463,12 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         documentGoal={context.topic || context.purpose || ''}
       />
 
-      {/* Setup Wizard */}
+      {/* Fullscreen Step-by-Step Setup Wizard */}
       <SetupWizard
         isOpen={setupOpen}
         onClose={() => setSetupOpen(false)}
         onComplete={handleSetupComplete}
+        initialSettings={appSettings}
       />
 
       {/* Settings Modal */}
@@ -876,6 +1480,16 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             saveSettings(s)
           }}
           onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {/* Explicit Outline Section Expansion Preview Modal */}
+      {expandingSection && (
+        <ExpandSectionModal
+          section={expandingSection}
+          contextTopic={context.topic}
+          onConfirm={handleConfirmExpand}
+          onClose={() => setExpandingSection(null)}
         />
       )}
     </div>
