@@ -9,6 +9,7 @@ export interface TopNavigationProps {
   onModeChange: (m: 'drafting' | 'editing') => void
   onOpenSetup: () => void
   onOpenSettings: () => void
+  onOpenMetrics?: () => void
   editor: Editor | null
 }
 
@@ -17,6 +18,7 @@ export default function TopNavigation({
   onModeChange,
   onOpenSetup,
   onOpenSettings,
+  onOpenMetrics,
   editor,
 }: TopNavigationProps) {
   const [exportOpen, setExportOpen] = useState(false)
@@ -121,6 +123,30 @@ export default function TopNavigation({
 
       {/* Right — actions, takes flex:1 and aligns to the right edge */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+        {/* Benchmark & Metrics Demo */}
+        <button
+          type="button"
+          onClick={() => { blip('open'); onOpenMetrics?.() }}
+          title="Demo — Benchmark & System Telemetry (Acceptance Rates, Usage & Model Output Errors)"
+          style={{
+            padding: '2px 10px',
+            fontSize: 11.5,
+            fontWeight: 700,
+            minHeight: 28,
+            background: 'color-mix(in srgb, var(--ai) 12%, var(--paper))',
+            color: 'var(--ai)',
+            border: '1px solid color-mix(in srgb, var(--ai) 35%, transparent)',
+            borderRadius: 'var(--radius, 4px)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
+            cursor: 'pointer',
+          }}
+        >
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ai)' }} />
+          DEMO
+        </button>
+
         {/* Setup */}
         <button
           type="button"

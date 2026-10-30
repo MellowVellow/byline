@@ -17,6 +17,8 @@ import InlineReviewPopup from '../components/InlineReviewPopup'
 import SetupWizard, { type SetupResult } from '../components/SetupWizard'
 import SettingsMenu from '../components/SettingsMenu'
 import ExpandSectionModal from '../components/ExpandSectionModal'
+import MetricsPopup from '../components/MetricsPopup'
+import { recordSuggestionOffered, recordSuggestionAccepted, recordRevisionAccepted } from '../lib/metrics'
 import { compareOutlineWithDraft } from '../domain/outline'
 import { keys } from '../lib/storage'
 
@@ -140,6 +142,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [draftLoading, setDraftLoading] = useState(false)
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   const [langMenuOpen, setLangMenuOpen] = useState(false)
+  const [metricsOpen, setMetricsOpen] = useState(false)
 
   // Ref to the editor scroll container so popups can scroll it into view
   const editorScrollRef = useRef<HTMLDivElement>(null)
@@ -526,6 +529,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       const options = list.length > 0 ? list : (assistLevel === 'Question' ? fallbackQuestions : defaultOptions)
 
       setDraftSuggestions(options)
+      recordSuggestionOffered(options.length)
 
       // Set inline ghost text for option 1
       const pos = editor.state.selection.from
@@ -574,6 +578,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     syncGhost(editor)
     setDraftSuggestions([])
     setSuggestPopupPos(null)
+    recordSuggestionAccepted()
     sfxAccept()
   }
 
@@ -589,6 +594,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     if (!editor) return
     const res = applySafeReplacement(editor, finding.anchor, suggestion.text)
     if (res.success) {
+      recordRevisionAccepted()
       sfxAccept()
       globalAnalysisService.updateStatus(finding.id, 'resolved')
       setInlineReviewState(prev => {
@@ -1122,6 +1128,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         onModeChange={handleModeChange}
         onOpenSetup={() => setSetupOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenMetrics={() => setMetricsOpen(true)}
         editor={editor}
       />
 
@@ -1623,6 +1630,13 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             saveSettings(s)
           }}
           onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {/* Benchmark & Telemetry Metrics Modal (DEMO) */}
+      {metricsOpen && (
+        <MetricsPopup
+          onClose={() => setMetricsOpen(false)}
         />
       )}
 
