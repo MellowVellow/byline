@@ -147,7 +147,11 @@ export function loadSettings(): AppSettings {
 }
 
 export function resolveTheme(t: ThemeMode): 'light' | 'dark' {
-  return t === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : t
+  if (t === 'light' || t === 'dark') return t
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return 'dark'
 }
 
 export function applySettings(s: AppSettings) {

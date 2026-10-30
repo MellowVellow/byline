@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react'
 
 export function getTheme(): 'light' | 'dark' {
-  const s = localStorage.getItem('byline.theme')
-  if (s === 'light' || s === 'dark') return s
-  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  try {
+    const s = localStorage.getItem('byline.theme')
+    if (s === 'light' || s === 'dark') return s
+  } catch {}
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return 'dark'
 }
 
 export function Logo({ height = 28 }: { height?: number }) {

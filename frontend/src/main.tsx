@@ -7,8 +7,14 @@ import './styles/theme.css'
 import './styles/app.css'
 
 document.documentElement.dataset.theme = (() => {
-  const s = localStorage.getItem('byline.theme')
-  return s === 'light' || s === 'dark' ? s : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+  try {
+    const s = localStorage.getItem('byline.theme')
+    if (s === 'light' || s === 'dark') return s
+  } catch {}
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return 'dark'
 })()
 
 const path = location.pathname

@@ -99,24 +99,31 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [activeOutlineNodeId, setActiveOutlineNodeId] = useState<string | null>(null)
   const [highlightedFindingId, setHighlightedFindingId] = useState<string | null>(null)
 
-  // Document state
+  // Document state (safely loaded so /app is never blank or crashed)
   const [context, setContext] = useState<DocumentContext>(() => {
-    if (demo) {
-      return {
-        topic: 'Intercity Rail Infrastructure vs. Highway Expansion',
-        purpose: 'Argue that strategic rail electrification delivers higher economic yields than highway expansion.',
-        audience: 'Urban policy makers and undecided regional voters',
-        background: 'Regional air corridors and highway networks face worsening congestion and carbon debt.',
-        keyIdeas: [
-          'Airport runway saturation compounds productivity losses.',
-          'High upfront capital expenditure can be amortized via land-value capture.',
-          'Core-to-core rail connectivity accelerates regional labor market mobility.',
-        ],
-        constraints: ['Ground arguments in economic and transit data', 'Directly address municipal debt risks'],
-      }
+    const defaultCtx: DocumentContext = {
+      topic: 'Intercity Rail Infrastructure vs. Highway Expansion',
+      purpose: 'Argue that strategic rail electrification delivers higher economic yields than highway expansion.',
+      audience: 'Urban policy makers and undecided regional voters',
+      background: 'Regional air corridors and highway networks face worsening congestion and carbon debt.',
+      keyIdeas: [
+        'Airport runway saturation compounds productivity losses.',
+        'High upfront capital expenditure can be amortized via land-value capture.',
+        'Core-to-core rail connectivity accelerates regional labor market mobility.',
+      ],
+      constraints: ['Ground arguments in economic and transit data', 'Directly address municipal debt risks'],
     }
-    const saved = localStorage.getItem('byline.doc.context')
-    return saved ? JSON.parse(saved) : { topic: '', purpose: '', audience: '', keyIdeas: [] }
+
+    if (demo) return defaultCtx
+
+    try {
+      const saved = localStorage.getItem('byline.doc.context')
+      if (saved && saved !== 'undefined' && saved !== 'null') {
+        const parsed = JSON.parse(saved)
+        if (parsed && typeof parsed === 'object' && (parsed.topic || parsed.purpose)) return parsed
+      }
+    } catch {}
+    return defaultCtx
   })
 
   const [outline, setOutline] = useState<OutlineNode[]>(() => {
@@ -128,11 +135,18 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         { id: 'sec-4', title: '4. Dialectical Synthesis', description: 'Frame investment as a balanced infrastructure portfolio.', order: 4, sectionId: 'sec-4' },
       ]
     }
-    const saved = localStorage.getItem('byline.doc.outline') || localStorage.getItem(keys.outline(false))
-    return saved ? JSON.parse(saved) : [
-      { id: 'sec-1', title: '1. Introduction', description: 'Establish the core thesis.', order: 1, sectionId: 'sec-1' },
-      { id: 'sec-2', title: '2. Argument & Evidence', description: 'Develop key points.', order: 2, sectionId: 'sec-2' },
-      { id: 'sec-3', title: '3. Conclusion', description: 'Synthesize conclusions.', order: 3, sectionId: 'sec-3' },
+    try {
+      const saved = localStorage.getItem('byline.doc.outline') || localStorage.getItem(keys.outline(false))
+      if (saved && saved !== 'undefined' && saved !== 'null') {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch {}
+    return [
+      { id: 'sec-1', title: '1. The Congestion Dilemma', description: 'Introduce runway and highway saturation.', order: 1, sectionId: 'sec-1' },
+      { id: 'sec-2', title: '2. The Capital Cost Critique', description: 'Examine debt loads and suburban density limits.', order: 2, sectionId: 'sec-2' },
+      { id: 'sec-3', title: '3. Comparative Economic Yields', description: 'Analyze travel predictability and carbon savings.', order: 3, sectionId: 'sec-3' },
+      { id: 'sec-4', title: '4. Dialectical Synthesis', description: 'Frame investment as a balanced infrastructure portfolio.', order: 4, sectionId: 'sec-4' },
     ]
   })
 
@@ -233,7 +247,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       AnchorDecorations,
       TableOfContents,
     ],
-    content: demo ? GOLDEN_PATH_SAMPLE_DOC : (localStorage.getItem('byline.doc.html') || '<h1>Untitled Document</h1><p>Start writing here…</p>'),
+    content: (() => {
+      if (demo) return GOLDEN_PATH_SAMPLE_DOC
+      try {
+        const saved = localStorage.getItem('byline.doc.html')
+        if (saved && saved.trim() && saved !== '<p></p>' && saved !== '<p></p>\n') return saved
+      } catch {}
+      return GOLDEN_PATH_SAMPLE_DOC
+    })(),
     editorProps: {
       attributes: {
         spellcheck: appSettings.spellcheck ? 'true' : 'false',
@@ -440,9 +461,9 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     }
   }, [findings, editor, syncEditorDecorations])
 
-  // Populate sample findings in demo mode
+  // Populate sample findings if findings are empty (ensures /app and /demo are immediately rich & interactive)
   useEffect(() => {
-    if (demo && findings.length === 0) {
+    if (findings.length === 0) {
       const demoFindings: Finding[] = [
         {
           id: 'f-demo-1',
