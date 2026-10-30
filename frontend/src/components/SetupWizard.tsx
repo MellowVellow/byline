@@ -6,10 +6,21 @@ import {
   type AppSettings,
   type EditorFont,
   type PaperWidth,
-  type Density,
 } from '../lib/settings'
 import { THEME_DEFINITIONS, SUPPORTED_LANGUAGES } from '../domain/writing-profile'
-import { sfxPick, sfxSuccess, blip } from '../lib/sfx'
+import {
+  sfxPick,
+  sfxSuccess,
+  sfxBack,
+  blip,
+  sfxEnabled,
+  setSfxEnabled,
+  getSfxPitch,
+  setSfxPitch,
+  getSfxInstrument,
+  setSfxInstrument,
+  type SfxInstrument,
+} from '../lib/sfx'
 import { Logo } from './Brand'
 
 export interface SetupResult {
@@ -26,6 +37,16 @@ export interface SetupWizardProps {
   onComplete: (result: SetupResult) => void
   initialSettings?: AppSettings
 }
+
+const STEP_LABELS = [
+  'Format',
+  'Purpose',
+  'Audience',
+  'Topic',
+  'Outline',
+  'Theme & Lang',
+  'Workspace',
+]
 
 const APPROVED_META_MODELS = [
   { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Meta Llama 3.3 70B Instruct (Primary frontier reasoning)', provider: 'OpenRouter' },
@@ -122,18 +143,23 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
   const [topic, setTopic] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState('argumentative')
 
-  // Misc Settings (from Settings Menu)
+  // Misc Settings (matching updated Settings Menu)
   const [docLanguage, setDocLanguage] = useState(initialSettings?.language || 'en-US')
   const [writingTheme, setWritingTheme] = useState<ThemeId>(initialSettings?.writingTheme || 'neutral')
   const [autoApplyGrammar, setAutoApplyGrammar] = useState(initialSettings?.autoApplyGrammar ?? false)
-  const [colorPresetKey, setColorPresetKey] = useState('default')
+  const [colorPresetKey, setColorPresetKey] = useState('byline')
   const [metaModel, setMetaModel] = useState(initialSettings?.metaModel || 'meta-llama/llama-3.3-70b-instruct')
   const [temperature, setTemperature] = useState(initialSettings?.temperature ?? 0.7)
   const [reasoningEffort, setReasoningEffort] = useState<'minimal' | 'low' | 'medium'>(initialSettings?.reasoningEffort || 'minimal')
   const [editorFont, setEditorFont] = useState<EditorFont>(initialSettings?.editorFont || 'serif')
   const [fontSize, setFontSize] = useState(initialSettings?.fontSize || 19)
   const [paperWidth, setPaperWidth] = useState<PaperWidth>(initialSettings?.paperWidth || 'normal')
-  const [density, setDensity] = useState<Density>(initialSettings?.density || 'comfortable')
+  const [showWordCount, setShowWordCount] = useState(initialSettings?.showWordCount ?? true)
+
+  // SFX Accessibility State
+  const [sfxActive, setSfxActive] = useState(() => sfxEnabled())
+  const [sfxPitchVal, setSfxPitchVal] = useState(() => getSfxPitch())
+  const [sfxInst, setSfxInst] = useState<SfxInstrument>(() => getSfxInstrument())
 
   if (!isOpen) return null
 
@@ -165,7 +191,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
   }
 
   const handleBack = () => {
-    blip('select')
+    sfxBack()
     if (currentStep > 0) {
       setCurrentStep(s => s - 1)
     }
@@ -173,7 +199,10 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
 
   const handleFinish = (overrideBlank = false) => {
     sfxSuccess()
-    const selectedPreset = COLOR_PRESETS[colorPresetKey] || COLOR_PRESETS.default
+    const selectedPreset = COLOR_PRESETS[colorPresetKey] || COLOR_PRESETS.byline
+    setSfxEnabled(sfxActive)
+    setSfxPitch(sfxPitchVal)
+    setSfxInstrument(sfxInst)
     const partialSettings: Partial<AppSettings> = {
       language: docLanguage,
       writingTheme,
@@ -184,7 +213,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
       editorFont,
       fontSize,
       paperWidth,
-      density,
+      showWordCount,
       ai: selectedPreset.ai,
       grammar: selectedPreset.grammar,
       sources: selectedPreset.sources,
@@ -249,23 +278,50 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '12px 32px',
+          padding: '10px 24px',
           borderBottom: '1px solid var(--border)',
           background: 'var(--paper)',
-          height: 54,
+          minHeight: 54,
+          flexWrap: 'wrap',
+          gap: 10,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <Logo height={24} />
-          <span style={{ fontFamily: '"Source Serif 4", serif', fontStyle: 'italic', fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}>
+          <span style={{ fontFamily: '"Source Serif 4", serif', fontStyle: 'italic', fontSize: 17, fontWeight: 700, color: 'var(--ink)' }}>
             Byline Setup
           </span>
-          <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 8 }}>
-            Step {currentStep + 1} of {totalSteps}
-          </span>
+          {/* Clickable Step Pills to freely navigate back and forth */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 6, flexWrap: 'wrap' }}>
+            {STEP_LABELS.map((name, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => {
+                  if (idx < currentStep) sfxBack()
+                  else sfxPick()
+                  setCurrentStep(idx)
+                }}
+                title={`Jump to Step ${idx + 1}: ${name}`}
+                style={{
+                  padding: '3px 8px',
+                  fontSize: 11,
+                  fontWeight: idx === currentStep ? 700 : 500,
+                  color: idx === currentStep ? 'var(--ink)' : 'var(--muted)',
+                  background: idx === currentStep ? 'var(--dock)' : 'transparent',
+                  border: idx === currentStep ? '1px solid var(--ai)' : '1px solid transparent',
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {idx + 1}. {name}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button
             type="button"
             onClick={handleLaunchDemoPreset}
@@ -276,7 +332,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
               border: 'none',
               borderRadius: 'var(--radius)',
               fontWeight: 600,
-              fontSize: 12.5,
+              fontSize: 12,
               cursor: 'pointer',
             }}
           >
@@ -748,7 +804,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
                   <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>Annotation colors</span>
                 </div>
                 <div style={{ display: 'grid', gap: 8 }}>
-                  {Object.entries(COLOR_PRESETS).map(([key, p]) => (
+                  {Object.entries(COLOR_PRESETS).filter(([key]) => !['default', 'ocean', 'forest'].includes(key)).map(([key, p]) => (
                     <div
                       key={key}
                       onClick={() => { setColorPresetKey(key); sfxPick() }}
@@ -866,7 +922,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
                   <strong style={{ fontSize: 13, color: 'var(--ink)' }}>Editor UI & Typography</strong>
                   <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>Paper & layout</span>
                 </div>
-                <div style={{ display: 'grid', gap: 10 }}>
+                <div style={{ display: 'grid', gap: 12 }}>
                   <div>
                     <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: 4 }}>
                       Typeface Family
@@ -904,12 +960,13 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
                     <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: 4 }}>
                       Paper Width
                     </label>
-                    <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       {(
                         [
-                          ['narrow', 'Narrow (58ch)'],
-                          ['normal', 'Normal (70ch)'],
-                          ['wide', 'Wide (88ch)'],
+                          ['narrow', 'Narrow (60ch)'],
+                          ['normal', 'Normal (72ch)'],
+                          ['wide', 'Wide (92ch)'],
+                          ['full', 'Full (100% Span)'],
                         ] as [PaperWidth, string][]
                       ).map(([wKey, label]) => (
                         <button
@@ -917,7 +974,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
                           type="button"
                           onClick={() => setPaperWidth(wKey)}
                           style={{
-                            flex: 1,
+                            flex: '1 1 calc(50% - 4px)',
                             padding: '8px 12px',
                             borderRadius: 4,
                             border: paperWidth === wKey ? '2px solid var(--ai)' : '1px solid var(--border)',
@@ -933,95 +990,147 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
                     </div>
                   </div>
 
-                  <div>
-                    <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: 4 }}>
-                      Layout Density
-                    </label>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      {(['comfortable', 'compact'] as Density[]).map(d => (
-                        <button
-                          key={d}
-                          type="button"
-                          onClick={() => setDensity(d)}
-                          style={{
-                            flex: 1,
-                            padding: '8px 12px',
-                            borderRadius: 4,
-                            border: density === d ? '2px solid var(--ai)' : '1px solid var(--border)',
-                            background: density === d ? 'var(--dock)' : 'var(--paper)',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            textTransform: 'capitalize',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {d}
-                        </button>
-                      ))}
+                  {/* Word & Character Count Toggle */}
+                  <div
+                    onClick={() => { setShowWordCount(v => !v); sfxPick() }}
+                    role="switch"
+                    aria-checked={showWordCount}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '10px 12px', borderRadius: 4, border: '1px solid var(--border)',
+                      background: 'var(--dock)', cursor: 'pointer', marginTop: 4,
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>Show Word & Character Count</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Display live counter in sticky drafting bar</div>
+                    </div>
+                    <div
+                      style={{
+                        width: 38, height: 20, borderRadius: 99,
+                        background: showWordCount ? 'var(--ai)' : 'var(--border)',
+                        position: 'relative', transition: 'background .18s ease', flexShrink: 0,
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: 'absolute', top: 2, left: showWordCount ? 20 : 2,
+                          width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                          transition: 'left .18s ease', boxShadow: '0 1px 2px rgba(0,0,0,.2)',
+                        }}
+                      />
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Language & Grammar (moved from step 5 for completeness) */}
+              {/* Accessibility & Sound Effects (SFX) */}
               <div style={{ background: 'var(--paper)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', display: 'grid', gap: 12, boxShadow: 'var(--shadow-paper)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--grammar)' }} />
-                  <strong style={{ fontSize: 13, color: 'var(--ink)' }}>Language & Grammar</strong>
-                  <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>Spelling & auto-fix</span>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--lt)' }} />
+                  <strong style={{ fontSize: 13, color: 'var(--ink)' }}>Accessibility & Sound Effects</strong>
+                  <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>Audio cues</span>
                 </div>
-                <div style={{ display: 'grid', gap: 10 }}>
-                  <div>
-                    <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: 4 }}>
-                      Primary Document Language
-                    </label>
-                    <select
-                      value={docLanguage}
-                      onChange={e => setDocLanguage(e.target.value)}
-                      style={{ width: '100%', padding: '8px 12px', fontSize: 13, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--dock)', color: 'var(--ink)' }}
-                    >
-                      {SUPPORTED_LANGUAGES.map(l => (
-                        <option key={l.code} value={l.code}>{l.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {/* SFX Toggle */}
                   <div
-                    onClick={() => { setAutoApplyGrammar(v => !v); sfxPick() }}
+                    onClick={() => {
+                      const next = !sfxActive
+                      setSfxActive(next)
+                      setSfxEnabled(next)
+                      if (next) blip('toggle')
+                    }}
                     role="switch"
-                    aria-checked={autoApplyGrammar}
+                    aria-checked={sfxActive}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
-                      padding: '10px 0', borderRadius: 'var(--radius)',
-                      border: '1px solid var(--border)',
-                      background: 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '10px 12px', borderRadius: 4, border: '1px solid var(--border)',
+                      background: 'var(--dock)', cursor: 'pointer',
                     }}
                   >
+                    <div>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>SFX Sound Effects</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Interactive audio feedback on clicks, suggestions & review resolutions</div>
+                    </div>
                     <div
                       style={{
-                        flex: 'none', width: 44, height: 24, borderRadius: 99,
-                        background: autoApplyGrammar ? 'var(--grammar, #C0281F)' : 'var(--border)',
-                        position: 'relative', transition: 'background .18s ease',
+                        width: 38, height: 20, borderRadius: 99,
+                        background: sfxActive ? 'var(--ai)' : 'var(--border)',
+                        position: 'relative', transition: 'background .18s ease', flexShrink: 0,
                       }}
                     >
                       <span
                         style={{
-                          position: 'absolute', top: 3, left: autoApplyGrammar ? 23 : 3,
-                          width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                          position: 'absolute', top: 2, left: sfxActive ? 20 : 2,
+                          width: 16, height: 16, borderRadius: '50%', background: '#fff',
                           transition: 'left .18s ease', boxShadow: '0 1px 2px rgba(0,0,0,.2)',
                         }}
                       />
                     </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <strong style={{ fontSize: 13, color: 'var(--ink)' }}>Automatically apply grammar fixes</strong>
-                        <span className="kind-label" style={{ color: 'var(--grammar, #C0281F)' }}>Grammar</span>
+                  </div>
+
+                  {/* Instrument & Pitch */}
+                  {sfxActive && (
+                    <div style={{ display: 'grid', gap: 10, padding: '10px 12px', background: 'var(--dock)', borderRadius: 4, border: '1px solid var(--border)' }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: 4 }}>
+                          Audio Waveform Instrument
+                        </label>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {(['triangle', 'sine', 'square', 'sawtooth'] as SfxInstrument[]).map(inst => (
+                            <button
+                              key={inst}
+                              type="button"
+                              onClick={() => {
+                                setSfxInst(inst)
+                                setSfxInstrument(inst)
+                                blip('select')
+                              }}
+                              style={{
+                                flex: 1,
+                                padding: '6px 8px',
+                                fontSize: 11.5,
+                                fontWeight: 600,
+                                borderRadius: 4,
+                                border: sfxInst === inst ? '2px solid var(--ai)' : '1px solid var(--border)',
+                                background: sfxInst === inst ? 'var(--paper)' : 'transparent',
+                                cursor: 'pointer',
+                                textTransform: 'capitalize',
+                              }}
+                            >
+                              {inst}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 2, lineHeight: 1.4 }}>
-                        In editing mode, spelling and grammar corrections apply as you write.
+
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+                          <label style={{ fontWeight: 600, color: 'var(--ink)' }}>Pitch Transposition</label>
+                          <span className="kbd" style={{ fontSize: 11 }}>{sfxPitchVal >= 0 ? `+${sfxPitchVal}` : sfxPitchVal} st</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-7"
+                          max="7"
+                          step="1"
+                          value={sfxPitchVal}
+                          onChange={e => {
+                            const val = parseInt(e.target.value, 10)
+                            setSfxPitchVal(val)
+                            setSfxPitch(val)
+                            blip('select')
+                          }}
+                          style={{ width: '100%', accentColor: 'var(--ai)' }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--muted)' }}>
+                          <span>-7 Semitones (Deep)</span>
+                          <span>0 Normal</span>
+                          <span>+7 Semitones (Crisp)</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -1064,7 +1173,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
                       Color Palette
                     </span>
                     <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', marginTop: 2 }}>
-                      {COLOR_PRESETS[colorPresetKey]?.label || 'Byline'}
+                      {COLOR_PRESETS[colorPresetKey]?.label || 'Byline Classic'}
                     </div>
                   </div>
 
@@ -1089,10 +1198,19 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
 
                   <div>
                     <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.04em' }}>
-                      Typography & Layout
+                      Typography & Paper Layout
                     </span>
                     <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', marginTop: 2 }}>
-                      {editorFont} • {paperWidth} width • {density}
+                      {editorFont} • {paperWidth} span • word count {showWordCount ? 'on' : 'off'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.04em' }}>
+                      Audio Feedback
+                    </span>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', marginTop: 2 }}>
+                      {sfxActive ? `SFX on (${sfxInst}, ${sfxPitchVal >= 0 ? `+${sfxPitchVal}` : sfxPitchVal} st)` : 'Audio muted'}
                     </div>
                   </div>
                 </div>
@@ -1110,37 +1228,58 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
               </div>
             </div>
 
-            {/* Final Action Buttons (sticky at bottom of scrollable area)} */}
-            <div style={{ padding: '24px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', background: 'var(--bg)', position: 'sticky', bottom: 0, zIndex: 10 }}>
+            {/* Final Action Buttons with prominent Back Button */}
+            <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, borderTop: '1px solid var(--border)', background: 'var(--bg)', position: 'sticky', bottom: 0, zIndex: 10 }}>
               <button
                 type="button"
-                onClick={() => handleFinish(true)}
+                onClick={handleBack}
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--muted)',
-                  cursor: 'pointer',
+                  padding: '10px 18px',
                   fontSize: 13,
-                  textDecoration: 'underline',
-                  padding: 0,
+                  fontWeight: 600,
+                  borderRadius: 'var(--radius)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--paper)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
                 }}
               >
-                Skip template & start with blank page
+                ← Back
               </button>
 
-              <button
-                type="button"
-                onClick={() => handleFinish(false)}
-                className="primary"
-                style={{ padding: '12px 28px', fontSize: 15, fontWeight: 700, minHeight: 46 }}
-              >
-                ✦ Enter Workspace →
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <button
+                  type="button"
+                  onClick={() => handleFinish(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--muted)',
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    textDecoration: 'underline',
+                    padding: 0,
+                  }}
+                >
+                  Skip template & start blank
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleFinish(false)}
+                  className="primary"
+                  style={{ padding: '12px 28px', fontSize: 15, fontWeight: 700, minHeight: 46 }}
+                >
+                  ✦ Enter Workspace →
+                </button>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Global Navigation Footer */}
+        {/* Global Navigation Footer for Steps 0 to 5 */}
         {currentStep < 6 && (
           <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: 28 }}>
             <button
@@ -1148,8 +1287,13 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
               disabled={currentStep === 0}
               onClick={handleBack}
               style={{
-                padding: '8px 16px',
+                padding: '8px 18px',
                 fontSize: 13,
+                fontWeight: 600,
+                borderRadius: 'var(--radius)',
+                border: '1px solid var(--border)',
+                background: 'var(--paper)',
+                cursor: currentStep === 0 ? 'default' : 'pointer',
                 visibility: currentStep === 0 ? 'hidden' : 'visible',
               }}
             >
@@ -1159,7 +1303,7 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initialSettin
               type="button"
               onClick={handleNext}
               className="primary"
-              style={{ padding: '8px 20px', fontSize: 13 }}
+              style={{ padding: '8px 22px', fontSize: 13, fontWeight: 600 }}
             >
               Next →
             </button>
