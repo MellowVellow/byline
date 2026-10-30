@@ -9,6 +9,8 @@ import {
   indentOutlineSection,
   outdentOutlineSection,
   compareOutlineWithDraft,
+  reorderOrReparentOutlineSection,
+  isDescendant,
 } from '../src/domain/outline'
 import type { OutlineNode } from '../src/domain/document'
 import { Editor } from '@tiptap/core'
@@ -102,6 +104,35 @@ describe('Independent Outline Domain & Operations', () => {
     const reparentedChild = afterDeleteParent.find(n => n.id === 'child-1')
     expect(reparentedChild).toBeDefined()
     expect(reparentedChild?.parentId).toBeUndefined()
+  })
+
+  it('supports drag-and-drop tree reparenting and nesting (inside, before, after) like Godot/Notion', () => {
+    // 1. Drag sec-3 inside sec-1 (nesting as child)
+    const nested = reorderOrReparentOutlineSection(initialOutline, 'sec-3', 'sec-1', 'inside')
+    const sec3 = nested.find(n => n.id === 'sec-3')
+    expect(sec3?.parentId).toBe('sec-1')
+
+    const flatAfterNest = flattenOutline(nested)
+    expect(flatAfterNest[0].node.id).toBe('sec-1')
+    expect(flatAfterNest[1].node.id).toBe('sec-3')
+    expect(flatAfterNest[1].depth).toBe(1)
+
+    // 2. Drag sec-3 before sec-2 (moves out of sec-1 to top level, placed before sec-2)
+    const movedBefore = reorderOrReparentOutlineSection(nested, 'sec-3', 'sec-2', 'before')
+    const sec3Before = movedBefore.find(n => n.id === 'sec-3')
+    expect(sec3Before?.parentId).toBeUndefined()
+    expect(sec3Before?.order).toBe(2)
+    expect(movedBefore.find(n => n.id === 'sec-2')?.order).toBe(3)
+
+    // 3. Drag sec-1 after sec-2
+    const movedAfter = reorderOrReparentOutlineSection(movedBefore, 'sec-1', 'sec-2', 'after')
+    const flatAfterReorder = flattenOutline(movedAfter)
+    expect(flatAfterReorder.map(f => f.node.id)).toEqual(['sec-3', 'sec-2', 'sec-1'])
+
+    // 4. Cycle guard: Cannot drag parent into its own descendant
+    expect(isDescendant(nested, 'sec-1', 'sec-3')).toBe(true)
+    const invalidDrop = reorderOrReparentOutlineSection(nested, 'sec-1', 'sec-3', 'inside')
+    expect(invalidDrop).toEqual(nested) // Unchanged
   })
 })
 

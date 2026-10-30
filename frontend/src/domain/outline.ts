@@ -103,6 +103,83 @@ export function deleteOutlineSection(nodes: OutlineNode[], id: string): OutlineN
 }
 
 /**
+ * Check if a candidate node is a descendant of a given ancestor node.
+ */
+export function isDescendant(
+  nodes: OutlineNode[],
+  ancestorId: string,
+  candidateId: string
+): boolean {
+  let curr = nodes.find(n => n.id === candidateId)
+  while (curr && curr.parentId) {
+    if (curr.parentId === ancestorId) return true
+    curr = nodes.find(n => n.id === curr!.parentId)
+  }
+  return false
+}
+
+/**
+ * Drag-and-drop reorder and reparenting (like Godot's node tree, Notion, Obsidian).
+ * Supports dropping 'before', 'after', or 'inside' (nested as child).
+ */
+export function reorderOrReparentOutlineSection(
+  nodes: OutlineNode[],
+  sourceId: string,
+  targetId: string,
+  position: 'before' | 'after' | 'inside'
+): OutlineNode[] {
+  if (sourceId === targetId) return nodes
+  // Guard against dragging an ancestor into its own descendant (would cause tree cycle)
+  if (isDescendant(nodes, sourceId, targetId)) return nodes
+
+  const sourceNode = nodes.find(n => n.id === sourceId)
+  const targetNode = nodes.find(n => n.id === targetId)
+  if (!sourceNode || !targetNode) return nodes
+
+  if (position === 'inside') {
+    // Reparent source under target as the last child
+    const existingChildren = nodes.filter(n => n.parentId === targetId && n.id !== sourceId)
+    const nextOrder = Math.max(0, ...existingChildren.map(c => c.order ?? 0)) + 1
+
+    return nodes.map(n => {
+      if (n.id === sourceId) {
+        return { ...n, parentId: targetId, order: nextOrder }
+      }
+      return n
+    })
+  }
+
+  // Position is 'before' or 'after': source shares target's parentId
+  const newParentId = targetNode.parentId
+  const targetSiblings = nodes
+    .filter(n => n.parentId === newParentId && n.id !== sourceId)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+
+  const targetIndex = targetSiblings.findIndex(n => n.id === targetId)
+  if (targetIndex < 0) return nodes
+
+  const insertIndex = position === 'before' ? targetIndex : targetIndex + 1
+  const reorderedSiblings = [
+    ...targetSiblings.slice(0, insertIndex),
+    { ...sourceNode, parentId: newParentId },
+    ...targetSiblings.slice(insertIndex),
+  ]
+
+  // Map each sibling to normalized 1-based order
+  const orderMap = new Map<string, number>()
+  reorderedSiblings.forEach((n, idx) => {
+    orderMap.set(n.id, idx + 1)
+  })
+
+  return nodes.map(n => {
+    if (orderMap.has(n.id)) {
+      return { ...n, parentId: newParentId, order: orderMap.get(n.id)! }
+    }
+    return n
+  })
+}
+
+/**
  * Move an outline section up or down among its siblings.
  * Does not mutate the editor draft.
  */
