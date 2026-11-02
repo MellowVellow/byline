@@ -30,6 +30,14 @@ export default function ConnectModal({ isOpen, onClose, editor }: ConnectModalPr
     return () => clearTimeout(t)
   }, [isOpen, tab])
 
+  // Esc closes the studio from anywhere inside it (including the search box)
+  useEffect(() => {
+    if (!isOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isOpen, onClose])
+
   if (!isOpen) return null
 
   const categories: Array<ConnectCategory | 'All'> = [

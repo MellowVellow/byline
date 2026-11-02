@@ -9,7 +9,7 @@ class CompleteIn(BaseModel):
     before: str = S(8000); after: str = S(4000); version: int = 0
     facts: list[str] = Field(default_factory=list, max_length=5)
     last_two: str = S(2000)
-    avoid: list[str] = Field(default_factory=list, max_length=3)
+    avoid: list[str] = Field(default_factory=list, max_length=24)
 
 class TextIn(BaseModel):
     context: str = S(4000); level: str = Field(default="General", max_length=40); text: str = S(20000)

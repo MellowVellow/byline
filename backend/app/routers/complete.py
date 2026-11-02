@@ -64,29 +64,35 @@ def retry_hint(assist: str) -> str:
     if assist == "Question": return "\nRETRY: previous format invalid — return exactly 3 questions, one per line, each ending with a question mark."
     return "\nRETRY: previous format invalid — follow ASSIST exactly, full sentences only, no fragments."
 
-def _clean_list(items, cap_words: int) -> list[str]:
+# Prefetch depth: initial call returns N per level (half shown, half instant rerolls).
+LEVELS_N = 6
+
+def _clean_list(items, cap_words: int, limit: int = LEVELS_N) -> list[str]:
     out = []
     for x in items or []:
         if not isinstance(x, str): continue
         s = re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", x).strip().strip('"')
         if s and s not in out and len(s.split()) <= cap_words: out.append(s)
-        if len(out) >= 3: break
+        if len(out) >= limit: break
     return out
 
 @router.post("/api/complete")
 async def complete(body: CompleteIn):
     try:
         # Grouped single-call payload: assist_level "All" returns all four ghost
-        # levels at once ({cue, question, fragment, sentence}); the app parses them.
-        # Rerolls carry `avoid` and bypass cache by design.
-        if body.assist_level == "All" and not body.avoid:
+        # levels at once ({cue, question, fragment, sentence}), LEVELS_N deep per
+        # level so reroll alternates ride along with the first call. Rerolls carry
+        # `avoid` (previously: fell into the single-level path and 422'd on >3
+        # avoid items) and bypass cache by design.
+        if body.assist_level == "All":
             ck = cache.key("complete:all", body.level, body.before[-400:], body.after[:200])
-            hit = cache.get(ck)
-            if hit is not None:
-                return ok(levels=hit, version=body.version, model="cache", ms=0, usage={}, cached=True)
-            s, u = prompts.complete_levels_prompt(body.before, body.after, body.level)
+            if not body.avoid:
+                hit = cache.get(ck)
+                if hit is not None:
+                    return ok(levels=hit, version=body.version, model="cache", ms=0, usage={}, cached=True)
+            s, u = prompts.complete_levels_prompt(body.before, body.after, body.level, body.avoid)
             try:
-                data, usage, model = await llm.json_call(s, u, max_tokens=700, temperature=0.8)
+                data, usage, model = await llm.json_call(s, u, max_tokens=1300, temperature=0.8)
                 levels = {
                     "cue": _clean_list(data.get("cue"), 6),
                     "question": [q if q.rstrip().endswith("?") else q.rstrip() + "?" for q in _clean_list(data.get("question"), 14)],
@@ -94,9 +100,10 @@ async def complete(body: CompleteIn):
                     "sentence": [merge_partial(body.before, x) for x in _clean_list(data.get("sentence"), 25)],
                 }
                 if any(levels.values()):
-                    cache.set(ck, levels)
+                    if not body.avoid:
+                        cache.set(ck, levels)
                     return ok(levels=levels, version=body.version, model=model, ms=0, usage=usage,
-                              meta=meta("complete", s, u, usage, model, 0, 0.8, 700))
+                              meta=meta("complete", s, u, usage, model, 0, 0.8, 1300))
             except (llm.ProviderUnavailable, budget.BudgetExceeded):
                 raise
             except Exception:

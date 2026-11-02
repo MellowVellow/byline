@@ -19,6 +19,7 @@ export interface LibraryProps {
   onToggleCollapse?: () => void
   onOpenSettings?: () => void
   onOpenHelp?: () => void
+  onRemoveEntry?: (id: string) => void
 }
 
 type DockTab = 'conversation' | 'library'
@@ -26,7 +27,7 @@ type DockTab = 'conversation' | 'library'
 /** Left dock — two sections: Conversation (prompting space) and Library (saved collection).
  * Bottom: profile row with a drop-up menu (Settings, Profile, Help, Logout).
  */
-export default function Library({ entries, activeId, onSelect, conversations, activeConversationId, onSelectConversation, onNewConversation, onToggleCollapse, onOpenSettings, onOpenHelp }: LibraryProps) {
+export default function Library({ entries, activeId, onSelect, conversations, activeConversationId, onSelectConversation, onNewConversation, onToggleCollapse, onOpenSettings, onOpenHelp, onRemoveEntry }: LibraryProps) {
   const [tab, setTab] = useState<DockTab>('conversation')
   const [menuOpen, setMenuOpen] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -167,7 +168,20 @@ export default function Library({ entries, activeId, onSelect, conversations, ac
               className={'dock-item' + (activeId === e.id ? ' dock-selected' : '')}
               title={e.detail || e.kind}
             >
-              <div className="quote-serif" style={{ fontSize: 13.5 }}>{e.title}</div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                <div className="quote-serif" style={{ fontSize: 13.5, flex: 1, minWidth: 0 }}>{e.title}</div>
+                {onRemoveEntry && (
+                  <button
+                    type="button"
+                    title="Remove from Saved"
+                    aria-label={`Remove ${e.title}`}
+                    onClick={ev => { ev.stopPropagation(); blip('dismiss'); onRemoveEntry(e.id) }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 13, padding: '0 2px', flexShrink: 0 }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
               <div className="meta">{e.kind}{e.detail ? ` · ${e.detail}` : ''}</div>
               {e.claim && <div style={{ fontSize: 12.5, marginTop: 4 }}>{e.claim}</div>}
               {e.excerpt && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, borderLeft: '2px solid var(--border)', paddingLeft: 8 }}>“{e.excerpt}”</div>}

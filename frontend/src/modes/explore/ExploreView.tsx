@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react'
 import { ROWS, SRC, CHECK_LABEL, SOURCE_TYPES, type ResearchRow, type SourceRecord, type CheckState } from '../../data/mockResearch'
+import type { ExploreSnapshot } from '../../data/mockLibrary'
 import { api, type ExploreFinding } from '../../lib/api'
 import { blip } from '../../lib/sfx'
 
@@ -8,7 +9,9 @@ export interface ExploreViewProps {
   savedIds: Set<number>
   initialQuery?: string
   startAtResults?: boolean
-  onExploreComplete?: (query: string) => void
+  /** Live snapshot of a saved conversation — shown instead of static rows. */
+  initialSnapshot?: ExploreSnapshot | null
+  onExploreComplete?: (query: string, snapshot?: ExploreSnapshot) => void
 }
 
 const STEPS = ['Searching for sources', 'Reading relevant material', 'Extracting findings', 'Organising results']
@@ -52,17 +55,19 @@ function toRows(findings: ExploreFinding[], angles: ExploreFinding[]): { rows: R
   return { rows, src }
 }
 
-export default function ExploreView({ onSaveToLibrary, savedIds, initialQuery, startAtResults, onExploreComplete }: ExploreViewProps) {
-  const [phase, setPhase] = useState<Phase>(startAtResults ? 'results' : 'init')
+export default function ExploreView({ onSaveToLibrary, savedIds, initialQuery, startAtResults, initialSnapshot, onExploreComplete }: ExploreViewProps) {
+  // Conversations without a snapshot (legacy) land on the prompt, never on
+  // static sample rows.
+  const [phase, setPhase] = useState<Phase>(startAtResults && initialSnapshot ? 'results' : 'init')
   const [query, setQuery] = useState(initialQuery ?? 'Does AI reduce creativity?')
   const [allowed, setAllowed] = useState<Set<string>>(new Set(ALL_SOURCE_TYPES))
   const [step, setStep] = useState(0)
   const [sel, setSel] = useState<number | null>(null)
   const [typeF, setTypeF] = useState('All')
-  const [liveRows, setLiveRows] = useState<ResearchRow[] | null>(null)
-  const [liveSrc, setLiveSrc] = useState<Record<string, SourceRecord> | null>(null)
-  const [liveSummary, setLiveSummary] = useState<string | null>(null)
-  const [liveModel, setLiveModel] = useState<string | null>(null)
+  const [liveRows, setLiveRows] = useState<ResearchRow[] | null>(initialSnapshot?.rows ?? null)
+  const [liveSrc, setLiveSrc] = useState<Record<string, SourceRecord> | null>(initialSnapshot?.src ?? null)
+  const [liveSummary, setLiveSummary] = useState<string | null>(initialSnapshot?.summary ?? null)
+  const [liveModel, setLiveModel] = useState<string | null>(initialSnapshot?.model ?? null)
   const [offline, setOffline] = useState(false)
   const [errMsg, setErrMsg] = useState<string | null>(null)
   const [stageMsg, setStageMsg] = useState<string | null>(null)
@@ -99,15 +104,30 @@ export default function ExploreView({ onSaveToLibrary, savedIds, initialQuery, s
           const { rows, src } = toRows(res.findings ?? [], res.angles ?? [])
           setLiveRows(rows)
           setLiveSrc(src)
+          setLiveSummary(res.summary || null)
+          setLiveModel(res.model || null)
+          setOffline(!!res.mock || !!res.offline)
+          setStep(STEPS.length)
+          setPhase('results')
+          onExploreComplete?.(query, {
+            rows, src,
+            summary: res.summary || null,
+            model: res.model || null,
+            savedAt: Date.now(),
+          })
+          return
         } catch (e) {
           console.error('explore: failed to parse live results', e)
           setLiveRows(null)
           setLiveSrc(null)
           setErrMsg('Could not parse live results — showing embedded sample data.')
         }
-        setLiveSummary(res.summary || null)
-        setLiveModel(res.model || null)
-        setOffline(!!res.mock || !!res.offline)
+        setLiveSummary(null)
+        setLiveModel(null)
+        setOffline(true)
+        setStep(STEPS.length)
+        setPhase('results')
+        onExploreComplete?.(query)
       } else {
         // Fixed fallback: static mock dataset with offline banner (never fake live).
         setLiveRows(null)
@@ -169,24 +189,32 @@ export default function ExploreView({ onSaveToLibrary, savedIds, initialQuery, s
 
   if (phase === 'run') {
     return (
-      <div style={{ maxWidth: 620, margin: '0 auto', padding: '20vh 20px', textAlign: 'center' }}>
+      <div className="explore-loading" style={{ maxWidth: 620, margin: '0 auto', padding: '20vh 20px', textAlign: 'center' }}>
         <h1 style={{ fontWeight: 400, fontSize: 22, fontFamily: 'Georgia, serif' }}>Exploring: {query}</h1>
         <ul style={{ listStyle: 'none', padding: 0, display: 'inline-block', textAlign: 'left' }}>
-          {STEPS.map((s, i) => (
-            <li key={s} style={{ color: i < step ? 'var(--ink)' : 'var(--muted)', padding: '4px 0' }}>
-              {i < step - 1 || (i === STEPS.length - 1 && step > STEPS.length - 1) ? '✓ ' : i === step - 1 && step <= STEPS.length ? '● ' : '○ '}{s}
-            </li>
-          ))}
+          {STEPS.map((s, i) => {
+            const done = i < step - 1 || (i === STEPS.length - 1 && step > STEPS.length - 1)
+            const active = !done && i === step - 1 && step <= STEPS.length
+            return (
+              <li
+                key={s}
+                className={active ? 'explore-step-active' : 'explore-step'}
+                style={{ color: done || active ? 'var(--ink)' : 'var(--muted)', padding: '4px 0', animationDelay: active ? undefined : `${i * 70}ms` }}
+              >
+                {done ? '✓ ' : active ? '● ' : '○ '}{s}
+              </li>
+            )
+          })}
         </ul>
-        {stageMsg && <p style={{ color: 'var(--muted)', fontSize: 13 }}>{stageMsg} · {evCounts.sources} sources · {evCounts.findings} findings</p>}
+        {stageMsg && <p className="explore-step" style={{ color: 'var(--muted)', fontSize: 13, animationDelay: '280ms' }}>{stageMsg} · {evCounts.sources} sources · {evCounts.findings} findings</p>}
         <div><button type="button" onClick={() => abortRef.current?.abort()}>Cancel</button></div>
       </div>
     )
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px,300px) minmax(0,1fr) minmax(240px,340px)', gap: 24, padding: '12px 20px 40px', alignItems: 'start' }} className="explore-results">
-      <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, padding: '12px 20px 40px' }} className="explore-results">
+      <div style={{ maxWidth: 860 }}>
         <h2 style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>Summary</h2>
         {liveSummary ? (
           <p style={{ fontSize: 14 }}>{liveSummary}</p>
@@ -212,6 +240,7 @@ export default function ExploreView({ onSaveToLibrary, savedIds, initialQuery, s
           <button type="button" className="primary" onClick={run} style={{ marginTop: 8, borderRadius: 999, padding: '6px 20px' }}>Re-explore</button>
         </div>
       </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(240px,340px)', gap: 24, alignItems: 'start' }} className="explore-results-main">
       <div>
         <div style={{ fontSize: 13, marginBottom: 12, display: 'flex', gap: 14 }}>
           <span style={{ color: 'var(--success)' }}>{counts.supported} supported</span>
@@ -266,6 +295,7 @@ export default function ExploreView({ onSaveToLibrary, savedIds, initialQuery, s
           </div>
         )}
       </aside>
+      </div>
     </div>
   )
 }

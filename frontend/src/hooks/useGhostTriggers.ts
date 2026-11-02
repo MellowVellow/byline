@@ -59,8 +59,8 @@ export interface TriggerState {
   fired: { g?: string; c?: string; p?: string }
 }
 
-/** Dual-threshold trigger evaluator: slow 700ms end-zone ghost, long 2500ms between-sentence connective. */
-export function useGhostTriggers(slowMs = 700, longMs = 2500) {
+/** Dual-threshold trigger evaluator: slow ~350ms pause-anywhere ghost, long 2500ms between-sentence connective. */
+export function useGhostTriggers(slowMs = 350, longMs = 2500) {
   const ref = useRef<TriggerState>({ lastKey: performance.now(), bursts: 0, sentIdx: 0, fired: {} })
   const thresh = useRef({ slowMs, longMs })
   thresh.current = { slowMs, longMs }
@@ -85,17 +85,16 @@ export function useGhostTriggers(slowMs = 700, longMs = 2500) {
     if (fullText.trim().length <= 8) return { ghost: false, connective: false, phrase: false }
     const key = `${s.sentIdx}|${caret}`
     const out = { ghost: false, connective: false, phrase: false }
-    // Pause-anywhere: end of doc OR end of sentence/block (complete before caret,
-    // newline or sentence boundary after). Previously zone==='end' only fired at
-    // the very last character, so mid-doc pauses never suggested.
-    const afterSlice = fullText.slice(caret, caret + 4)
-    const atSoftEnd =
-      s.zone === 'end' ||
-      s.complete ||
-      afterSlice.startsWith('\n') ||
-      afterSlice.trim().length === 0
-    if (idle >= slow && atSoftEnd && !ref.current.fired.g) {
-      ref.current.fired.g = key
+    // Pause-anywhere: any caret pause fires ghost (per product: suggest on every
+    // pause, mid-word/mid-sentence included). Sentence state still biases the
+    // preselected level via ghostTriggerForState, it just never suppresses here.
+    // NOTE: ghost is intentionally stateless (no fired.* dedup). The poller's
+    // 150ms armed-confirm needs 2+ consecutive ghost:true ticks, and a one-shot
+    // fired flag would turn the 2nd tick false and deadlock auto-fire forever.
+    // Refire loops are prevented by the poller itself (skips while a ghost is
+    // visible) + onInput clearing fired + dismiss touching lastKey.
+    void s.zone
+    if (idle >= slow) {
       out.ghost = true
     }
     if (idle >= long && s.zone === 'between' && !ref.current.fired.c) {

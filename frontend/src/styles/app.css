@@ -228,56 +228,44 @@ button:disabled{opacity:.4;cursor:default}
 .footnote-ref{color:var(--ai);cursor:pointer;font-weight:700}
 .footnotes{max-width:var(--paper-w,70ch);margin:24px auto 0;font-size:13px;color:var(--muted);line-height:1.55}
 .footnotes hr{border:none;border-top:1px solid var(--border);width:38%;margin:0 0 8px}
-/* Red wavy underline shown DURING the pre-fix hold: "this text is about to be fixed" */
+/* Pre-fix hold: red text + red wavy squiggly — "this text is about to be fixed" */
 .grammar-hold-mark {
+  color: var(--lt, #C0281F) !important;
   text-decoration-line: underline !important;
   text-decoration-style: wavy !important;
   text-decoration-color: var(--lt, #C0281F) !important;
   text-decoration-thickness: 1.5px !important;
   text-underline-offset: 4px !important;
 }
-/* Grammar auto-apply pop animation: green wavy underline + soft glow, then fades into normal text.
+/* Grammar auto-fix pop: fixed text lands green, then text color fades to ink.
+   No underline / bg — pure text-color sequence: red squiggly → green → ink.
    Driven by the preset's fix color (--fix). */
 .grammar-auto-pop {
   display: inline;
   color: var(--fix, #16A34A) !important;
-  background-color: color-mix(in srgb, var(--fix, #16A34A) 25%, transparent) !important;
-  text-decoration-line: underline !important;
-  text-decoration-style: wavy !important;
-  text-decoration-color: var(--fix, #16A34A) !important;
-  text-decoration-thickness: 1.5px !important;
-  text-underline-offset: 4px !important;
-  border-radius: 3px;
-  padding: 0 2px;
-  animation: grammarPopFade 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  text-decoration: none !important;
+  background: none !important;
+  border-radius: 0;
+  padding: 0;
+  will-change: color;
+  animation: grammarPopFade 2s linear forwards;
 }
 
 @keyframes grammarPopFade {
   0% {
     color: var(--fix, #16A34A);
-    background-color: color-mix(in srgb, var(--fix, #16A34A) 45%, transparent);
-    text-decoration-color: var(--fix, #16A34A);
-    box-shadow: 0 0 12px color-mix(in srgb, var(--fix, #16A34A) 55%, transparent);
-    text-shadow: 0 0 8px color-mix(in srgb, var(--fix, #16A34A) 30%, transparent);
   }
-  35% {
+  28% {
     color: var(--fix, #16A34A);
-    background-color: color-mix(in srgb, var(--fix, #16A34A) 32%, transparent);
-    text-decoration-color: var(--fix, #16A34A);
-    box-shadow: 0 0 8px color-mix(in srgb, var(--fix, #16A34A) 35%, transparent);
   }
-  70% {
-    color: var(--fix, #16A34A);
-    background-color: color-mix(in srgb, var(--fix, #16A34A) 12%, transparent);
-    text-decoration-color: color-mix(in srgb, var(--fix, #16A34A) 55%, transparent);
-    box-shadow: none;
+  52% {
+    color: color-mix(in oklab, var(--fix, #16A34A) 62%, var(--ink, #181A1E));
+  }
+  74% {
+    color: color-mix(in oklab, var(--fix, #16A34A) 28%, var(--ink, #181A1E));
   }
   100% {
     color: inherit;
-    background-color: transparent;
-    text-decoration-color: transparent;
-    box-shadow: none;
-    text-shadow: none;
   }
 }
 
@@ -559,6 +547,23 @@ footer.section{padding-top:20px;border-top:1px solid var(--border)}
   50% { opacity: 0.4; transform: scale(0.75); }
 }
 
+/* ── Explore loading motion: active step pulses brightness, everything
+ *  rises in (fade + slide from below), including the loading screen itself. */
+@keyframes explore-pulse {
+  0%, 100% { opacity: 0.45; filter: brightness(0.85); }
+  50% { opacity: 1; filter: brightness(1.15); }
+}
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.explore-loading { animation: rise-in 0.35s ease-out both; }
+.explore-step { animation: rise-in 0.3s ease-out both; }
+.explore-step-active { animation: explore-pulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .explore-loading, .explore-step, .explore-step-active { animation: none !important; }
+}
+
 /* ── Minimal suggestion popup v2 ── */
 .sugg-popup-v2 { font-family: Inter, sans-serif; }
 .sugg-popup-v2 button { transition: background 0.1s ease; }
@@ -588,8 +593,15 @@ header.topbar { overflow: visible !important; }
 }
 .ghost-text { color: var(--grey); font-style: normal; }
 .explore-results { container-type: inline-size; }
+/* Summary sits full-width above; table + details share the row below. */
+.explore-results-main { display: grid; grid-template-columns: minmax(0,1fr) minmax(240px,340px); gap: 24px; align-items: start; }
+/* Stack table above details when the results column itself is narrow
+   (e.g. both docks open on a wide viewport). */
+@container (max-width: 900px) {
+  .explore-results-main { grid-template-columns: 1fr !important; }
+}
 @media(max-width:1060px) {
-  .explore-results { grid-template-columns: 1fr !important; }
+  .explore-results-main { grid-template-columns: 1fr !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   .conn, .ghost-text { animation: none !important; transition: none !important; }

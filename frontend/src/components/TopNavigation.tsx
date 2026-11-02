@@ -6,6 +6,16 @@ import { Logo, ThemeToggle } from './Brand'
 import { THEME_DEFINITIONS, SUPPORTED_LANGUAGES } from '../domain/writing-profile'
 import type { ThemeId } from '../domain/document'
 import { TRANSITIONS } from '../lib/constants'
+import { GHOST_LABELS, type GhostLevel } from './CaretPopup'
+
+/** Completion Level picker entries in popup-tab order (display label + value).
+ *  Values stay backend AssistGranularity ids; only labels match the popup. */
+const ASSIST_OPTIONS: Array<[AssistGranularity, GhostLevel]> = [
+  ['Hint', 'cue'],
+  ['Question', 'question'],
+  ['Phrase', 'fragment'],
+  ['Sentence', 'sentence'],
+]
 
 export type AssistGranularity = 'Hint' | 'Phrase' | 'Sentence' | 'Question'
 
@@ -310,7 +320,7 @@ export default function TopNavigation({
                   Completion Level
                 </div>
                 <div style={{ display: 'flex', gap: 4 }}>
-                  {(['Hint', 'Phrase', 'Sentence', 'Question'] as AssistGranularity[]).map(gran => (
+                  {ASSIST_OPTIONS.map(([gran, lv]) => (
                     <button
                       key={gran}
                       type="button"
@@ -329,7 +339,7 @@ export default function TopNavigation({
                         cursor: 'pointer',
                       }}
                     >
-                      {gran}
+                      {GHOST_LABELS[lv]}
                     </button>
                   ))}
                 </div>

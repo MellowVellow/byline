@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { Settings as SettingsIcon } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Highlight from '@tiptap/extension-highlight'
@@ -12,7 +13,7 @@ import ReviewDock from '../components/ReviewDock'
 import BootLoader from '../components/BootLoader'
 import Library from '../components/Library'
 import ExploreView from '../modes/explore/ExploreView'
-import { loadLibrary, saveLibrary, loadConversations, saveConversations, type LibraryEntry, type ExploreConversation } from '../data/mockLibrary'
+import { loadLibrary, saveLibrary, loadConversations, saveConversations, type LibraryEntry, type ExploreConversation, type ExploreSnapshot } from '../data/mockLibrary'
 import type { ResearchRow } from '../data/mockResearch'
 import { useGhostTriggers, findConnectives, connectiveAlternatives } from '../hooks/useGhostTriggers'
 import { classifyLine, ghostTriggerForState } from '../lib/sentence-state'
@@ -149,9 +150,12 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const ghostAbort = useRef<AbortController | null>(null)
   // Armed-delay state: trigger held 350ms to confirm a real pause before firing
   const ghostArmed = useRef<{ key: string; at: number } | null>(null)
-  // Idle-poll memo: skip textBetween + trigger evaluation when idle
-  const lastPoll = useRef({ rev: -1, from: -1 })
-  const GHOST_ARM_MS = 350
+  // Idle-poll memo: cache the expensive textBetween snapshots (full text per
+  // revision, caret offset per caret move) — the time-based trigger logic
+  // below must still run on EVERY tick, since pause thresholds elapse while
+  // nothing moves.
+  const lastPoll = useRef({ rev: -1, from: -1, full: '', textCaret: 0 })
+  const GHOST_ARM_MS = 150
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
 
   useEffect(() => {
@@ -257,7 +261,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const [exploreKey, setExploreKey] = useState(0)
   const [savedResearchIds, setSavedResearchIds] = useState<Set<number>>(new Set())
   const [connBar, setConnBar] = useState<{ why: string; opts: Array<{ label: string; apply: () => void }> } | null>(null)
-  const [slowMs, setSlowMs] = useState(700)
+  const [slowMs, setSlowMs] = useState(350)
   const [longMs, setLongMs] = useState(2500)
   const ghostTriggers = useGhostTriggers(slowMs, longMs)
 
@@ -265,6 +269,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const editorScrollRef = useRef<HTMLDivElement>(null)
   // Ref to the right rail aside element so we can measure its actual rendered width
   const rightRailRef = useRef<HTMLElement>(null)
+  const leftRailRef = useRef<HTMLElement>(null)
 
   /**
    * Convert a raw viewport coordinate from TipTap / getBoundingClientRect into a
@@ -274,14 +279,18 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
    */
   const safePosFixed = useCallback(
     (viewportLeft: number, viewportBottom: number, popupW = 440, popupH = 300) => {
-      // Measure the right rail's actual left edge from the DOM for accurate clamping.
+      // Measure both rails' actual edges from the DOM for accurate clamping.
       // Pure clamp — never scrolls the container (scroll-locking the viewport while
       // a popup is open trapped the user at the popup area).
       const rightRailLeft = rightRailRef.current
         ? rightRailRef.current.getBoundingClientRect().left
         : window.innerWidth - (rightOpen ? 318 : 52)
+      const leftRailRight = leftRailRef.current
+        ? leftRailRef.current.getBoundingClientRect().right
+        : 16
       const maxRight = rightRailLeft - 16
-      const x = Math.max(16, Math.min(viewportLeft, maxRight - popupW))
+      const minLeft = leftRailRight + 16
+      const x = Math.max(minLeft, Math.min(viewportLeft, maxRight - popupW))
       return { x, y: viewportBottom + 8 }
     },
     [rightOpen]
@@ -432,8 +441,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
           })
           setSelectionContext(null)
           setHighlightedFindingId(matched[0].id)
-          blip('select')
-        }
+    blip('select')
+  }
       }
     }
     dom.addEventListener('click', onClick)
@@ -522,7 +531,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       const out = { ...EMPTY_GHOST } as GhostGroups
       for (const [lv, ag] of fmt) {
         const list = Array.isArray(res.levels[lv]) ? res.levels[lv] : []
-        out[lv] = list.map((s: string) => formatSuggestionText(s, ag)).filter(Boolean).slice(0, 3)
+        // Backend prefetches LEVELS_N per level (shown + instant reroll alts)
+        out[lv] = list.map((s: string) => formatSuggestionText(s, ag)).filter(Boolean).slice(0, 6)
       }
       if (GHOST_LEVELS.some(l => out[l].length > 0)) return out
     }
@@ -539,6 +549,21 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const handleRequestGhost = async (opts?: { isAuto?: boolean; isReroll?: boolean }) => {
     if (!editor || !editor.view) return
     if (opts?.isReroll) {
+      // Instant reroll: the first call prefetched alternates per level, so just
+      // advance to the next prefetched option — zero network. Only when the
+      // prefetched pool wraps do we fall through to a network refetch (avoid).
+      const cur = ghostGroups[ghostLv] || []
+      if (cur.length > 1) {
+        const next = (ghostIdx + 1) % cur.length
+        if (next !== 0) {
+          setGhostIdx(next)
+          lastGhostRef.current = { groups: ghostGroups, lv: ghostLv, idx: next }
+          saveLastGhost({ groups: ghostGroups, lv: ghostLv, idx: next })
+          showInlineGhost(ghostGroups, ghostLv, next)
+          blip('select')
+          return
+        }
+      }
       rerollCountRef.current += 1
     }
     // Request identity + abort: a newer keystroke/request cancels the in-flight
@@ -564,7 +589,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     try {
       // Text-only prompt, one call: backend returns all four levels, app parses.
       // Rerolls bypass cache via `avoid`; fresh/auto requests reuse 5min cache.
-      const avoid = opts?.isReroll ? GHOST_LEVELS.flatMap(l => ghostGroups[l]) : undefined
+      const avoid = opts?.isReroll ? GHOST_LEVELS.flatMap(l => ghostGroups[l]).slice(0, 24) : undefined
       const cacheKey = opts?.isReroll
         ? null
         : 'ghost:' + hashKey([appSettings.writingTheme, cursorCtx.before.slice(-400), cursorCtx.after.slice(0, 200)])
@@ -592,11 +617,13 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
 
       const groups = parseGhostGroups(res)
       // Auto triggers may carry a completion-state bias; manual triggers use the assist default.
+      // Rerolls stay on the currently selected level when it has fresh options.
       // Fall back to the default when the biased level came back empty.
       const biased = pendingGhostBias.current
       pendingGhostBias.current = null
       let lv = defaultGhostLv(assistLevel)
-      if (biased && (groups[biased] || []).length > 0) lv = biased
+      if (opts?.isReroll && (groups[ghostLv] || []).length > 0) lv = ghostLv
+      else if (biased && (groups[biased] || []).length > 0) lv = biased
       setGhostGroups(groups)
       setGhostLv(lv)
       setGhostIdx(0)
@@ -615,7 +642,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       const biased = pendingGhostBias.current
       pendingGhostBias.current = null
       let lv = defaultGhostLv(assistLevel)
-      if (biased && (groups[biased] || []).length > 0) lv = biased
+      if (opts?.isReroll && (groups[ghostLv] || []).length > 0) lv = ghostLv
+      else if (biased && (groups[biased] || []).length > 0) lv = biased
       setGhostGroups(groups)
       setGhostLv(lv)
       setGhostIdx(0)
@@ -659,8 +687,9 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     setSuggestPopupPos(safePosFixed(coords.left, coords.bottom, 440, 220))
   }
 
-  // V4 dual-threshold ghost triggers (feel-test): slow 700ms end-zone ghost,
-  // long 2500ms between-sentence connective + burst phrase. 100ms tick.
+  // V4 dual-threshold ghost triggers: slow ~350ms pause-anywhere ghost
+  // (+150ms arm ≈ 500ms total), long 2500ms between-sentence connective
+  // + burst phrase. 100ms tick.
   useEffect(() => {
     // Feed keystroke into burst/sentence tracking (feel-test input handler).
     // NOTE: ProseMirror offsets include node overhead, so convert to a text-space
@@ -710,32 +739,44 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         if (draftLoadingRef.current) return
         const { empty, from } = editor.state.selection as { empty: boolean; from: number; to: number }
         if (!empty) return
-        // Idle gate: skip the expensive textBetween + evaluate when neither
-        // the document nor the caret moved since the last poll.
+        // Snapshot cache: full text is O(doc) so refresh it only when the
+        // revision changed; the caret slice only on caret moves. Trigger
+        // evaluation keeps running every tick regardless.
         const lp = lastPoll.current
-        if (lp.rev === docRevisionRef.current && lp.from === from) return
-        lp.rev = docRevisionRef.current
-        lp.from = from
+        const rev = docRevisionRef.current
+        if (lp.rev !== rev) {
+          lp.full = editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n\n')
+          lp.rev = rev
+          lp.from = -1
+        }
+        if (lp.from !== from) {
+          // Convert PM offset → text offset (see note above)
+          lp.textCaret = Math.min(editor.state.doc.textBetween(0, from, '\n\n').length, lp.full.length)
+          lp.from = from
+        }
         // Skip while a ghost popup or inline ghost is already visible
         const groups = ghostGroupsRef.current
         const ghostEmpty = GHOST_LEVELS.every(l => groups[l].length === 0)
         if (!ghostEmpty || anchorStore.ghost) return
-        const full = editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n\n')
-        // Convert PM offset → text offset (see note above)
-        const textCaret = Math.min(editor.state.doc.textBetween(0, from, '\n\n').length, full.length)
-        // Completion-state gate: classify the caret line (up to the caret) so the
-        // trigger respects sentence state — NA/Empty suppress, Complete/Open bias level.
+        const full = lp.full
+        const textCaret = lp.textCaret
+        // Completion-state gate: pause-anywhere means an Empty caret line (blank
+        // paragraph) still fires when the doc has content elsewhere — only code
+        // fences (NA) and a near-empty doc suppress. Complete/Open bias level.
         const lineStart = full.lastIndexOf('\n', Math.max(0, textCaret - 1)) + 1
         const caretLine = full.slice(lineStart, textCaret)
         const prevLineStart = full.lastIndexOf('\n', Math.max(0, lineStart - 2)) + 1
         const prevLine = full.slice(prevLineStart, Math.max(0, lineStart - 1))
         const inFence = (full.slice(0, lineStart).match(/^\s*```/gm) || []).length % 2 === 1
-        const gate = ghostTriggerForState(classifyLine(caretLine, 'doc', prevLine, inFence).state)
+        const cls = classifyLine(caretLine, 'doc', prevLine, inFence)
+        const gate = cls.state === 'Empty'
+          ? { suppress: full.trim().length <= 8, bias: null as null }
+          : ghostTriggerForState(cls.state)
         const t = ghostTriggers.evaluate(full, textCaret, textCaret)
         if (t.ghost && !gate.suppress) {
           const before = editor.state.doc.textBetween(Math.max(0, from - 200), from)
-          if (before.trim().length >= 4) {
-            // 350ms armed delay: confirm a real pause before firing. A keystroke
+          if (before.trim().length >= 2) {
+            // 150ms armed delay: confirm a real pause before firing. A keystroke
             // inside the window disarms (counted as a debounce-saved call).
             const key = `${textCaret}|${before.slice(-24)}`
             const now = performance.now()
@@ -835,6 +876,13 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     if (editor) syncGhost(editor)
     setGhostGroups(EMPTY_GHOST)
     setSuggestPopupPos(null)
+    // Require a fresh pause before the next auto-fire (no instant loop),
+    // but allow refire without typing — dismiss + pause again suggests again.
+    ghostArmed.current = null
+    try {
+      ghostTriggers.ref.current.fired = {}
+      ghostTriggers.touch()
+    } catch { /* ignore */ }
   }
 
   // --- SELECTION GRID (Synonyms / Paraphrase / Tone, one call, app parses) ---
@@ -890,9 +938,11 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   }
 
   const stubSelGrid = (sel: string): SelGrid => {
-    const w = (sel || 'word').trim() || 'word'
+    // Cap offline-fallback cells so long drag-selections don't blow up the popup.
+    const cap = (s: string, n = 120) => (s.length > n ? s.slice(0, n).trimEnd() + '…' : s)
+    const w = cap((sel || 'word').trim() || 'word')
     const words = w.split(/\s+/)
-    const half = words.slice(0, Math.max(1, Math.floor(words.length / 2))).join(' ') || w
+    const half = cap(words.slice(0, Math.max(1, Math.floor(words.length / 2))).join(' ') || w)
     return {
       Synonyms: [w],
       Paraphrase: [half, `in other words, ${half.toLowerCase()}`, `${half} — put plainly`],
@@ -903,8 +953,9 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const requestSelGrid = async () => {
     if (!editor || !selectionContext) return
     const { selectedText, from } = selectionContext
-    const words = selectedText.trim().split(/\s+/)
-    if (selectedText.trim().length < 2 || words.length > 12) return
+    // Any length: drag-select of any size triggers paraphrase/synonyms.
+    // Backend payload truncated to 500 chars; full text kept for replacement.
+    if (selectedText.trim().length < 2) return
     setSelLoading(true)
     try {
       const before = editor.state.doc.textBetween(Math.max(0, from - 300), from, '\n')
@@ -912,7 +963,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       const cachedSel = cacheGet<any>(selKey)
       const res = cachedSel ?? await api.synonyms({
         level: appSettings.writingTheme || 'General',
-        word: selectedText.trim(),
+        word: selectedText.trim().slice(0, 500),
         sentence: before,
       })
       if (!cachedSel && res) cacheSet(selKey, res)
@@ -959,7 +1010,10 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     setSelGrid(EMPTY_GRID)
   }
 
-  // Debounced selection-grid fetch (feel-test: 350ms after selection settles)
+  // Debounced selection-grid fetch: any drag-select (any length >= 2 chars)
+  // triggers paraphrase/synonyms. Loading shows immediately so drags feel
+  // instant; fetch fires 150ms after selection settles. Mouseup flushes
+  // pending debounces so release → popup without waiting.
   useEffect(() => {
     if (selTimerRef.current) window.clearTimeout(selTimerRef.current)
     if (!selectionContext || selectionContext.selectedText.trim().length < 2) {
@@ -972,8 +1026,21 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     anchorStore.ghost = ''
     if (editor) syncGhost(editor)
     setSuggestPopupPos(null)
-    selTimerRef.current = window.setTimeout(() => { void requestSelGrid() }, 350)
-    return () => { if (selTimerRef.current) window.clearTimeout(selTimerRef.current) }
+    // Immediate shimmer: popup renders in loading state during debounce/fetch
+    setSelLoading(true)
+    selTimerRef.current = window.setTimeout(() => { void requestSelGrid() }, 150)
+    const flushOnMouseUp = () => {
+      if (selTimerRef.current) {
+        window.clearTimeout(selTimerRef.current)
+        selTimerRef.current = null
+        void requestSelGrid()
+      }
+    }
+    window.addEventListener('mouseup', flushOnMouseUp)
+    return () => {
+      if (selTimerRef.current) window.clearTimeout(selTimerRef.current)
+      window.removeEventListener('mouseup', flushOnMouseUp)
+    }
   }, [selectionContext]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle inline review popup actions (Edit mode)
@@ -1382,15 +1449,20 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     }
   }
 
-  const handleExploreComplete = (query: string) => {
+  const handleExploreComplete = (query: string, snapshot?: ExploreSnapshot) => {
     const q = query.trim() || 'Untitled question'
     setConversations(prev => {
       if (prev.some(c => c.query === q)) {
         const existing = prev.find(c => c.query === q)!
         setActiveConversationId(existing.id)
+        if (snapshot) {
+          const next = prev.map(c => c.id === existing.id ? { ...c, snapshot } : c)
+          saveConversations(next)
+          return next
+        }
         return prev
       }
-      const entry: ExploreConversation = { id: `conv-${Date.now()}`, query: q, createdAt: Date.now() }
+      const entry: ExploreConversation = { id: `conv-${Date.now()}`, query: q, createdAt: Date.now(), snapshot }
       const next = [entry, ...prev].slice(0, 30)
       saveConversations(next)
       setActiveConversationId(entry.id)
@@ -1437,6 +1509,15 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       return n
     })
     blip('select')
+  }
+
+  const handleRemoveLibraryEntry = (id: string) => {
+    setLibrary(lib => {
+      const next = lib.filter(e => e.id !== id)
+      saveLibrary(next)
+      return next
+    })
+    if (activeLibraryId === id) setActiveLibraryId(null)
   }
 
   const handleModeChange = (newMode: AppMode) => {
@@ -1548,6 +1629,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         {/* Left Rail: Library — persistent across all modes. Desktop only */}
         {!isMobile && (
           <aside
+            ref={leftRailRef}
             className="rail"
             style={{
               height: '100%',
@@ -1571,6 +1653,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
                 onToggleCollapse={() => setLeftOpen(false)}
                 onOpenSettings={() => setSettingsOpen(true)}
                 onOpenHelp={() => setTutorialOpen(true)}
+                onRemoveEntry={handleRemoveLibraryEntry}
               />
             ) : (
               <div className="rail-strip" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 0' }}>
@@ -1589,6 +1672,15 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
                   style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--ai)' }}
                 >
                   L
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { blip('open'); setSettingsOpen(true) }}
+                  title="Settings"
+                  aria-label="Open settings"
+                  style={{ width: 30, height: 30, padding: 0, display: 'grid', placeItems: 'center', color: 'var(--muted)' }}
+                >
+                  <SettingsIcon size={15} strokeWidth={1.8} />
                 </button>
               </div>
             )}
@@ -1706,18 +1798,20 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
             </button>
           )}
 
-          {mode === 'explore' ? (
-            <div ref={editorScrollRef} style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-              <ExploreView
-                key={`${activeConversationId ?? 'new'}-${exploreKey}`}
-                onSaveToLibrary={handleSaveResearch}
-                savedIds={savedResearchIds}
-                initialQuery={conversations.find(c => c.id === activeConversationId)?.query}
-                startAtResults={activeConversationId != null}
-                onExploreComplete={handleExploreComplete}
-              />
-            </div>
-          ) : (
+          {/* Explore stays mounted when inactive so an in-flight run (prompt,
+              loading steps, SSE stream) survives mode switches. */}
+          <div ref={editorScrollRef} style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: mode === 'explore' ? undefined : 'none' }}>
+            <ExploreView
+              key={`${activeConversationId ?? 'new'}-${exploreKey}`}
+              onSaveToLibrary={handleSaveResearch}
+              savedIds={savedResearchIds}
+              initialQuery={conversations.find(c => c.id === activeConversationId)?.query}
+              startAtResults={activeConversationId != null}
+              initialSnapshot={conversations.find(c => c.id === activeConversationId)?.snapshot}
+              onExploreComplete={handleExploreComplete}
+            />
+          </div>
+          {mode !== 'explore' && (
           <>
           {mode === 'drafting' && (
             <div style={{ padding: '12px 24px 0' }}>

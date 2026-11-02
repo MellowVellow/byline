@@ -30,7 +30,7 @@ export function getSfxInstrument(): SfxInstrument {
   if (saved === 'sine' || saved === 'square' || saved === 'sawtooth' || saved === 'triangle') {
     return saved
   }
-  return 'triangle'
+  return 'sine'
 }
 
 export function setSfxInstrument(inst: SfxInstrument) {

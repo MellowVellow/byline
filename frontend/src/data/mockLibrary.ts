@@ -14,21 +14,26 @@ export interface LibraryEntry {
 
 const KEY = 'byline.library.entries'
 
-export const DEFAULT_LIBRARY: LibraryEntry[] = [
-  { id: 'lib-1', title: 'Does AI reduce creativity?', kind: 'explore', detail: '12 findings · 4 supported', createdAt: Date.now() - 86400000 },
-  { id: 'lib-2', title: 'Doshi & Hauser (2024) — Science Advances', kind: 'source', detail: 'Peer-reviewed · primary', createdAt: Date.now() - 82000000 },
-  { id: 'lib-3', title: 'Cognitive debt — define on first use', kind: 'idea', detail: 'Terminology', createdAt: Date.now() - 40000000 },
-]
+/** No seeded rows: the Saved collection starts empty and holds only rows
+ *  the user explicitly saves from Explore. */
+export const DEFAULT_LIBRARY: LibraryEntry[] = []
+
+/** Ids of the retired static seed rows — purged from old stored libraries. */
+const RETIRED_SEED_IDS = new Set(['lib-1', 'lib-2', 'lib-3'])
 
 export function loadLibrary(): LibraryEntry[] {
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      if (Array.isArray(parsed)) {
+        const live = parsed.filter(e => e && typeof e.id === 'string' && !RETIRED_SEED_IDS.has(e.id))
+        if (live.length !== parsed.length) saveLibrary(live)
+        return live
+      }
     }
   } catch {}
-  return DEFAULT_LIBRARY
+  return []
 }
 
 export function saveLibrary(entries: LibraryEntry[]) {
@@ -38,10 +43,22 @@ export function saveLibrary(entries: LibraryEntry[]) {
 }
 
 /** Explore conversation: one question plus its own summary + table snapshot. */
+import type { ResearchRow, SourceRecord } from './mockResearch'
+
+export interface ExploreSnapshot {
+  rows: ResearchRow[]
+  src: Record<string, SourceRecord>
+  summary: string | null
+  model: string | null
+  savedAt: number
+}
+
 export interface ExploreConversation {
   id: string
   query: string
   createdAt: number
+  /** Live results snapshot — rendered on reopen instead of static sample rows. */
+  snapshot?: ExploreSnapshot
 }
 
 const CONV_KEY = 'byline.explore.conversations'

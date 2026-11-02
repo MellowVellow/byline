@@ -2,6 +2,14 @@ import React from 'react'
 
 export type GhostLevel = 'cue' | 'question' | 'fragment' | 'sentence'
 export const GHOST_LEVELS: GhostLevel[] = ['cue', 'question', 'fragment', 'sentence']
+/** Display labels for ghost levels, shared by the popup tabs and the top-bar
+ *  Completion Level picker so both read cue/question/fragment/sentence. */
+export const GHOST_LABELS: Record<GhostLevel, string> = {
+  cue: 'cue',
+  question: 'question',
+  fragment: 'fragment',
+  sentence: 'sentence',
+}
 export type SelCol = 'Synonyms' | 'Paraphrase' | 'Tone'
 export const SEL_COLS: SelCol[] = ['Synonyms', 'Paraphrase', 'Tone']
 
@@ -125,7 +133,7 @@ export default function CaretPopup({
                 }}
               >
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ai)' }}>{i + 1}</span>
-                {l}
+                {GHOST_LABELS[l]}
               </div>
             ))}
           </div>
