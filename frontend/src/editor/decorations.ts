@@ -7,31 +7,6 @@ export const anchorStore: { anchors: Anchor[]; ranges: Map<string, { from: numbe
   { anchors: [], ranges: new Map(), ghost: '', ghostPos: 0, linkedId: null }
 export type EditorMode = 'drafting' | 'editing'
 export const modeStore: { mode: EditorMode } = { mode: 'drafting' }
-export const lintStore: { results: any[]; ranges: Map<string, { from: number; to: number }>; activeUid: string | null } =
-  { results: [], ranges: new Map(), activeUid: null }
-const lintKey = new PluginKey('byline-lint')
-const LINT_PRIO: Record<string, number> = { violet: 0, amber: 1, rose: 2, green: 3, cyan: 4 }
-function buildLint(doc: any): Decoration[] {
-  if (modeStore.mode !== 'editing') return []
-  const ordered = [...lintStore.results].sort((a, b) => (LINT_PRIO[a.color_category] ?? 9) - (LINT_PRIO[b.color_category] ?? 9))
-  const decos: Decoration[] = []; const taken: { from: number; to: number }[] = []
-  for (const r of ordered) {
-    const range = lintStore.ranges.get(r.uid)
-    if (!range || range.to > doc.content.size) continue
-    const overlaps = lintStore.results.filter(x => { const q = lintStore.ranges.get(x.uid); return q && q.from < range.to && range.from < q.to }).length
-    for (const seg of subtractRange(range, taken)) {
-      decos.push(Decoration.inline(seg.from, seg.to, { class: `linter-highlight linter-${r.color_category}${lintStore.activeUid === r.uid ? ' linter-active' : ''}`, 'data-lint-uid': r.uid }))
-      if (overlaps > 1) {
-        const badge = document.createElement('span'); badge.className = 'lint-badge'; badge.textContent = String(overlaps)
-        decos.push(Decoration.widget(seg.to, badge, { side: 1 }))
-      }
-    }
-    taken.push(range)
-  }
-  return decos
-}
-export function syncLint(editor: any) { if (editor?.view) editor.view.dispatch(editor.state.tr.setMeta(lintKey, { rebuild: true })) }
-
 const anchorKey = new PluginKey('byline-anchors')
 const ghostKey = new PluginKey('byline-ghost')
 
@@ -51,14 +26,12 @@ export function subtractRange(r: { from: number; to: number }, taken: { from: nu
   return segs.filter(s => s.to > s.from)
 }
 
+// Underline palette: purple reader, red grammar, blue explore.
 const KIND_COLORS: Record<string, string> = {
-  grammar: 'var(--lt)',
   reader: 'var(--ai)',
-  vocabulary: 'var(--yellow)',
-  claim: 'var(--blue)',
-  supervisor: 'var(--yellow)',
   reaction: 'var(--ai)',
-  relevance: 'var(--lt)',
+  grammar: 'var(--lt)',
+  explore: 'var(--explore, var(--blue))',
 }
 
 function groupOverlapping(anchors: Array<{ id: string; kind: string; from: number; to: number }>): Array<{ items: typeof anchors; from: number; to: number }> {
@@ -102,10 +75,12 @@ function buildAnchors(doc: any): Decoration[] {
     if (g.items.length === 1) {
       const a = g.items[0]
       const color = KIND_COLORS[a.kind] || 'var(--lt)'
+      // Grammar underlines are wavy red (Harper feel); reader underlines stay solid.
+      const wavy = a.kind === 'grammar' ? ' text-decoration-style: wavy;' : ''
       decos.push(Decoration.inline(g.from, g.to, {
         class: `anch anch-${a.kind}${anchorStore.linkedId === a.id ? ' anch-linked' : ''}`,
         'data-anchor-id': a.id,
-        style: `text-decoration-line: underline; text-decoration-color: ${color}; text-decoration-thickness: 2px; text-underline-offset: 3px; border-radius: 2px;`,
+        style: `text-decoration-line: underline;${wavy} text-decoration-color: ${color}; text-decoration-thickness: 2px; text-underline-offset: 3px; border-radius: 2px;`,
       }))
     } else {
       // Multiple overlapping anchors on same range -> merged gradient underline
@@ -146,6 +121,11 @@ function buildFlash(doc: any): Decoration[] {
 const popKey = new PluginKey('byline-grammar-pop')
 export const popStore: { pops: Array<{ id: string; from: number; to: number; expireAt: number }> } = { pops: [] }
 
+// Red wavy underlines shown DURING the pre-fix hold so the writer sees
+// exactly which text is about to be auto-fixed. Cleared when fixes apply.
+const holdKey = new PluginKey('byline-grammar-hold')
+export const holdStore: { holds: Array<{ id: string; from: number; to: number }> } = { holds: [] }
+
 function buildPops(doc: any): Decoration[] {
   const now = Date.now()
   popStore.pops = popStore.pops.filter(p => p.expireAt > now)
@@ -153,6 +133,16 @@ function buildPops(doc: any): Decoration[] {
   for (const p of popStore.pops) {
     if (p.to <= doc.content.size && p.from < p.to) {
       decos.push(Decoration.inline(p.from, p.to, { class: 'grammar-auto-pop' }))
+    }
+  }
+  return decos
+}
+
+function buildHolds(doc: any): Decoration[] {
+  const decos: Decoration[] = []
+  for (const h of holdStore.holds) {
+    if (h.to <= doc.content.size && h.from < h.to) {
+      decos.push(Decoration.inline(h.from, h.to, { class: 'grammar-hold-mark' }))
     }
   }
   return decos
@@ -175,6 +165,9 @@ export function syncFlash(editor: any) {
 export function syncPops(editor: any) {
   if (editor?.view) editor.view.dispatch(editor.state.tr.setMeta(popKey, { rebuild: true }))
 }
+export function syncHolds(editor: any) {
+  if (editor?.view) editor.view.dispatch(editor.state.tr.setMeta(holdKey, { rebuild: true }))
+}
 
 export const AnchorDecorations = Extension.create({
   name: 'anchorDecorations',
@@ -190,14 +183,6 @@ export const AnchorDecorations = Extension.create({
           },
         },
         props: { decorations: (state) => anchorKey.getState(state) },
-      }),
-      new Plugin({
-        key: lintKey,
-        state: {
-          init: (_cfg, state) => DecorationSet.create(state.doc, buildLint(state.doc)),
-          apply: (tr, set) => { const mapped = set.map(tr.mapping, tr.doc); return tr.getMeta(lintKey)?.rebuild ? DecorationSet.create(tr.doc, buildLint(tr.doc)) : mapped },
-        },
-        props: { decorations: (state) => lintKey.getState(state) },
       }),
       new Plugin({
         key: ghostKey,
@@ -231,6 +216,17 @@ export const AnchorDecorations = Extension.create({
           },
         },
         props: { decorations: (state) => popKey.getState(state) },
+      }),
+      new Plugin({
+        key: holdKey,
+        state: {
+          init: (_cfg, state) => DecorationSet.create(state.doc, buildHolds(state.doc)),
+          apply: (tr, set) => {
+            const mapped = set.map(tr.mapping, tr.doc)
+            return tr.getMeta(holdKey)?.rebuild ? DecorationSet.create(tr.doc, buildHolds(tr.doc)) : mapped
+          },
+        },
+        props: { decorations: (state) => holdKey.getState(state) },
       }),
     ]
   },

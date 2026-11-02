@@ -1,10 +1,15 @@
-from fastapi import APIRouter, UploadFile, File
-import asyncio, httpx, json
+from fastapi import APIRouter, UploadFile, File, Query
+import asyncio
+import httpx
+import json
+import time
+from fastapi.responses import StreamingResponse
 from .. import llm, prompts, citations
 from ..config import settings
-from ..models import TextIn, ResearchIn, CiteIn, BiblioIn
+from ..models import TextIn, ResearchIn, ExploreIn, CiteIn, BiblioIn
 from ..quote import filter_anchored
 from ..security import is_safe_public_url
+from ..services.explore_service import run_explore, MAX_SOURCES
 from .common import ok, fail, err, meta
 
 router = APIRouter()
@@ -26,6 +31,9 @@ async def _readings_for_claim(c: dict) -> list:
             tools=[{"type": "web_search", "search_context_size": "medium"}], include=["web_search_call.results"], max_output_tokens=900)
     except Exception:
         return []
+    if r.get("mock"):
+        # Offline mock must never surface as a citable source.
+        return []
     answer = (r.get("text") or "").strip()
     verdict, summary = parse_verdict(answer)
     seen = set(); out = []
@@ -35,6 +43,7 @@ async def _readings_for_claim(c: dict) -> list:
     for res in srcs:
         url = res.get("url", "")
         if not url or url in seen or not url.startswith(("http://", "https://")): continue
+        if "mock.local" in url or "example.org/writing-study" in url: continue
         seen.add(url)
         from urllib.parse import urlparse as _up
         out.append({"title": res.get("title", "") or url, "url": url, "label": verdict, "verdict": verdict,
@@ -64,14 +73,19 @@ async def research(body: ResearchIn):
                 {"type": "input_text", "text": f"{body.question} Extract structured facts as JSON per schema. locator = page number if known."},
                 {"type": "input_file", "file_url": url}]}],
                 instructions=prompts.FACTS_SYSTEM, text_format=llm.FACTS_FORMAT, max_output_tokens=1800)
+            if r.get("mock"):
+                return ok(facts=[], model=r.get("model", ""), usage=r.get("usage"), mock=True, offline=True)
             facts = llm.extract_json(r["text"]).get("facts", []) if r.get("text") else []
         else:
             r = await llm.responses_call(f"Research this source for my writing: {url}\nQuestion: {body.question}\nOpen/search the source, then extract structured facts as JSON per schema.",
                 instructions=prompts.FACTS_SYSTEM, tools=[{"type": "web_search", "search_context_size": "high"}], include=["web_search_call.results"], text_format=llm.FACTS_FORMAT, max_output_tokens=1800)
+            if r.get("mock"):
+                return ok(facts=[], model=r.get("model", ""), usage=r.get("usage"), mock=True, offline=True)
             facts = llm.extract_json(r["text"]).get("facts", []) if r.get("text") else []
             if not facts and r.get("text"):
                 facts = [{"fact": r["text"][:400], "source_title": url, "url": url, "locator": "web", "excerpt": r["text"][:240]}]
         for f in facts: f.setdefault("url", url)
+        facts = [f for f in facts if "mock.local" not in str(f.get("url", ""))]
         return ok(facts=facts[:12], model=r.get("model", ""), usage=r.get("usage"))
 
     except Exception as e: return err(e)
@@ -109,6 +123,68 @@ async def research_upload(file: UploadFile = File(...), question: str = "Extract
         for f in facts: f.setdefault("source_title", file.filename or "upload")
         return ok(facts=facts[:12], file_id=fid, model=r.get("model", ""))
     except Exception as e: return err(e)
+
+@router.post("/api/explore")
+async def explore(body: ExploreIn):
+    """Orchestrated Explore: plan → search → fetch → evaluate → findings → synthesize."""
+    query = (body.query or "").strip()
+    if not query:
+        return fail(error="empty query")
+    t0 = time.perf_counter()
+    count = max(1, min(MAX_SOURCES, body.count or MAX_SOURCES))
+    try:
+        r = await run_explore(query, body.context or "", count)
+        return ok(query=query, findings=r["findings"], angles=r["angles"],
+                  summary=r["summary"], model=r["model"], usage=r["usage"],
+                  mock=r["mock"], offline=r["offline"], ms=r["ms"],
+                  meta=meta("explore", query, body.context, r["usage"], r["model"],
+                            (time.perf_counter() - t0) * 1000, 0.5, 1800))
+    except Exception as e:
+        return err(e)
+
+
+@router.get("/api/explore/stream")
+async def explore_stream(query: str = Query(default="", max_length=1000),
+                         context: str = Query(default="", max_length=4000),
+                         count: int = Query(default=8, ge=1, le=8)):
+    """SSE progress for orchestrator: stage|source|finding|done|error."""
+    q = (query or "").strip()
+    if not q:
+        async def _empty():
+            yield f"event: error\ndata: {json.dumps({'error': 'empty query'})}\n\n"
+        return StreamingResponse(_empty(), media_type="text/event-stream")
+
+    async def _gen():
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def _cb(event: str, data: dict):
+            await queue.put((event, data))
+
+        task = asyncio.create_task(run_explore(q, context or "", count, on_event=_cb))
+        try:
+            while True:
+                if task.done() and queue.empty():
+                    break
+                try:
+                    event, data = await asyncio.wait_for(queue.get(), timeout=20.0)
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+                    continue
+                yield f"event: {event}\ndata: {json.dumps(data)[:20000]}\n\n"
+                if event == "done":
+                    break
+            res = task.result() if task.done() else {}
+            if res.get("mock") or res.get("offline"):
+                yield f"event: offline\ndata: {json.dumps({'mock': True})}\n\n"
+        except Exception as e:  # noqa: BLE001
+            yield f"event: error\ndata: {json.dumps({'error': 'upstream_error'})}\n\n"
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(_gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
 
 @router.post("/api/cite")
 async def cite(body: CiteIn):

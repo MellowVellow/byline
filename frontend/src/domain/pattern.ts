@@ -23,6 +23,43 @@ export interface ConnectPattern {
 }
 
 export const CONNECT_PATTERNS: ConnectPattern[] = [
+  // 0. Sentence starters (1–3 word openers + one slot — one-tap insert)
+  {
+    id: 'pat-starter-however',
+    name: 'However',
+    category: 'Contrast',
+    template: 'However, [point].',
+    placeholders: ['point'],
+    rationale: 'Short contrast opener.',
+    example: 'However, the impact depends on how people use it.',
+  },
+  {
+    id: 'pat-starter-other-hand',
+    name: 'On the other hand',
+    category: 'Contrast',
+    template: 'On the other hand, [point].',
+    placeholders: ['point'],
+    rationale: 'Short two-sided contrast opener.',
+    example: 'On the other hand, supervised drafting keeps the writer in control.',
+  },
+  {
+    id: 'pat-starter-alternatively',
+    name: 'Alternatively',
+    category: 'Comparison',
+    template: 'Alternatively, [option].',
+    placeholders: ['option'],
+    rationale: 'Short alternative opener.',
+    example: 'Alternatively, a lighter review pass catches tone first.',
+  },
+  {
+    id: 'pat-starter-firstly',
+    name: 'Firstly',
+    category: 'Sequence',
+    template: 'Firstly, [step].',
+    placeholders: ['step'],
+    rationale: 'Short sequence opener.',
+    example: 'Firstly, gather the sources before drafting.',
+  },
   // 1. Contrast
   {
     id: 'pat-contrast-1',

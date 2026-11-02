@@ -122,6 +122,10 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
             <div style={{ fontSize: 11, color: 'var(--muted)' }}>
               {usage.suggestionsAccepted} of {usage.suggestionsOffered} suggestions accepted
             </div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+              {usage.ghostFired || 0} fired · {((usage.ghostCacheSaved || 0) + (usage.ghostAborted || 0) + (usage.ghostStaleDropped || 0) + (usage.ghostDebounceSaved || 0))} saved
+              (cache {usage.ghostCacheSaved || 0} · abort {usage.ghostAborted || 0} · stale {usage.ghostStaleDropped || 0} · debounce {usage.ghostDebounceSaved || 0})
+            </div>
             <div style={{ marginTop: 6, height: 4, background: 'var(--hover)', borderRadius: 2, overflow: 'hidden' }}>
               <div style={{ width: `${ghostAcceptRate}%`, height: '100%', background: 'var(--ai)' }} />
             </div>
@@ -286,11 +290,11 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
                     </thead>
                     <tbody>
                       {[
-                        { ep: '/api/suggest', persona: 'Ghost Drafting', model: 'Llama 3.3 70B', lat: '284ms', count: 22, ok: '100%' },
-                        { ep: '/api/grammar', persona: 'Language / Spelling', model: 'Harper WASM', lat: '18ms', count: 14, ok: '100%' },
+                        { ep: '/api/complete', persona: 'Ghost Drafting', model: 'Llama 3.3 70B', lat: '284ms', count: 22, ok: '100%' },
+                        { ep: 'harper-local-wasm', persona: 'Grammar Auto-fix', model: 'Harper WASM', lat: '18ms', count: 14, ok: '100%' },
                         { ep: '/api/reactions', persona: 'Reader Ambiguity', model: 'Llama 3.3 70B', lat: '540ms', count: 8, ok: '100%' },
-                        { ep: '/api/lint', persona: 'Supervisor Flow', model: 'Llama 3.1 8B', lat: '215ms', count: 5, ok: '100%' },
-                        { ep: '/api/readings', persona: 'Researcher Grounding', model: 'Llama 3.3 70B', lat: '890ms', count: 3, ok: '67%' },
+                        { ep: '/api/connect', persona: 'Connect Bridges', model: 'Llama 3.3 70B', lat: '312ms', count: 6, ok: '100%' },
+                        { ep: '/api/synonyms', persona: 'Paraphrase Options', model: 'Llama 3.3 70B', lat: '265ms', count: 9, ok: '100%' },
                       ].map(r => (
                         <tr key={r.ep}>
                           <td><code>{r.ep}</code></td>

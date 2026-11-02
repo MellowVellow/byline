@@ -1,5 +1,4 @@
 import type { Editor } from '@tiptap/react'
-import type { DocumentContext, OutlineNode, WritingProfile } from '../domain/document'
 
 export interface CursorContext {
   before: string
@@ -15,13 +14,6 @@ export interface SelectionContext {
   surroundingParagraph: string
   from: number
   to: number
-}
-
-export interface FullDocumentContext {
-  fullText: string
-  context: DocumentContext
-  outline: OutlineNode[]
-  profile: WritingProfile
 }
 
 export const contextService = {
@@ -65,18 +57,4 @@ export const contextService = {
     }
   },
 
-  getFullContext(
-    editor: Editor,
-    context: DocumentContext,
-    outline: OutlineNode[],
-    profile: WritingProfile
-  ): FullDocumentContext {
-    const fullText = editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n\n')
-    return {
-      fullText,
-      context,
-      outline,
-      profile,
-    }
-  },
 }

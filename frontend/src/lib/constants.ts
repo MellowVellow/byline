@@ -11,6 +11,7 @@ export const ASSIST_DESCRIPTIONS: Record<string, string> = {
 export const PERSONAS = ['Skeptical reader', 'Ordinary reader', 'Expert reader', 'Supportive friend']
 
 export const TRANSITIONS: Record<string, string[]> = {
+  'Quick starters': ['However, []', 'Alternatively, []', 'Firstly, []', 'Secondly, []', 'Finally, []', 'On the other hand, []', 'In addition, []', 'Nevertheless, []', 'Meanwhile, []', 'Instead, []'],
   'Introduction / framing': ['To begin with, []', 'Regarding [], ', 'In this context, []', 'This essay argues that []', 'Recent studies suggest that []'],
   'Addition / similarity': ['Furthermore, []', 'Moreover, []', 'Similarly, []', 'Likewise, []', 'In addition, []'],
   'Example / clarification': ['For example, []', 'Specifically, []', 'In other words, []', 'For instance, []', 'Evidence suggests that []'],

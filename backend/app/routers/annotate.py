@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from .. import llm, prompts
+from .. import llm, prompts, cache
 from ..models import TextIn, SynonymIn
 from ..quote import filter_anchored
 from ..services.annotate_service import enrich_alternatives
@@ -33,9 +33,15 @@ async def annotate(body: TextIn):
 @router.post("/api/reactions")
 async def reactions(body: TextIn):
     try:
+        ck = cache.key("reactions", body.level, body.text[:8000], body.persona)
+        hit = cache.get(ck)
+        if hit is not None:
+            return ok(reactions=hit, model="cache", usage={}, cached=True)
         s, u = prompts.reactions_prompt(body.context, body.level, body.text, body.persona)
         data, usage, model = await llm.json_call(s, u, max_tokens=1100, temperature=0.6)
-        return ok(reactions=filter_anchored(data.get("reactions", []), body.text), model=model, usage=usage, meta=meta("reactions", s, u, usage, model, 0, 0.6, 1100))
+        out = filter_anchored(data.get("reactions", []), body.text)
+        cache.set(ck, out)
+        return ok(reactions=out, model=model, usage=usage, meta=meta("reactions", s, u, usage, model, 0, 0.6, 1100))
     except Exception as e: return err(e)
 
 @router.post("/api/main-idea")
@@ -58,10 +64,26 @@ async def outline(body: TextIn):
 @router.post("/api/synonyms")
 async def synonyms(body: SynonymIn):
     try:
+        ck = cache.key("synonyms", body.level, (body.word or "").lower(), body.sentence[-300:])
+        hit = cache.get(ck)
+        if hit is not None:
+            return ok(synonyms=hit.get("synonyms", []), grid=hit.get("grid", {}), model="cache", usage={}, cached=True)
         s, u = prompts.synonyms_prompt(body.context, body.level, body.word, body.sentence)
-        data, usage, model = await llm.json_call(s, u, max_tokens=600, temperature=0.5)
+        data, usage, model = await llm.json_call(s, u, max_tokens=700, temperature=0.5)
+        def _col(key: str) -> list[str]:
+            seen = [w for w in data.get(key, []) if isinstance(w, str) and w.strip()]
+            if body.word:
+                seen = [w for w in seen if w.lower() != body.word.lower()]
+            return seen[:6]
+        grid = {"Synonyms": _col("Synonyms"), "Paraphrase": _col("Paraphrase"), "Tone": _col("Tone")}
         words = [w for w in data.get("synonyms", []) if isinstance(w, str) and w.strip()][:8]
         if body.sentence and body.word:
             words = [w for w in words if w.lower() != body.word.lower()]
-        return ok(synonyms=words, model=model, usage=usage, meta=meta("synonyms", s, u, usage, model, 0, 0.5, 600))
+        if not words:
+            # Backward-compatible flat list derived from the grid
+            for w in grid["Synonyms"] + grid["Paraphrase"] + grid["Tone"]:
+                if w not in words: words.append(w)
+                if len(words) >= 8: break
+        cache.set(ck, {"synonyms": words, "grid": grid})
+        return ok(synonyms=words, grid=grid, model=model, usage=usage, meta=meta("synonyms", s, u, usage, model, 0, 0.5, 700))
     except Exception as e: return err(e)

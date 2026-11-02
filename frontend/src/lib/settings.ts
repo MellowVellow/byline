@@ -14,6 +14,15 @@ export interface AppSettings {
   /** Dark-mode surface overrides (empty = follow theme.css). */
   uiBg: string
   uiPanel: string
+  /** Light-mode surface overrides (empty = follow theme.css). */
+  uiBgLight: string
+  uiPanelLight: string
+  /** Writing space + caret accents per preset. */
+  paper: string
+  paperLine: string
+  caret: string
+  btnBg: string
+  btnInk: string
   editorFont: EditorFont
   fontSize: number
   lineHeight: number
@@ -45,6 +54,13 @@ export interface ColorPreset {
   selection: string // Yellow / selection highlight
   uiBg: string      // Dark-mode UI background override
   uiPanel: string   // Dark-mode UI panel (rails) override
+  uiBgLight: string   // Light-mode UI background override
+  uiPanelLight: string // Light-mode UI panel (rails) override
+  paper: string     // Writing space (paper) background
+  paperLine: string // Writing space vertical margin line (--proof)
+  caret: string     // Caret / cursor accent
+  btnBg: string     // Primary button background
+  btnInk: string    // Primary button text
 }
 
 /** Color presets for logo, cards, and text marks */
@@ -60,6 +76,13 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     selection: '#F5E3B0',
     uiBg: '#0F1115',
     uiPanel: '#16181D',
+    uiBgLight: '#F8F9FA',
+    uiPanelLight: '#EFF1F4',
+    paper: '#FFFFFF',
+    paperLine: '#C0281F',
+    caret: '#6D3BE0',
+    btnBg: '#6D3BE0',
+    btnInk: '#FFFFFF',
   },
   oxford: {
     label: 'Oxford',
@@ -72,6 +95,13 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     selection: '#E0E7FF',
     uiBg: '#111420',
     uiPanel: '#181C28',
+    uiBgLight: '#F7F6F2',
+    uiPanelLight: '#ECE9E2',
+    paper: '#FFFDF8',
+    paperLine: '#B91C1C',
+    caret: '#4338CA',
+    btnBg: '#4338CA',
+    btnInk: '#FFFFFF',
   },
   glacier: {
     label: 'Glacier',
@@ -84,6 +114,13 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     selection: '#CFFAFE',
     uiBg: '#0E1418',
     uiPanel: '#162026',
+    uiBgLight: '#F4F8FA',
+    uiPanelLight: '#E6EFF3',
+    paper: '#FFFFFF',
+    paperLine: '#E11D48',
+    caret: '#0891B2',
+    btnBg: '#0891B2',
+    btnInk: '#FFFFFF',
   },
   verdant: {
     label: 'Verdant',
@@ -96,6 +133,13 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     selection: '#D1FAE5',
     uiBg: '#0E1512',
     uiPanel: '#16211B',
+    uiBgLight: '#F4F8F4',
+    uiPanelLight: '#E5EFE6',
+    paper: '#FFFFFF',
+    paperLine: '#DC2626',
+    caret: '#059669',
+    btnBg: '#059669',
+    btnInk: '#FFFFFF',
   },
   sunset: {
     label: 'Sunset',
@@ -108,6 +152,13 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     selection: '#FDE68A',
     uiBg: '#161210',
     uiPanel: '#211914',
+    uiBgLight: '#FAF6F2',
+    uiPanelLight: '#F1E8DE',
+    paper: '#FFFEFA',
+    paperLine: '#EA580C',
+    caret: '#C026D3',
+    btnBg: '#C026D3',
+    btnInk: '#FFFFFF',
   },
   monochrome: {
     label: 'Monochrome',
@@ -120,6 +171,13 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     selection: '#E4E4E7',
     uiBg: '#131313',
     uiPanel: '#1B1B1B',
+    uiBgLight: '#FAFAFA',
+    uiPanelLight: '#F0F0F0',
+    paper: '#FFFFFF',
+    paperLine: '#52525B',
+    caret: '#3F3F46',
+    btnBg: '#3F3F46',
+    btnInk: '#FFFFFF',
   },
 }
 
@@ -185,15 +243,34 @@ export function applySettings(s: AppSettings) {
   root.style.setProperty('--grey', s.suggest || COLOR_PRESETS.byline.suggest)
   root.style.setProperty('--link', s.selection)
 
+  // Surfaces: clear every mode-specific override first so toggling resolved
+  // theme never leaves stale cross-mode inline vars (the reported bug:
+  // dark --bg persisted after switching to light while --ink/--border
+  // flipped via theme.css). --ink/--border/--muted always come from
+  // theme.css and must never linger inline (clears legacy writes).
+  for (const k of ['--bg', '--dock', '--paper', '--proof', '--caret', 'caret-color',
+    '--btn-bg', '--btn-ink', '--ink', '--border', '--muted',
+    '--paper-0', '--paper-1', '--paper-2', '--ink-1', '--ink-2', '--ink-4', '--ink-5']) {
+    root.style.removeProperty(k)
+  }
+
   // Dark-mode surface overrides (light mode always follows theme.css)
   if (resolved === 'dark') {
     if (s.uiBg) root.style.setProperty('--bg', s.uiBg)
-    else root.style.removeProperty('--bg')
     if (s.uiPanel) root.style.setProperty('--dock', s.uiPanel)
-    else root.style.removeProperty('--dock')
+    // Dark keeps theme.css surfaces: never apply light paper/caret/buttons here.
   } else {
-    root.style.removeProperty('--bg')
-    root.style.removeProperty('--dock')
+    if (s.uiBgLight) root.style.setProperty('--bg', s.uiBgLight)
+    if (s.uiPanelLight) root.style.setProperty('--dock', s.uiPanelLight)
+    // Writing space, margin line, caret, buttons follow preset in light mode
+    if ((s as any).paper) root.style.setProperty('--paper', (s as any).paper)
+    if ((s as any).paperLine) root.style.setProperty('--proof', (s as any).paperLine)
+    if ((s as any).caret) {
+      root.style.setProperty('--caret', (s as any).caret)
+      root.style.setProperty('caret-color', (s as any).caret)
+    }
+    if ((s as any).btnBg) root.style.setProperty('--btn-bg', (s as any).btnBg)
+    if ((s as any).btnInk) root.style.setProperty('--btn-ink', (s as any).btnInk)
   }
 
   // Typography & document setup
@@ -227,7 +304,7 @@ export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
     { keys: '1 – 9', action: 'Accept grid cell', context: 'Grid open' },
     { keys: 'Tab', action: 'Accept first option', context: 'Options open' },
     { keys: 'Alt + R / `', action: 'List new options', context: 'Options open' },
-    { keys: 'Ctrl/⌘ .', action: 'Show last options', context: 'Editor' },
+    { keys: 'Ctrl/⌘ .', action: 'Show last suggestions (reopens after dismiss)', context: 'Editor' },
     { keys: 'Esc', action: 'Close options / clear selection', context: 'Options open' },
     { keys: 'Double-click word', action: 'Show synonyms for word', context: 'Editor' },
   ] },

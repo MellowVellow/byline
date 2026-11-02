@@ -132,7 +132,22 @@ export class HarperService {
         for (const lint of lints) {
           counter++
           const span = lint.span()
+          // Guard zero-length / out-of-range spans
+          if (span.end <= span.start || span.start < 0 || span.end > text.length) continue
           const problemText = lint.get_problem_text() || text.slice(span.start, span.end)
+          if (!problemText || !problemText.trim()) continue
+          // Guard single-char slices inside a larger word (Harper mis-slice
+          // that previously turned every letter into an i→I candidate)
+          if (problemText.length === 1) {
+            const prev = span.start > 0 ? text[span.start - 1] : ' '
+            const next = span.end < text.length ? text[span.end] : ' '
+            const isWordChar = (c: string) => /[A-Za-z0-9_]/.test(c)
+            if (isWordChar(prev) || isWordChar(next)) {
+              // Allow only standalone "i" / "a" capitalization
+              const isStandaloneI = problemText === 'i' && !isWordChar(prev) && !isWordChar(next)
+              if (!isStandaloneI) continue
+            }
+          }
           const category = lint.lint_kind_pretty() || lint.lint_kind() || 'Spelling'
           const message = lint.message() || `Language issue (${category})`
 
@@ -142,6 +157,8 @@ export class HarperService {
             rationale: category,
           }))
 
+          // Grammar findings: silent auto-fix records in Draft, red-underline
+          // review cards in Edit (never auto-fixed there).
           findings.push({
             id: `harper-${Date.now()}-${counter}-${Math.random().toString(36).slice(2, 6)}`,
             documentId: 'active-doc',

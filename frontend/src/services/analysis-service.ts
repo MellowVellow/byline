@@ -29,9 +29,44 @@ export class AnalysisService {
     this.notify()
   }
 
-  updateStatus(id: string, status: FindingStatus) {
-    this.findings = this.findings.map(f => (f.id === id ? { ...f, status } : f))
+  /** Replace all findings of one persona (e.g. refresh Harper underlines) without
+   * touching others. Dismissed/resolved verdicts survive by quoted-text match so a
+   * re-lint doesn't resurrect findings the writer already handled. */
+  replacePersona(persona: Persona, incoming: Finding[]) {
+    const keep = this.findings.filter(f => f.persona !== persona)
+    const oldStatus = new Map(
+      this.findings
+        .filter(f => f.persona === persona && f.status !== 'open' && f.status !== 'stale')
+        .map(f => [f.anchor.quotedText, f.status] as const)
+    )
+    const freshIds = new Set<string>()
+    const fresh = incoming.filter(f => {
+      if (freshIds.has(f.id)) return false
+      freshIds.add(f.id)
+      return true
+    }).map(f => {
+      const st = oldStatus.get(f.anchor.quotedText)
+      return st ? { ...f, status: st } : f
+    })
+    this.findings = [...keep, ...fresh]
     this.notify()
+  }
+
+  updateStatus(id: string, status: FindingStatus) {
+    // Resolved findings are deleted outright; stale stays greyed out.
+    if (status === 'resolved') {
+      this.findings = this.findings.filter(f => f.id !== id)
+    } else {
+      this.findings = this.findings.map(f => (f.id === id ? { ...f, status } : f))
+    }
+    this.notify()
+  }
+
+  /** Delete all resolved findings (they are removed, not listed). */
+  purgeResolved() {
+    const n = this.findings.length
+    this.findings = this.findings.filter(f => f.status !== 'resolved')
+    if (this.findings.length !== n) this.notify()
   }
 
   updateSuggestions(id: string, suggestions: Suggestion[]) {

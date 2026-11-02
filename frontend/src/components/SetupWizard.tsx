@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { blip, sfxAccept } from '../lib/sfx'
 
 export interface SetupWizardProps {
@@ -17,6 +17,25 @@ export default function SetupWizard({ isOpen, onClose, onComplete, initial = '' 
   const [what, setWhat] = useState('')
   const [who, setWho] = useState('')
   const [goal, setGoal] = useState('')
+
+  // Prefill fields from existing context note so reopening setup edits, not blanks
+  useEffect(() => {
+    if (!isOpen) return
+    const src = initial || ''
+    const pick = (re: RegExp) => {
+      const m = src.match(re)
+      return m ? m[1].trim() : ''
+    }
+    setWhat(pick(/Writing about:\s*(.+?)(?=\.\s*(?:Audience|Goal):|$)/is))
+    setWho(pick(/Audience:\s*(.+?)(?=\.\s*(?:Goal):|$|\.\s*$)/is))
+    setGoal(pick(/Goal:\s*(.+?)(?=\.\s*$|$)/is))
+    // If no labeled parts, put raw note into Topic so nothing is lost
+    if (src.trim() && !/Writing about:|Audience:|Goal:/i.test(src)) {
+      setWhat(src.trim())
+      setWho('')
+      setGoal('')
+    }
+  }, [isOpen, initial])
 
   if (!isOpen) return null
 

@@ -9,8 +9,28 @@ export interface ResolvedRange {
 }
 
 /**
- * Builds a character-level map from plain-text coordinates to ProseMirror document positions.
+ * Canonical plain-text separator. Must match every textBetween() call whose
+ * offsets feed Harper spans or TextAnchor offsets ('\n' single).
  */
+export const TEXT_SEP = '\n'
+
+function nearestMatch(fullText: string, quote: string, hintIdx: number | null): number {
+  if (hintIdx == null) return fullText.indexOf(quote)
+  let idx = fullText.indexOf(quote)
+  if (idx < 0) return -1
+  let best = idx
+  let bestDist = Math.abs(idx - hintIdx)
+  while (true) {
+    idx = fullText.indexOf(quote, idx + 1)
+    if (idx < 0) break
+    const d = Math.abs(idx - hintIdx)
+    if (d < bestDist) {
+      bestDist = d
+      best = idx
+    }
+  }
+  return best
+}
 export interface EditorTextMap {
   fullText: string
   posMap: number[] // index in fullText -> ProseMirror position
@@ -26,8 +46,8 @@ export function buildEditorTextMap(editor: Editor): EditorTextMap {
         chunks.push(node.text[i])
         posMap.push(pos + i)
       }
-    } else if (node.isBlock && chunks.length > 0 && chunks[chunks.length - 1] !== '\n') {
-      chunks.push('\n')
+    } else if (node.isBlock && chunks.length > 0 && chunks[chunks.length - 1] !== TEXT_SEP) {
+      chunks.push(TEXT_SEP)
       posMap.push(-1)
     }
   })
@@ -49,6 +69,27 @@ export function resolveAnchor(editor: Editor, anchor: TextAnchor): ResolvedRange
   const quote = anchor.quotedText.trim()
   if (!quote) return null
 
+  // 0. Offset-aware fast path (Harper spans): map text offsets directly to
+  // PM positions. Verifies quoted text to avoid fixing wrong ranges.
+  if (anchor.startOffset != null && anchor.endOffset != null && anchor.endOffset > anchor.startOffset) {
+    const len = anchor.endOffset - anchor.startOffset
+    if (anchor.startOffset >= 0 && anchor.endOffset <= posMap.length) {
+      const fromPos = posMap[anchor.startOffset]
+      const lastIdx = anchor.endOffset - 1
+      const toPos = posMap[lastIdx] != null && posMap[lastIdx] >= 0 ? posMap[lastIdx] + 1 : -1
+      if (fromPos >= 0 && toPos > fromPos) {
+        try {
+          const actualText = editor.state.doc.textBetween(fromPos, toPos)
+          // Exact or length-matched (Harper problem text may differ in case/trim)
+          if (actualText === anchor.quotedText || actualText.trim() === quote || actualText.length === len) {
+            return { from: fromPos, to: toPos, matchedText: actualText, confidence: 'exact' }
+          }
+        } catch { /* fall through to quote search */ }
+      }
+    }
+  }
+
+  const hint = anchor.startOffset ?? null
   let targetIdx = -1
   let confidence: 'exact' | 'contextual' = 'exact'
 
@@ -80,9 +121,10 @@ export function resolveAnchor(editor: Editor, anchor: TextAnchor): ResolvedRange
     }
   }
 
-  // 3. Exact unique match fallback
+  // 3. Quote match nearest to the original offset (not first in doc —
+  // first-match is what misapplied single-letter fixes like i→I).
   if (targetIdx < 0) {
-    const firstMatch = fullText.indexOf(quote)
+    const firstMatch = nearestMatch(fullText, quote, hint)
     if (firstMatch >= 0) {
       targetIdx = firstMatch
       confidence = 'contextual'

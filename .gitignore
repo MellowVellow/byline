@@ -42,7 +42,5 @@ dist/
 __pycache__/
 .pytest_cache/
 *.pyc
-# local reference copy + secrets-adjacent artifacts (never commit)
-/EXAMPLE/
 shot*.mjs
 frontend/shot*.mjs

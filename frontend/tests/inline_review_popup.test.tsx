@@ -8,29 +8,35 @@ import type { Finding } from '../src/domain/finding'
 describe('InlineReviewPopup in Edit Mode', () => {
   const sampleFindings: Finding[] = [
     {
-      id: 'f-grammar-1',
+      id: 'f-reader-1',
       documentId: 'doc-1',
-      persona: 'grammar',
-      kind: 'spelling',
+      persona: 'reader',
+      kind: 'reader_observation',
       anchor: { quotedText: 'interconnecting regional labor markets', documentRevision: 1 },
       explanation: 'Stylistic clarity: "connecting" or "linking" provides a cleaner verb form.',
       suggestions: [
         { id: 's-1', text: 'linking regional labor markets', rationale: 'Active verb' },
         { id: 's-2', text: 'connecting regional labor markets', rationale: 'Direct form' },
       ],
+      status: 'open',
+      sourceRevision: 1,
+      createdAt: 1,
     },
     {
-      id: 'f-reader-1',
+      id: 'f-reader-2',
       documentId: 'doc-1',
       persona: 'reader',
-      kind: 'tone_reaction',
+      kind: 'reader_observation',
       anchor: { quotedText: 'interconnecting regional labor markets', documentRevision: 1 },
       explanation: 'Reader perception: Jargon density feels heavy for a general audience.',
       suggestions: [],
+      status: 'open',
+      sourceRevision: 1,
+      createdAt: 2,
     },
   ]
 
-  it('renders fix suggestions when available with an Accept button', () => {
+  it('renders fix suggestions feel-test compact with keybind hints', () => {
     const handleApply = vi.fn()
     const handleDismiss = vi.fn()
     const handleClose = vi.fn()
@@ -52,15 +58,25 @@ describe('InlineReviewPopup in Edit Mode', () => {
       )
     })
 
-    expect(container.textContent).toContain('Grammar')
+    // Fixes only — no persona label, color border carries the type
+    expect(container.textContent).not.toContain('Reader')
     expect(container.textContent).toContain('linking regional labor markets')
-    const acceptBtn = container.querySelector('button[type="button"]')
-    expect(acceptBtn).toBeDefined()
+    // Keybind footer: dismiss esc only (no accept-number hint)
+    expect(container.textContent).toContain('Dismiss')
+    expect(container.textContent).toContain('esc')
+    expect(container.textContent).not.toContain('1–2')
+    // Clicking a fix row applies it
+    const row = container.querySelector('[role="option"]')
+    expect(row).not.toBeNull()
+    act(() => {
+      row?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(handleApply).toHaveBeenCalledTimes(1)
     root.unmount()
     container.remove()
   })
 
-  it('renders persona comment/critique when no suggestions exist', () => {
+  it('renders reader comment when no suggestions exist', () => {
     const handleApply = vi.fn()
     const handleDismiss = vi.fn()
     const handleClose = vi.fn()
@@ -87,7 +103,7 @@ describe('InlineReviewPopup in Edit Mode', () => {
     container.remove()
   })
 
-  it('displays multiple colors/findings side by side with Next-Tab navigation', () => {
+  it('cycles multiple findings with Tab navigation', () => {
     const handleApply = vi.fn()
     const handleDismiss = vi.fn()
     const handleClose = vi.fn()
@@ -109,23 +125,16 @@ describe('InlineReviewPopup in Edit Mode', () => {
       )
     })
 
-    // Side-by-side tabs for both Grammar and Reader
-    expect(container.textContent).toContain('Grammar')
-    expect(container.textContent).toContain('Reader')
-
-    // Initially active is Grammar (has suggestions)
+    // Initially active is the first finding (has suggestions), Tab hint shown
     expect(container.textContent).toContain('linking regional labor markets')
+    expect(container.textContent).toContain('tab')
 
-    // Find and click Next tab button
-    const buttons = Array.from(container.querySelectorAll('button'))
-    const nextTabBtn = buttons.find(b => b.textContent?.includes('Next tab'))
-    expect(nextTabBtn).toBeDefined()
-
+    // Tab cycles to the second finding (shows comment)
     act(() => {
-      nextTabBtn?.click()
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
     })
 
-    // Now active is Reader (shows comment)
+    // Now active is the second finding (shows comment)
     expect(container.textContent).toContain('Reader perception: Jargon density feels heavy')
     root.unmount()
     container.remove()

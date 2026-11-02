@@ -23,6 +23,12 @@ export interface UsageTelemetry {
   revisionsAccepted: number
   totalSessions: number
   lastActive: number
+  /** Call-saving telemetry (ghost autos): fired, cache-saved, aborted, stale-dropped, debounce-saved */
+  ghostFired: number
+  ghostCacheSaved: number
+  ghostAborted: number
+  ghostStaleDropped: number
+  ghostDebounceSaved: number
 }
 
 const EVENTS_KEY = 'byline.metrics.events.v1'
@@ -37,6 +43,11 @@ const DEFAULT_USAGE: UsageTelemetry = {
   revisionsAccepted: 20,
   totalSessions: 3,
   lastActive: Date.now(),
+  ghostFired: 0,
+  ghostCacheSaved: 0,
+  ghostAborted: 0,
+  ghostStaleDropped: 0,
+  ghostDebounceSaved: 0,
 }
 
 export function loadUsageStats(): UsageTelemetry {
@@ -81,6 +92,22 @@ export function recordRevisionAccepted() {
   stats.lastActive = Date.now()
   saveUsageStats(stats)
 }
+
+function bumpGhost(field: 'ghostFired' | 'ghostCacheSaved' | 'ghostAborted' | 'ghostStaleDropped' | 'ghostDebounceSaved') {
+  try {
+    const stats = loadUsageStats()
+    stats[field] += 1
+    stats.lastActive = Date.now()
+    saveUsageStats(stats)
+  } catch { /* noop */ }
+}
+
+/** Ghost autos measurement: fired, cache-saved, aborted, stale-dropped, debounce-saved */
+export const recordGhostFired = () => bumpGhost('ghostFired')
+export const recordGhostCacheSaved = () => bumpGhost('ghostCacheSaved')
+export const recordGhostAborted = () => bumpGhost('ghostAborted')
+export const recordGhostStaleDropped = () => bumpGhost('ghostStaleDropped')
+export const recordGhostDebounceSaved = () => bumpGhost('ghostDebounceSaved')
 
 export function recordCall(meta: any, ok = true, errorReason?: string) {
   if (!meta?.endpoint) return
@@ -140,30 +167,6 @@ export function loadCalls(): CallEvent[] {
       prompt: {
         system: 'Read as an educated skeptical peer and identify ambiguous assumptions.',
         user: 'Intercity air travel corridors face worsening ground delays...',
-      },
-    },
-    {
-      ts: now - 110000,
-      endpoint: '/api/lint',
-      model: 'meta-llama/llama-3.1-8b-instruct',
-      ms: 215,
-      usage: { in: 610, out: 95, reasoning: 0 },
-      params: { temperature: 0.3, max_tokens: 500, reasoning_effort: 'minimal' },
-      ok: true,
-      prompt: { system: 'Audit document outline and paragraph transitions', user: 'Section: Table of Content -> Analysis' },
-    },
-    {
-      ts: now - 180000,
-      endpoint: '/api/readings',
-      model: 'meta-llama/llama-3.3-70b-instruct',
-      ms: 890,
-      usage: { in: 1150, out: 240, reasoning: 220 },
-      params: { temperature: 0.2, max_tokens: 1000, reasoning_effort: 'medium' },
-      ok: false,
-      errorReason: 'Rate limit (429) on frontier endpoint — automatically fell back to cached evidence',
-      prompt: {
-        system: 'Verify empirical claims against known literature citations.',
-        user: 'Claim: Strategic electrification offers exponential carbon reduction.',
       },
     },
   ]

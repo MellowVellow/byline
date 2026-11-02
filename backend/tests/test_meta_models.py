@@ -29,10 +29,9 @@ def test_forbidden_models_rejected():
 @pytest.mark.anyio
 async def test_offline_meta_mock_fallback():
     """When no API key is configured, fallback uses internal Meta mock engine without failing."""
-    with pytest.MonkeyPatch.context() as m:
-        m.setattr(settings, "openrouter_api_key", "")
-        m.setattr(settings, "meta_api_key", "")
-        m.setattr(settings, "baseten_api_key", "")
+    import os
+    from unittest.mock import patch
+    with patch.dict(os.environ, {"OPENROUTER_API_KEY": "", "META_API_KEY": "", "BASETEN_API_KEY": ""}, clear=False):
 
         content, usage, model = await llm.chat(
             "You are Byline's Connect Engine, powered by Meta reasoning models.",

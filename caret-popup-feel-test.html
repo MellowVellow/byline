@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Caret popup feel test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{color-scheme:light;--bg:#fdfdfc;--text:#34322d;--muted:#8b8980;--ghost:#b0aea6;--line:#e4e3de;--acc:140,110,230;
+    box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#151418;--text:#e6e4ea;--muted:#8e8c96;--ghost:#5f5d68;--line:#2c2b32;--acc:170,145,250}}
+  :root[data-theme="dark"]{color-scheme:dark;--bg:#151418;--text:#e6e4ea;--muted:#8e8c96;--ghost:#5f5d68;--line:#2c2b32;--acc:170,145,250}
+  html,body{margin:0;min-height:100%}
+  body{background:var(--bg);color:var(--text);font-family:"Noto Serif KR","Source Han Serif KR",Georgia,serif;display:flex;justify-content:center}
+  main{width:100%;max-width:700px;padding:14vh 1.25rem 4rem;box-sizing:border-box}
+  .field{position:relative}
+  .mirror,.field textarea{font:400 1.25rem/1.85 "Noto Serif KR","Source Han Serif KR",Georgia,serif;margin:0;padding:0;border:0;
+    white-space:pre-wrap;overflow-wrap:break-word;box-sizing:border-box;width:100%}
+  .mirror{position:relative;min-height:34vh;pointer-events:none}
+  .field textarea{position:absolute;inset:0;height:100%;resize:none;overflow:hidden;background:transparent;color:transparent;caret-color:var(--text);outline:none}
+  .field textarea::selection{background:rgba(var(--acc),.28)}
+  .ghost{color:var(--ghost)}
+  .pop{position:absolute;z-index:5;min-width:170px;max-width:440px;background:var(--bg);border:1px solid var(--line);border-radius:8px;
+    padding:.35rem .5rem;font-size:.8125rem;line-height:1.5;box-shadow:0 4px 14px rgba(0,0,0,.06);display:none}
+  .lv div{color:var(--muted);padding:0 .35rem;border-radius:4px;cursor:pointer}
+  .lv div.on{color:var(--text);background:rgba(var(--acc),.16)}
+  .qq{color:var(--text);font-style:italic;padding:.15rem .35rem}
+  .cols{display:grid;grid-template-columns:repeat(3,minmax(110px,1fr));gap:.2rem .7rem}
+  .cols h4{margin:0 0 .1rem;font-weight:400;font-size:.75rem;color:var(--muted)}
+  .opt{padding:0 .35rem;border-radius:4px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .opt.on{background:rgba(var(--acc),.2)}
+  .keys{display:flex;gap:.9rem;margin-top:.35rem;padding:.2rem .35rem 0;border-top:1px solid var(--line);color:var(--muted)}
+  .keys button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+  .keys button:hover{color:var(--text)}
+  .keys .off{opacity:.4}
+  kbd{font:inherit;font-size:.75rem;border:1px solid var(--line);border-radius:4px;padding:0 .3rem;margin-left:.2rem}
+  .hint{margin-top:2.5rem;font-size:.8125rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <div class="field" id="field">
+    <div class="mirror" id="mirror" aria-hidden="true"></div>
+    <textarea id="ta" spellcheck="false" autocomplete="off" autofocus>Unfortunately we wasted too much time on the first draft.
+
+However, the impact of AI depends on</textarea>
+    <div class="pop" id="pop" role="listbox" aria-label="Suggestions"></div>
+  </div>
+  <p class="hint">Pause at the end for ghost text. Select “wasted too much time” for replacements. Tab accepts, Alt rerolls, arrows move, Esc closes.</p>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const ta=$("ta"),mirror=$("mirror"),pop=$("pop"),field=$("field");
+const LV=["cue","question","fragment","sentence"],COLS=["Synonyms","Paraphrase","Tone"];
+let st={mode:null,lv:2,i:0,data:null,col:0,row:0,page:0},ver=0,timer=null,selTimer=null,sample=null,abort=null;
+
+(async()=>{try{sample=window.claude?await window.claude.use("sample"):null}catch(e){sample=null}})();
+
+/* canned data for the two example sentences; anything else asks Claude */
+const G=[
+ {k:"depends on",d:{cue:["how people use it","the process","who is using it"],question:["Depends on how, exactly: who uses it, and when?","Which part of the creative process is meant?","What would a careful use look like?"],
+   fragment:["the way people use it during the creative process","whether people lead or follow its ideas","how much thinking happens before prompting"],
+   sentence:["the way people use it during the creative process, not on the tool alone.","whether writers treat its output as a draft or as an answer.","when in the process it is used, and by whom."]}},
+ {k:"unfortunately we",d:{cue:["lost time","ran late","wasted it"],question:["What did the delay cost you?","Why did it take so long?","What would you do differently?"],
+   fragment:["wasted too much time","ran out of time","lost the whole afternoon"],sentence:["wasted too much time on the first draft.","ran out of time before the review.","lost the whole afternoon to revisions."]}}
+];
+const S=[{k:"wasted too much time",d:{
+  Synonyms:["procrastinated","dawdled","squandered","idled","stalled","lingered"],
+  Paraphrase:["wasted for too long","spent far too long on it","let the hours slip away","took longer than it should","burned through the schedule","sat on it too long"],
+  Tone:["dilly-dallied","frittered it away","dragged our feet","lost the plot","burnt daylight","ran down the clock"]}}];
+
+function parse(raw){const m=raw&&raw.match(/\{[\s\S]*\}/);try{return m?JSON.parse(m[0]):null}catch(e){return null}}
+async function ask(p){
+  if(!sample)return null;if(abort)abort.abort();abort=new AbortController();
+  try{const r=await sample(p,{modelTier:"quick",cache:false,signal:abort.signal});return parse(r.text)}catch(e){return null}
+}
+async function getGhost(text){
+  const low=text.trimEnd().toLowerCase(),hit=G.find(g=>low.endsWith(g.k));if(hit)return hit.d;
+  return ask('A writer paused after this text:\n'+text.slice(-500)+'\n\nReturn ONLY JSON {"cue":[3],"question":[3],"fragment":[3],"sentence":[3]}. cue = 2-4 word nudge; question = a short question that prompts the writer; fragment = words that continue the text; sentence = words that finish the sentence. Each list has 3 alternatives, no quotes.');
+}
+async function getSel(sel,ctx){
+  const hit=S.find(s=>sel.toLowerCase()===s.k);if(hit)return hit.d;
+  return ask('Context: '+ctx.slice(-300)+'\nSelected text: "'+sel+'"\nReturn ONLY JSON {"Synonyms":[6],"Paraphrase":[6],"Tone":[6]}. Synonyms = single-word or short replacements; Paraphrase = same meaning, different wording; Tone = replacements with a more casual or vivid tone. They must fit the context grammatically.');
+}
+
+const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const gap=t=>/\s$/.test(t)?"":" ";
+const ghostText=()=>{if(st.mode!=="ghost")return "";const a=st.data[LV[st.lv]]||[];return a.length?a[st.i%a.length]:""};
+const colItems=c=>{const a=st.data[COLS[c]]||[];if(!a.length)return[];const o=(st.page*3)%a.length;return[0,1,2].filter(n=>n<a.length).map(n=>a[(o+n)%a.length])};
+
+function render(){
+  const t=ta.value,pos=st.mode==="sel"?ta.selectionEnd:ta.selectionStart;
+  const lvl=LV[st.lv],inline=st.mode==="ghost"&&lvl!=="question"?ghostText():"";
+  mirror.innerHTML=esc(t.slice(0,pos))+'<span id="cp">\u200b</span>'+(inline?'<span class="ghost">'+esc(gap(t.slice(0,pos))+inline)+"</span>":"")+esc(t.slice(pos))+"\u200b";
+  if(!st.mode){pop.style.display="none";return}
+  let h="";
+  if(st.mode==="ghost"){
+    h='<div class="lv">'+LV.map((l,i)=>'<div data-lv="'+i+'" class="'+(i===st.lv?"on":"")+'">'+l+"</div>").join("")+"</div>"+
+      (lvl==="question"?'<div class="qq">'+esc(ghostText())+"</div>":"");
+  }else{
+    h='<div class="cols">'+COLS.map((c,ci)=>"<div><h4>"+c+"</h4>"+colItems(ci).map((o,ri)=>'<div class="opt '+(ci===st.col&&ri===st.row?"on":"")+'" data-c="'+ci+'" data-r="'+ri+'">'+esc(o)+"</div>").join("")+"</div>").join("")+"</div>";
+  }
+  h+='<div class="keys"><button data-a="accept" class="'+(st.mode==="ghost"&&lvl==="question"?"off":"")+'">Accept<kbd>tab</kbd></button><button data-a="reroll">Reroll<kbd>alt</kbd></button></div>';
+  pop.innerHTML=h;pop.style.display="block";
+  const cp=$("cp").getBoundingClientRect(),f=field.getBoundingClientRect();
+  const w=pop.offsetWidth;pop.style.left=Math.max(0,Math.min(cp.left-f.left,f.width-w))+"px";pop.style.top=(cp.bottom-f.top+6)+"px";
+}
+
+function hide(){ver++;if(abort)abort.abort();st.mode=null;render()}
+async function showGhost(){
+  const my=++ver;if(ta.selectionStart!==ta.selectionEnd||ta.selectionStart!==ta.value.length||ta.value.trim().length<6)return;
+  const d=await getGhost(ta.value);if(my!==ver||!d)return;
+  st={mode:"ghost",lv:st.lv,i:0,data:d,col:0,row:0,page:0};render();
+}
+async function showSel(){
+  const my=++ver,s=ta.selectionStart,e=ta.selectionEnd,txt=ta.value.slice(s,e).trim();
+  if(txt.length<2||txt.split(/\s+/).length>12)return;
+  const d=await getSel(txt,ta.value.slice(0,s));if(my!==ver||!d)return;
+  st={mode:"sel",lv:st.lv,i:0,data:d,col:1,row:0,page:0};render();
+}
+
+function accept(){
+  if(st.mode==="ghost"){
+    if(LV[st.lv]==="question"){hide();return}
+    const g=ghostText(),t=ta.value;ta.setRangeText(gap(t)+g,t.length,t.length,"end");
+  }else if(st.mode==="sel"){
+    const o=colItems(st.col)[st.row];if(o==null)return;
+    ta.setRangeText(o,ta.selectionStart,ta.selectionEnd,"end");
+  }
+  hide();ta.focus();
+}
+function reroll(){if(st.mode==="ghost")st.i++;else if(st.mode==="sel"){st.page++;st.row=Math.min(st.row,colItems(st.col).length-1)}render()}
+
+ta.addEventListener("input",()=>{hide();clearTimeout(timer);timer=setTimeout(showGhost,650)});
+document.addEventListener("selectionchange",()=>{
+  if(document.activeElement!==ta)return;clearTimeout(selTimer);
+  if(ta.selectionStart!==ta.selectionEnd)selTimer=setTimeout(showSel,200);
+  else if(st.mode==="sel")hide();
+});
+ta.addEventListener("keydown",e=>{
+  if(e.key==="Alt"){e.preventDefault();if(!e.repeat&&st.mode)reroll();return}
+  if(!st.mode)return;
+  if(e.key==="Tab"){e.preventDefault();accept()}
+  else if(e.key==="Escape"){e.preventDefault();hide()}
+  else if(st.mode==="ghost"&&(e.key==="ArrowUp"||e.key==="ArrowDown")){e.preventDefault();st.lv=(st.lv+(e.key==="ArrowDown"?1:3))%4;st.i=0;render()}
+  else if(st.mode==="sel"&&/^Arrow/.test(e.key)){
+    e.preventDefault();
+    if(e.key==="ArrowLeft")st.col=(st.col+2)%3;if(e.key==="ArrowRight")st.col=(st.col+1)%3;
+    const n=colItems(st.col).length;if(e.key==="ArrowUp")st.row=(st.row+n-1)%n;if(e.key==="ArrowDown")st.row=(st.row+1)%n;
+    st.row=Math.min(st.row,n-1);render();
+  }
+});
+ta.addEventListener("keyup",e=>{if(e.key==="Alt")e.preventDefault()});
+ta.addEventListener("click",()=>{if(st.mode==="ghost"&&ta.selectionStart!==ta.value.length)hide()});
+pop.addEventListener("mousedown",e=>e.preventDefault());
+pop.addEventListener("click",e=>{
+  const a=e.target.closest("[data-a]"),l=e.target.closest("[data-lv]"),o=e.target.closest("[data-c]");
+  if(a){a.dataset.a==="accept"?accept():reroll()}
+  else if(l){st.lv=+l.dataset.lv;st.i=0;render()}
+  else if(o){st.col=+o.dataset.c;st.row=+o.dataset.r;accept()}
+});
+render();
+</script>
+</body>
+</html>

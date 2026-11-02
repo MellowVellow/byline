@@ -30,16 +30,16 @@ describe('Domain Models & Connect Patterns', () => {
 })
 
 describe('Unified AnalysisService', () => {
-  it('manages unified findings across all 4 personas without interference', () => {
+  it('manages reader findings without interference', () => {
     const service = new AnalysisService()
     const mockFindings: Finding[] = [
       {
         id: 'f-1',
         documentId: 'doc-1',
-        persona: 'grammar',
-        kind: 'language_error',
+        persona: 'reader',
+        kind: 'reader_observation',
         anchor: { quotedText: 'Dogs needs', documentRevision: 1 },
-        explanation: 'Subject-verb agreement error.',
+        explanation: 'A reader may question the abrupt claim.',
         suggestions: [{ id: 's-1', text: 'Dogs need' }],
         status: 'open',
         sourceRevision: 1,
@@ -57,63 +57,24 @@ describe('Unified AnalysisService', () => {
         sourceRevision: 1,
         createdAt: Date.now(),
       },
-      {
-        id: 'f-3',
-        documentId: 'doc-1',
-        persona: 'supervisor',
-        kind: 'supervisor_critique',
-        anchor: { quotedText: 'Dogs bark', documentRevision: 1 },
-        explanation: 'Abrupt transition; lacks connection to the prior point.',
-        suggestions: [
-          { id: 's-2', text: 'Furthermore, dogs tend to bark when unattended.' },
-          { id: 's-3', text: 'In contrast to quiet cats, dogs vocalize frequently.' },
-          { id: 's-4', text: 'Noise is another consideration, as dogs bark.' },
-        ],
-        status: 'open',
-        sourceRevision: 1,
-        createdAt: Date.now(),
-      },
-      {
-        id: 'f-4',
-        documentId: 'doc-1',
-        persona: 'researcher',
-        kind: 'research_claim',
-        anchor: { quotedText: 'Studies show that dog owners are always happier', documentRevision: 1 },
-        explanation: 'Claim of absolute happiness is contradicted by peer-reviewed studies.',
-        suggestions: [{ id: 's-5', text: 'Several surveys suggest positive companionship effects' }],
-        status: 'open',
-        sourceRevision: 1,
-        evidence: [
-          {
-            url: 'https://example.org/study',
-            title: 'Companion Animal Study',
-            excerpt: 'Results indicate moderated well-being benefits rather than uniform happiness.',
-            status: 'contradicted',
-          },
-        ],
-        createdAt: Date.now(),
-      },
     ]
 
     service.setFindings(mockFindings)
 
-    // Verify all 4 are present in the unified collection
-    expect(service.getFindings().length).toBe(4)
+    expect(service.getFindings().length).toBe(2)
 
     // Filter by persona
-    expect(service.filterFindings({ persona: 'grammar' }).length).toBe(1)
-    expect(service.filterFindings({ persona: 'reader' }).length).toBe(1)
-    expect(service.filterFindings({ persona: 'supervisor' }).length).toBe(1)
-    expect(service.filterFindings({ persona: 'researcher' }).length).toBe(1)
+    expect(service.filterFindings({ persona: 'reader' }).length).toBe(2)
 
-    // Status transition: resolve grammar finding
+    // Status transition: resolving deletes the finding
     service.updateStatus('f-1', 'resolved')
-    expect(service.filterFindings({ status: 'active' }).length).toBe(3)
-    expect(service.filterFindings({ status: 'resolved' }).length).toBe(1)
+    expect(service.filterFindings({ status: 'active' }).length).toBe(1)
+    expect(service.filterFindings({ status: 'resolved' }).length).toBe(0)
+    expect(service.getFindings().length).toBe(1)
 
     // Search query
-    const searchRes = service.filterFindings({ search: 'transition' })
+    const searchRes = service.filterFindings({ search: 'duration' })
     expect(searchRes.length).toBe(1)
-    expect(searchRes[0].persona).toBe('supervisor')
+    expect(searchRes[0].id).toBe('f-2')
   })
 })

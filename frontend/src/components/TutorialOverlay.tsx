@@ -34,9 +34,9 @@ const STEPS: Step[] = [
   },
   {
     id: 'library',
-    title: 'Library Dock',
+    title: 'Left Dock: Conversation & Library',
     description:
-      'Explore history stays here in all modes. Select an entry to open it. The profile row opens Settings and Help.',
+      'The left dock has two sections. Conversation lists past questions. Each keeps its own summary and table. Library keeps saved rows.',
     tag: 'Left Rail',
     tagColor: 'var(--ai)',
     icon: '📚',
@@ -82,6 +82,17 @@ const STEPS: Step[] = [
   },
 ]
 
+export const TOUR_SEEN_KEY = 'byline.tour_seen'
+
+export function isTourSeen(): boolean {
+  try { return localStorage.getItem(TOUR_SEEN_KEY) === 'true' } catch { return false }
+}
+
+export function markTourSeen() {
+  try { localStorage.setItem(TOUR_SEEN_KEY, 'true') } catch {}
+  try { sessionStorage.setItem('byline.tour_opened', '1') } catch {}
+}
+
 function getSpotlightRect(selector?: string): DOMRect | null {
   if (!selector) return null
   try {
@@ -98,6 +109,8 @@ export default function TutorialOverlay({ isOpen, onClose, onHighlightFeature }:
   const [currentIdx, setCurrentIdx] = useState(0)
   const [spotlightRect, setSpotlightRect] = useState<DOMRect | null>(null)
   const rafRef = useRef<number>(0)
+  const cardRef = useRef<HTMLDivElement>(null)
+  const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
   const step = STEPS[currentIdx]
   const isFirst = currentIdx === 0
@@ -131,6 +144,13 @@ export default function TutorialOverlay({ isOpen, onClose, onHighlightFeature }:
     return () => window.removeEventListener('keydown', handleKey)
   }, [isOpen, currentIdx])
 
+  // Focus the card on open + step change so keyboard users land smoothly
+  useEffect(() => {
+    if (!isOpen) return
+    const t = setTimeout(() => cardRef.current?.focus(), 60)
+    return () => clearTimeout(t)
+  }, [isOpen, currentIdx])
+
   if (!isOpen) return null
 
   const handleNext = () => {
@@ -143,7 +163,7 @@ export default function TutorialOverlay({ isOpen, onClose, onHighlightFeature }:
   }
   const handleFinish = () => {
     sfxAccept()
-    try { localStorage.setItem('byline.tour_seen', 'true') } catch {}
+    markTourSeen()
     onClose()
   }
 
@@ -213,21 +233,23 @@ export default function TutorialOverlay({ isOpen, onClose, onHighlightFeature }:
         background: spotlightRect ? 'transparent' : 'rgba(10,12,16,0.82)',
         backdropFilter: spotlightRect ? 'none' : 'blur(2px)',
       }}
-      onClick={e => { if (e.target === e.currentTarget) handleFinish() }}
+      onClick={() => handleFinish()}
     >
       {/* SVG backdrop with cutout */}
       {spotlightSvg}
 
-      {/* No spotlight — full dimmed backdrop */}
+      {/* No spotlight — full dimmed backdrop (click-through to dismiss) */}
       {!spotlightRect && !step.spotlightSelector && (
-        <div style={{ position: 'absolute', inset: 0, backdropFilter: 'blur(3px)' }} />
+        <div style={{ position: 'absolute', inset: 0, backdropFilter: 'blur(3px)', pointerEvents: 'none' }} />
       )}
 
       {/* Tutorial card */}
       <div
+        ref={cardRef}
         role="dialog"
         aria-modal="true"
         aria-label="Interactive Workspace Tour"
+        tabIndex={-1}
         style={{
           position: 'absolute',
           width: 'min(460px, calc(100vw - 32px))',
@@ -241,6 +263,7 @@ export default function TutorialOverlay({ isOpen, onClose, onHighlightFeature }:
           flexDirection: 'column',
           gap: 12,
           zIndex: 10000,
+          transition: reduceMotion ? 'none' : 'top 0.28s cubic-bezier(0.16, 1, 0.3, 1), left 0.28s cubic-bezier(0.16, 1, 0.3, 1), right 0.28s cubic-bezier(0.16, 1, 0.3, 1), transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease',
           ...cardPosition,
         }}
         onClick={e => e.stopPropagation()}

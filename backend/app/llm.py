@@ -139,6 +139,21 @@ def _mock_meta_response(system: str, user: str) -> tuple[str, dict, str]:
         }
         return json.dumps(mock_data), {"total_tokens": 85}, "mock:meta-llama-3.3-70b-instruct"
 
+    # Explore: query planner (offline-safe, no URLs)
+    if "query planner" in low_sys or "search queries" in low_sys:
+        return json.dumps({"queries": ["definition and key terms", "supporting evidence and studies", "counterarguments and limits"]}), {"total_tokens": 40}, "mock:meta-llama-3.3-70b-instruct"
+
+    # Explore: angle planner (offline-safe, no URLs — angles only)
+    if "research planner" in low_sys or "exploration angles" in low_sys:
+        mock_data = {
+            "angles": [
+                {"type": "Question", "text": "What is the strongest evidence on either side?", "why": "Frames the core debate."},
+                {"type": "Terminology", "text": "Define the key terms before arguing.", "why": "Prevents equivocation."},
+                {"type": "Idea", "text": "Consider second-order effects beyond the immediate claim.", "why": "Adds depth."}
+            ]
+        }
+        return json.dumps(mock_data), {"total_tokens": 80}, "mock:meta-llama-3.3-70b-instruct"
+
     # Default fallback JSON if requested
     if "json" in low_sys:
         return '{"result": "ok"}', {"total_tokens": 20}, "mock:meta-llama-3.3-70b-instruct"
@@ -147,35 +162,70 @@ def _mock_meta_response(system: str, user: str) -> tuple[str, dict, str]:
 
 async def chat(system: str, user: str, *, model: str | None = None, max_tokens: int = 800, temperature: float = 0.7) -> tuple[str, dict, str]:
     """Execute chat completion using approved Meta models exclusively.
-    Hackathon priority order:
+    Priority order:
       1. Baseten (meta-models/muse-spark-open-1026) — primary
       2. Meta Model API (Muse Spark/Glimmer) — fallback
-      3. Internal deterministic Mock Meta Engine (offline/dev fallback)
+      3. OpenRouter (Meta Llama allowlist) — fallback when configured
+      4. Internal deterministic Mock Meta Engine (offline/dev fallback)
     """
     # Hackathon: always route through muse-spark-open-1026 on Baseten
-    HACKATHON_MODEL = "meta-models/muse-spark-open-1026"
-    target_model = HACKATHON_MODEL
+    HACKATHON_MODEL = settings.baseten_model or "meta-models/muse-spark-open-1026"
     errors: list[str] = []
 
     # 1. Baseten — primary (muse-spark-open-1026, hackathon)
     if settings.baseten_api_key:
-        try:
-            url = "https://bridge.baseten.co/v1/chat/completions"
-            c, u = await _call(
-                url,
-                settings.baseten_api_key,
-                HACKATHON_MODEL,
-                system,
-                user,
-                max_tokens,
-                temperature,
-                is_meta_api=False,
-            )
-            if c.strip():
-                return c, u, HACKATHON_MODEL
-            errors.append("baseten: empty content")
-        except Exception as e:  # noqa: BLE001
-            errors.append(f"baseten: {type(e).__name__}: {e}")
+        candidate_urls = [
+            f"{settings.baseten_base_url}/chat/completions",
+            "https://inference.baseten.co/v1/chat/completions",
+            "https://bridge.baseten.co/v1/chat/completions",
+        ]
+        # Deduplicate endpoints preserving order
+        seen = set()
+        endpoints = [u for u in candidate_urls if not (u in seen or seen.add(u))]
+
+        for endpoint in endpoints:
+            try:
+                c, u = await _call(
+                    endpoint,
+                    settings.baseten_api_key,
+                    HACKATHON_MODEL,
+                    system,
+                    user,
+                    max_tokens,
+                    temperature,
+                    is_meta_api=False,
+                )
+                if c.strip():
+                    log.info("Baseten inference succeeded via %s with model %s", endpoint, HACKATHON_MODEL)
+                    return c, u, HACKATHON_MODEL
+                errors.append(f"baseten ({endpoint}): empty content")
+            except httpx.HTTPStatusError as e:
+                # If 401/403 with Bearer, retry with Api-Key auth scheme
+                if e.response.status_code in (401, 403):
+                    try:
+                        c, u = await _call(
+                            endpoint,
+                            settings.baseten_api_key,
+                            HACKATHON_MODEL,
+                            system,
+                            user,
+                            max_tokens,
+                            temperature,
+                            is_meta_api=False,
+                            custom_headers={"Authorization": f"Api-Key {settings.baseten_api_key}"},
+                        )
+                        if c.strip():
+                            log.info("Baseten inference succeeded via Api-Key scheme on %s", endpoint)
+                            return c, u, HACKATHON_MODEL
+                    except Exception as retry_err:  # noqa: BLE001
+                        errors.append(f"baseten Api-Key retry ({endpoint}): {retry_err}")
+                errors.append(f"baseten ({endpoint}): HTTP {e.response.status_code}: {e}")
+                # Try next endpoint on 404/502/503
+                if e.response.status_code in (404, 502, 503):
+                    continue
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"baseten ({endpoint}): {type(e).__name__}: {e}")
+                continue
 
     # 2. Meta Model API — fallback
     if settings.meta_api_key:
@@ -194,10 +244,38 @@ async def chat(system: str, user: str, *, model: str | None = None, max_tokens: 
             if c.strip():
                 return c, u, meta_m
             errors.append("meta_api: empty content")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 402:
+                errors.append(f"meta_api: 402 Payment Required (Meta credit limit reached; check BASETEN_API_KEY): {e}")
+            else:
+                errors.append(f"meta_api: HTTP {e.response.status_code}: {e}")
         except Exception as e:  # noqa: BLE001
             errors.append(f"meta_api: {type(e).__name__}: {e}")
 
-    # 3. Safe offline deterministic mock engine (preserves Meta-only output without non-Meta runtime fallback)
+    # 3. OpenRouter — fallback (Meta allowlist only, requires OPENROUTER_API_KEY)
+    if settings.openrouter_api_key:
+        or_m = validate_meta_model(settings.openrouter_model)
+        try:
+            c, u = await _call(
+                f"{settings.openrouter_base_url}/chat/completions",
+                settings.openrouter_api_key,
+                or_m,
+                system,
+                user,
+                max_tokens,
+                temperature,
+                is_meta_api=False,
+            )
+            if c.strip():
+                log.info("OpenRouter inference succeeded with model %s", or_m)
+                return c, u, or_m
+            errors.append("openrouter: empty content")
+        except httpx.HTTPStatusError as e:
+            errors.append(f"openrouter: HTTP {e.response.status_code}: {e}")
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"openrouter: {type(e).__name__}: {e}")
+
+    # 4. Safe offline deterministic mock engine (preserves Meta-only output without non-Meta runtime fallback)
     log.info("Using offline Meta mock engine (keys unconfigured or remote unreachable): %s", "; ".join(errors) or "no keys")
     return _mock_meta_response(system, user)
 
@@ -219,13 +297,16 @@ async def responses_call(input_data, *, instructions: str = "", tools=None, incl
     Baseten handles chat completions; Meta API handles grounded web-search Responses calls.
     """
     if not settings.meta_api_key:
-        # Offline mock research response grounded in simulated evidence
+        # Offline mock research response — clearly tagged so callers never
+        # mistake it for a real citation. Uses mock.local (RFC-2606-style
+        # invalid host) instead of a plausible real-world URL.
         return {
             "text": "Evidence qualifies the claim: while preliminary analyses indicate positive correlation, long-term confounding variables require structured moderation.",
-            "annotations": [{"title": "Journal of Writing Research", "url": "https://example.org/writing-study"}],
-            "search_results": [{"title": "Journal of Writing Research", "url": "https://example.org/writing-study"}],
+            "annotations": [{"title": "Mock evidence (offline, unverified)", "url": "https://mock.local/offline-evidence"}],
+            "search_results": [{"title": "Mock evidence (offline, unverified)", "url": "https://mock.local/offline-evidence"}],
             "usage": {"total_tokens": 150},
-            "model": "mock:muse-spark-open-1026"
+            "model": "mock:muse-spark-open-1026",
+            "mock": True,
         }
     # Use the configured meta_model for Responses API (web-search grounding requires Meta API key)
     resp_model = validate_meta_model(settings.meta_model)
@@ -239,13 +320,24 @@ async def responses_call(input_data, *, instructions: str = "", tools=None, incl
     if tools: body["tools"] = tools
     if include: body["include"] = include
     if text_format: body["text"] = {"format": text_format}
-    r = await _client().post(
-        f"{settings.meta_base_url}/responses",
-        json=body,
-        headers={"Authorization": f"Bearer {settings.meta_api_key}", "Content-Type": "application/json"}
-    )
-    r.raise_for_status()
-    d = r.json()
+    try:
+        r = await _client().post(
+            f"{settings.meta_base_url}/responses",
+            json=body,
+            headers={"Authorization": f"Bearer {settings.meta_api_key}", "Content-Type": "application/json"}
+        )
+        r.raise_for_status()
+        d = r.json()
+    except Exception as e:
+        log.warning("Meta Responses API call failed (%s), returning grounded mock response", e)
+        return {
+            "text": "Evidence qualifies the claim: while preliminary analyses indicate positive correlation, long-term confounding variables require structured moderation.",
+            "annotations": [{"title": "Mock evidence (offline, unverified)", "url": "https://mock.local/offline-evidence"}],
+            "search_results": [{"title": "Mock evidence (offline, unverified)", "url": "https://mock.local/offline-evidence"}],
+            "usage": {"total_tokens": 150},
+            "model": "mock:muse-spark-open-1026",
+            "mock": True,
+        }
     texts, annotations, results = [], [], []
     for item in d.get("output", []) or []:
         if item.get("type") == "message":
@@ -260,7 +352,8 @@ async def responses_call(input_data, *, instructions: str = "", tools=None, incl
         "annotations": annotations,
         "search_results": results,
         "usage": d.get("usage") or {},
-        "model": resp_model
+        "model": resp_model,
+        "mock": False,
     }
 
 FACTS_FORMAT = {

@@ -1,6 +1,8 @@
 import re
+import time
 from fastapi import APIRouter
-from .. import llm, prompts
+from .. import llm, prompts, cache
+from ..config import settings
 from ..models import CompleteIn
 from .common import ok, fail, err, meta
 
@@ -58,22 +60,73 @@ def retry_hint(assist: str) -> str:
     if assist == "Question": return "\nRETRY: previous format invalid — return exactly 3 questions, one per line, each ending with a question mark."
     return "\nRETRY: previous format invalid — follow ASSIST exactly, full sentences only, no fragments."
 
+def _clean_list(items, cap_words: int) -> list[str]:
+    out = []
+    for x in items or []:
+        if not isinstance(x, str): continue
+        s = re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", x).strip().strip('"')
+        if s and s not in out and len(s.split()) <= cap_words: out.append(s)
+        if len(out) >= 3: break
+    return out
+
 @router.post("/api/complete")
 async def complete(body: CompleteIn):
     try:
+        # Grouped single-call payload: assist_level "All" returns all four ghost
+        # levels at once ({cue, question, fragment, sentence}); the app parses them.
+        # Rerolls carry `avoid` and bypass cache by design.
+        if body.assist_level == "All" and not body.avoid:
+            ck = cache.key("complete:all", body.level, body.before[-400:], body.after[:200])
+            hit = cache.get(ck)
+            if hit is not None:
+                return ok(levels=hit, version=body.version, model="cache", ms=0, usage={}, cached=True)
+            s, u = prompts.complete_levels_prompt(body.before, body.after, body.level)
+            try:
+                data, usage, model = await llm.json_call(s, u, max_tokens=700, temperature=0.8)
+                levels = {
+                    "cue": _clean_list(data.get("cue"), 6),
+                    "question": [q if q.rstrip().endswith("?") else q.rstrip() + "?" for q in _clean_list(data.get("question"), 14)],
+                    "fragment": [merge_partial(body.before, x) for x in _clean_list(data.get("fragment"), 21)],
+                    "sentence": [merge_partial(body.before, x) for x in _clean_list(data.get("sentence"), 25)],
+                }
+                if any(levels.values()):
+                    cache.set(ck, levels)
+                    return ok(levels=levels, version=body.version, model=model, ms=0, usage=usage,
+                              meta=meta("complete", s, u, usage, model, 0, 0.8, 700))
+            except Exception:
+                pass
+            return fail(version=body.version)
         s, u = prompts.complete_prompt(body.context, body.level, body.before, body.after, body.assist_level, body.facts, body.last_two, body.avoid)
-        try:
-            t0 = __import__('time').perf_counter(); local_raw = await llm.local_text(s, u); dt = __import__('time').perf_counter() - t0
+        # Priority: remote cascade (Baseten → Meta → OpenRouter → mock) by default.
+        # Local vLLM is opt-in first-choice only when LOCAL_PREFER=1, else it
+        # serves as a secondary fallback before giving up — avoids silently
+        # preferring an unconfigured/local model over the hackathon primary.
+        async def _try_local():
+            t0 = time.perf_counter(); local_raw = await llm.local_text(s, u); dt = time.perf_counter() - t0
             sugg = post_process(body.before, parse_options(local_raw, body.assist_level), body.assist_level)
             if sugg: return ok(suggestions=sugg, version=body.version, model=f"local:{llm.settings.local_model or 'glimmer-lora'}", ms=round(dt * 1000), usage={})
             raise ValueError("local empty")
-        except Exception:
-            pass
-        raw, usage, model, dt = await llm.timed_text(s, u, max_tokens=ASSIST_TOKENS.get(body.assist_level, 220), temperature=0.8)
-        sugg = post_process(body.before, parse_options(raw, body.assist_level), body.assist_level)
-        if sugg and not valid_options(sugg, body.assist_level):
-            raw2, usage, model, dt2 = await llm.timed_text(s, u + retry_hint(body.assist_level), max_tokens=ASSIST_TOKENS.get(body.assist_level, 220), temperature=0.7)
-            sugg2 = post_process(body.before, parse_options(raw2, body.assist_level), body.assist_level)
-            if sugg2: sugg, dt = sugg2, dt + dt2
-        return ok(suggestions=sugg, version=body.version, model=model, ms=round(dt * 1000), usage=usage, meta=meta("complete", s, u, usage, model, dt*1000, 0.8, ASSIST_TOKENS.get(body.assist_level, 220))) if sugg else fail(version=body.version)
+        async def _try_remote():
+            raw, usage, model, dt = await llm.timed_text(s, u, max_tokens=ASSIST_TOKENS.get(body.assist_level, 220), temperature=0.8)
+            sugg = post_process(body.before, parse_options(raw, body.assist_level), body.assist_level)
+            if sugg and not valid_options(sugg, body.assist_level):
+                raw2, usage, model, dt2 = await llm.timed_text(s, u + retry_hint(body.assist_level), max_tokens=ASSIST_TOKENS.get(body.assist_level, 220), temperature=0.7)
+                sugg2 = post_process(body.before, parse_options(raw2, body.assist_level), body.assist_level)
+                if sugg2: sugg, dt = sugg2, dt + dt2
+            return (sugg, usage, model, dt) if sugg else (None, usage, model, dt)
+        use_local_first = bool(settings.local_prefer and settings.local_base_url)
+        if use_local_first:
+            try:
+                return await _try_local()
+            except Exception:
+                pass
+        sugg, usage, model, dt = await _try_remote()
+        if sugg:
+            return ok(suggestions=sugg, version=body.version, model=model, ms=round(dt * 1000), usage=usage, meta=meta("complete", s, u, usage, model, dt*1000, 0.8, ASSIST_TOKENS.get(body.assist_level, 220)))
+        if not use_local_first and settings.local_base_url:
+            try:
+                return await _try_local()
+            except Exception:
+                pass
+        return fail(version=body.version)
     except Exception as e: return err(e)

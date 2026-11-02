@@ -45,6 +45,10 @@ class LintIn(BaseModel):
 class ResearchIn(BaseModel):
     url: str = S(2000); question: str = Field(default="Extract the key facts relevant to my writing, with sources.", max_length=1000)
 
+class ExploreIn(BaseModel):
+    query: str = Field(default="", max_length=1000); context: str = S(4000)
+    count: int = Field(default=8, ge=1, le=8)
+
 class OutlineGenIn(BaseModel):
     answers: dict = Field(default_factory=dict)
 

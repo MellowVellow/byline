@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>b loading</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #fdfdfc;
+    --glyph: #f1f0eb;
+    --text: #6f6d66;
+    --track: #ecebe6;
+    --chip: #6f6d66;
+    --g1: #b9a0f7;
+    --g2: #de5a50;
+    --g3: #fbe777;
+    --g4: #8ec8fa;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #151418;
+      --glyph: #3b3a42;
+      --text: #9a98a1;
+      --track: #26252b;
+      --chip: #9a98a1;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #151418;
+    --glyph: #3b3a42;
+    --text: #9a98a1;
+    --track: #26252b;
+    --chip: #9a98a1;
+  }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Noto Serif KR", "Source Han Serif KR", "Source Han Serif K", Georgia, serif;
+    display: grid;
+    place-items: center;
+    transition: background .4s ease;
+  }
+  main { display: grid; justify-items: center; gap: 1.5rem; padding: 1rem; }
+  .logo { width: min(62vmin, 360px); height: auto; display: block; }
+  .logo text {
+    font-family: "Noto Serif KR", "Source Han Serif KR", "Source Han Serif K", Georgia, serif;
+    font-weight: 400;
+    fill: var(--glyph);
+  }
+  .msg {
+    margin: 0;
+    min-height: 1.6em;
+    font-size: 1rem;
+    letter-spacing: .02em;
+    transition: opacity .35s ease, transform .35s ease;
+  }
+  .msg.out { opacity: 0; transform: translateY(4px); }
+  .progress {
+    width: 120px; height: 2px; border-radius: 2px;
+    background: var(--track); overflow: hidden;
+  }
+  .progress > i {
+    display: block; height: 100%; width: 0;
+    background: linear-gradient(90deg, var(--g1), var(--g2), var(--g3), var(--g4));
+    border-radius: inherit;
+  }
+  .theme {
+    position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    font: inherit; font-size: .8125rem; color: var(--chip);
+    background: none; border: 1px solid var(--track); border-radius: 999px;
+    padding: .4rem .9rem; cursor: pointer;
+  }
+  .theme:hover { border-color: var(--chip); }
+  .theme:focus-visible { outline: 2px solid var(--g4); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <svg class="logo" viewBox="0 0 400 400" role="img" aria-label="b logo">
+    <defs>
+      <linearGradient id="flow" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="260" y2="0"
+                      spreadMethod="repeat" gradientTransform="rotate(35)">
+        <stop offset="0"    stop-color="var(--g1)"/>
+        <stop offset="0.28" stop-color="var(--g2)"/>
+        <stop offset="0.58" stop-color="var(--g3)"/>
+        <stop offset="0.82" stop-color="var(--g4)"/>
+        <stop offset="1"    stop-color="var(--g1)"/>
+        <animateTransform id="flowAnim" attributeName="gradientTransform" type="translate"
+                          additive="sum" from="0 0" to="260 0" dur="3.2s" repeatCount="indefinite"/>
+      </linearGradient>
+    </defs>
+    <text x="200" y="300" font-size="300" text-anchor="middle">b</text>
+    <rect x="88" y="201" width="224" height="30" fill="url(#flow)" opacity="0.8"/>
+  </svg>
+
+  <p class="msg" id="msg" role="status" aria-live="polite">Waking things up…</p>
+  <div class="progress" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="bar"><i id="fill"></i></div>
+</main>
+
+<button class="theme" id="theme" type="button">Theme: auto</button>
+
+<script>
+(function () {
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var msgEl = document.getElementById("msg");
+  var fill = document.getElementById("fill");
+  var bar = document.getElementById("bar");
+  var anim = document.getElementById("flowAnim");
+
+  if (reduce && anim) { anim.parentNode.removeChild(anim); }
+
+  /* Rotating messages */
+  var messages = [
+    "Waking things up…",
+    "Gathering your documents…",
+    "Syncing the latest changes…",
+    "Tuning the editor…",
+    "Almost ready…"
+  ];
+  var i = 0;
+  setInterval(function () {
+    i = (i + 1) % messages.length;
+    msgEl.classList.add("out");
+    setTimeout(function () {
+      msgEl.textContent = messages[i];
+      msgEl.classList.remove("out");
+    }, reduce ? 0 : 350);
+  }, 2400);
+
+  /* Progress: eases toward the end, then restarts (demo loop) */
+  var duration = 11000, start = null;
+  function tick(t) {
+    if (start === null) start = t;
+    var p = Math.min((t - start) / duration, 1);
+    var eased = 1 - Math.pow(1 - p, 2.2);
+    var pct = Math.round(eased * 100);
+    fill.style.width = pct + "%";
+    bar.setAttribute("aria-valuenow", pct);
+    if (p >= 1) { start = t + 900; }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  /* Theme toggle: auto -> light -> dark */
+  var btn = document.getElementById("theme");
+  var modes = ["auto", "light", "dark"], m = 0;
+  btn.addEventListener("click", function () {
+    m = (m + 1) % modes.length;
+    var mode = modes[m];
+    if (mode === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", mode);
+    btn.textContent = "Theme: " + mode;
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { loadSettings, saveSettings, resolveTheme } from '../lib/settings'
 
 export function getTheme(): 'light' | 'dark' {
   try {
@@ -126,12 +127,20 @@ export function Logo({ height = 28 }: { height?: number }) {
 
 export function ThemeToggle() {
   const [t, setT] = useState(getTheme())
+  useEffect(() => {
+    const sync = () => setT(getTheme())
+    window.addEventListener('byline-theme', sync)
+    return () => window.removeEventListener('byline-theme', sync)
+  }, [])
   function toggle() {
-    const n = t === 'dark' ? 'light' : 'dark'
-    document.documentElement.dataset.theme = n
-    localStorage.setItem('byline.theme', n)
+    // Single source of truth: flip resolved theme through the settings store
+    // so applySettings() clears stale preset vars (previously toggle wrote
+    // dataset.theme directly and left inline --bg/--dock behind).
+    const s = loadSettings()
+    const resolved = resolveTheme(s.theme)
+    const n = resolved === 'dark' ? 'light' : 'dark'
+    saveSettings({ ...s, theme: n })
     setT(n)
-    dispatchEvent(new Event('byline-theme'))
   }
   return (
     <button className="icon-btn" onClick={toggle} title={t === 'dark' ? 'Switch to light' : 'Switch to dark'} aria-label="Toggle theme">

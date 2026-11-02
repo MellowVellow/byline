@@ -14,6 +14,7 @@ if _env.exists():
 APPROVED_META_MODELS = {
     # Hackathon primary model (Baseten-hosted)
     "meta-models/muse-spark-open-1026",
+    "muse-spark-open-1026",
     # OpenRouter Meta models
     "meta-llama/llama-3.3-70b-instruct",
     "meta-llama/llama-3.1-70b-instruct",
@@ -33,22 +34,81 @@ APPROVED_META_MODELS = {
 }
 
 class Settings:
-    meta_api_key: str = os.getenv("META_API_KEY", "")
-    meta_base_url: str = os.getenv("META_BASE_URL", "https://api.meta.ai/v1")
-    meta_model: str = os.getenv("META_MODEL", "muse-spark-1.3")
-    openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
-    openrouter_model: str = os.getenv("FALLBACK_MODEL", os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct"))
-    fallback_model: str = openrouter_model
-    baseten_api_key: str = os.getenv("BASETEN_API_KEY", "")
+    @property
+    def meta_api_key(self) -> str:
+        return os.getenv("META_API_KEY", "").strip().strip("'\"")
+
+    @property
+    def meta_base_url(self) -> str:
+        return (os.getenv("META_BASE_URL") or "https://api.meta.ai/v1").strip().rstrip("/")
+
+    @property
+    def meta_model(self) -> str:
+        return (os.getenv("META_MODEL") or "muse-spark-1.3").strip()
+
+    @property
+    def openrouter_api_key(self) -> str:
+        return os.getenv("OPENROUTER_API_KEY", "").strip().strip("'\"")
+
+    @property
+    def openrouter_model(self) -> str:
+        return (os.getenv("FALLBACK_MODEL") or os.getenv("OPENROUTER_MODEL") or "meta-llama/llama-3.3-70b-instruct").strip()
+
+    @property
+    def openrouter_base_url(self) -> str:
+        return (os.getenv("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1").strip().rstrip("/")
+
+    @property
+    def fallback_model(self) -> str:
+        return self.openrouter_model
+
+    @property
+    def baseten_api_key(self) -> str:
+        return os.getenv("BASETEN_API_KEY", "").strip().strip("'\"")
+
+    @property
+    def baseten_base_url(self) -> str:
+        return (os.getenv("BASETEN_BASE_URL") or "https://inference.baseten.co/v1").strip().rstrip("/")
+
     # Hackathon primary: always use muse-spark-open-1026 on Baseten
-    baseten_model: str = os.getenv("BASETEN_MODEL", "meta-models/muse-spark-open-1026")
-    languagetool_url: str = os.getenv("LANGUAGETOOL_URL", "http://localhost:8010/v2/check")
-    supabase_url: str = os.getenv("SUPABASE_URL", "")
-    supabase_key: str = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_ANON_KEY", "")
-    cors_origins: str = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:4173")
-    request_timeout: float = float(os.getenv("REQUEST_TIMEOUT", "60"))
-    local_base_url: str = os.getenv("LOCAL_BASE_URL", "")
-    local_model: str = os.getenv("LOCAL_MODEL", "")
+    @property
+    def baseten_model(self) -> str:
+        return (os.getenv("BASETEN_MODEL") or "meta-models/muse-spark-open-1026").strip()
+
+    @property
+    def languagetool_url(self) -> str:
+        return os.getenv("LANGUAGETOOL_URL", "http://localhost:8010/v2/check").strip()
+
+    @property
+    def supabase_url(self) -> str:
+        return os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+
+    @property
+    def supabase_key(self) -> str:
+        return (os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_ANON_KEY") or "").strip().strip("'\"")
+
+    @property
+    def cors_origins(self) -> str:
+        return os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:4173")
+
+    @property
+    def request_timeout(self) -> float:
+        try:
+            return float(os.getenv("REQUEST_TIMEOUT", "60"))
+        except ValueError:
+            return 60.0
+
+    @property
+    def local_base_url(self) -> str:
+        return os.getenv("LOCAL_BASE_URL", "").strip().rstrip("/")
+
+    @property
+    def local_model(self) -> str:
+        return os.getenv("LOCAL_MODEL", "").strip()
+
+    @property
+    def local_prefer(self) -> bool:
+        return os.getenv("LOCAL_PREFER", "").strip().lower() in ("1", "true", "yes")
 
 settings = Settings()
 

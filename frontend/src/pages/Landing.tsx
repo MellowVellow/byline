@@ -57,9 +57,10 @@ export default function Landing() {
   return (
     <div>
       <header className="topbar">
-        <Logo /><div className="spacer" /><ThemeToggle />
+        <Logo /><div className="spacer" />
         <a className="btn" href="/demo">Public demo</a>
         <a className="btn primary" href="/app">Open app</a>
+        <ThemeToggle />
       </header>
 
       <main>

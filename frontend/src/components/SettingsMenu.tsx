@@ -16,15 +16,22 @@ import { Logo } from './Brand'
 type Tab = 'colors' | 'document' | 'accessibility' | 'shortcuts'
 
 // Mark colors: red grammar, purple reader, blue explore, green fix, grey completions,
-// plus dark-mode surface overrides (UI background + panel).
-const PERSONA_FIELDS: { key: 'ai' | 'grammar' | 'explore' | 'fix' | 'suggest' | 'uiBg' | 'uiPanel'; label: string; hint: string; defaultColor: string }[] = [
+// plus UI surfaces (dark + light), writing space, caret, buttons.
+const PERSONA_FIELDS: { key: 'ai' | 'grammar' | 'explore' | 'fix' | 'suggest' | 'uiBg' | 'uiPanel' | 'uiBgLight' | 'uiPanelLight' | 'paper' | 'paperLine' | 'caret' | 'btnBg' | 'btnInk'; label: string; hint: string; defaultColor: string }[] = [
   { key: 'ai',         label: 'Reader',     hint: 'Reader notes on tone and clarity', defaultColor: '#6D3BE0' },
   { key: 'grammar',    label: 'Grammar',    hint: 'Red line shown before correction',    defaultColor: '#C0281F' },
   { key: 'explore',    label: 'Explore',    hint: 'Blue line for source-backed text',    defaultColor: '#1765CC' },
   { key: 'fix',        label: 'Fix flash', hint: 'Green fade after a fix applies', defaultColor: '#16A34A' },
   { key: 'suggest',    label: 'Completions',hint: 'Faint text at cursor',  defaultColor: '#626A75' },
-  { key: 'uiBg',       label: 'UI Background', hint: 'Dark-mode app background',          defaultColor: '#0F1115' },
-  { key: 'uiPanel',    label: 'UI Panel',   hint: 'Dark-mode rail background',    defaultColor: '#16181D' },
+  { key: 'uiBg',       label: 'UI Background (dark)', hint: 'Dark-mode app background',          defaultColor: '#0F1115' },
+  { key: 'uiPanel',    label: 'UI Panel (dark)',   hint: 'Dark-mode rail background',    defaultColor: '#16181D' },
+  { key: 'uiBgLight',  label: 'UI Background (light)', hint: 'Light-mode app background',          defaultColor: '#F8F9FA' },
+  { key: 'uiPanelLight', label: 'UI Panel (light)',   hint: 'Light-mode rail background',    defaultColor: '#EFF1F4' },
+  { key: 'paper',      label: 'Writing space', hint: 'Paper background',          defaultColor: '#FFFFFF' },
+  { key: 'paperLine',  label: 'Margin line',   hint: 'Vertical line in writing space',    defaultColor: '#C0281F' },
+  { key: 'caret',      label: 'Caret', hint: 'Cursor + writing accent',  defaultColor: '#6D3BE0' },
+  { key: 'btnBg',      label: 'Button', hint: 'Primary button background',  defaultColor: '#6D3BE0' },
+  { key: 'btnInk',     label: 'Button text', hint: 'Primary button text',  defaultColor: '#FFFFFF' },
 ]
 
 export default function SettingsMenu({
@@ -185,7 +192,9 @@ export default function SettingsMenu({
                       settings.suggest === p.suggest &&
                       settings.selection === p.selection &&
                       settings.uiBg === p.uiBg &&
-                      settings.uiPanel === p.uiPanel
+                      settings.uiPanel === p.uiPanel &&
+                      (settings as any).uiBgLight === p.uiBgLight &&
+                      (settings as any).uiPanelLight === p.uiPanelLight
 
                     return (
                       <button
@@ -201,7 +210,14 @@ export default function SettingsMenu({
                             selection: p.selection,
                             uiBg: p.uiBg,
                             uiPanel: p.uiPanel,
-                          })
+                            uiBgLight: p.uiBgLight,
+                            uiPanelLight: p.uiPanelLight,
+                            paper: p.paper,
+                            paperLine: p.paperLine,
+                            caret: p.caret,
+                            btnBg: p.btnBg,
+                            btnInk: p.btnInk,
+                          } as any)
                         }}
                         style={{
                           display: 'flex',

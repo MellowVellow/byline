@@ -14,16 +14,21 @@
   --ink-4: #5A626F;
   --ink-5: #181A1E;
 
-  /* The 4 Iconic Personas (Original Byline Palette) */
+  /* Byline annotation palette: red grammar, purple reader, yellow selection, blue explore, green fix */
   --lt: #C0281F;      /* Red — Grammar & Language */
   --ai: #6D3BE0;      /* Purple — Reader Interpretation */
-  --yellow: #8A5F00;  /* Yellow/Amber — Supervisor & Flow */
-  --blue: #1765CC;    /* Blue — Researcher & Citations */
+  --yellow: #8A5F00;  /* Amber — selection accents */
+  --blue: #1765CC;    /* Blue — links & accents */
+  --explore: #1765CC; /* Blue — Explore underline */
+  --fix: #16A34A;     /* Green — auto-fix flash */
   --grey: #626A75;    /* Grey — Suggest & Ghost Completions */
 
   --old: #9CA3AF;
   --link: #FEF08A;
   --proof: #C0281F;
+  --caret: #6D3BE0;
+  --btn-bg: #6D3BE0;
+  --btn-ink: #FFFFFF;
   --pencil: #1765CC;
   --gold: #8A5F00;
   --gold-ink: #8A5F00;
@@ -54,16 +59,21 @@
   --ink-4: #8B949E;
   --ink-5: #F0F6FC;
 
-  /* The 4 Iconic Personas in Dark Mode */
+  /* Annotation palette in Dark Mode */
   --lt: #FF6B6B;      /* Red — Grammar */
   --ai: #B79CFF;      /* Purple — Reader */
-  --yellow: #E6B93D;  /* Yellow — Supervisor */
-  --blue: #60A5FA;    /* Blue — Researcher */
+  --yellow: #E6B93D;  /* Amber — selection accents */
+  --blue: #60A5FA;    /* Blue — links & accents */
+  --explore: #60A5FA; /* Blue — Explore underline */
+  --fix: #34D399;     /* Green — auto-fix flash */
   --grey: #9CA3AF;    /* Grey — Ghost */
 
   --old: #4B5563;
-  --link: #4A4120;
+  --link: #FDE047;
   --proof: #FF6B6B;
+  --caret: #B79CFF;
+  --btn-bg: #B79CFF;
+  --btn-ink: #0F1115;
   --pencil: #60A5FA;
   --gold: #E6B93D;
   --gold-ink: #E6B93D;
@@ -101,8 +111,13 @@ html {
 }
 
 ::selection {
-  background: var(--link);
-  color: var(--ink);
+  background: #FEF08A;
+  color: #0F1115 !important;
+}
+
+:root[data-theme="dark"] ::selection {
+  background: #FDE047;
+  color: #0F1115 !important;
 }
 
 body {
@@ -116,7 +131,7 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   font-feature-settings: "cv02", "cv03", "cv04", "ss01";
-  caret-color: var(--ai);
+  caret-color: var(--caret, var(--ai));
 }
 
 a {
@@ -160,13 +175,13 @@ button:hover {
 }
 
 button.primary {
-  background: var(--ink);
-  color: var(--bg);
-  border-color: var(--ink);
+  background: var(--btn-bg, var(--ink));
+  color: var(--btn-ink, var(--bg));
+  border-color: var(--btn-bg, var(--ink));
 }
 
 button.primary:hover {
-  background: color-mix(in srgb, var(--ink) 88%, var(--bg));
+  background: color-mix(in srgb, var(--btn-bg, var(--ink)) 88%, var(--btn-ink, var(--bg)));
   border-color: transparent;
 }
 

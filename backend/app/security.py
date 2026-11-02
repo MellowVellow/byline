@@ -1,19 +1,24 @@
-"""Security helpers: rate limiting, SSRF guard, prompt-data fencing."""
+"""Security helpers: rate limiting, SSRF guard, prompt-data fencing.
+NOTE: rate buckets are process-local — run uvicorn with --workers=1 in
+production or front with a shared rate-limiter; otherwise each worker
+enforces its own 120/min budget (fail-open on scale, never fail-closed)."""
 from __future__ import annotations
-import ipaddress, socket, time
+import ipaddress, socket, threading, time
 from urllib.parse import urlparse
 
 _BUCKETS: dict[str, list[float]] = {}
+_BUCKET_LOCK = threading.Lock()
 
 def rate_ok(key: str, limit: int = 60, window: float = 60.0) -> bool:
     now = time.time()
-    hits = [t for t in _BUCKETS.get(key, []) if now - t < window]
-    if len(hits) >= limit:
+    with _BUCKET_LOCK:
+        hits = [t for t in _BUCKETS.get(key, []) if now - t < window]
+        if len(hits) >= limit:
+            _BUCKETS[key] = hits
+            return False
+        hits.append(now)
         _BUCKETS[key] = hits
-        return False
-    hits.append(now)
-    _BUCKETS[key] = hits
-    return True
+        return True
 
 def is_safe_public_url(url: str) -> bool:
     try:

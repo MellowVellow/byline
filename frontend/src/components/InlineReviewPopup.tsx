@@ -12,34 +12,20 @@ export interface InlineReviewPopupProps {
   onClose: () => void
 }
 
-export const PERSONA_STYLES: Record<string, { label: string; color: string; border: string; bg: string; dot: string }> = {
-  grammar: {
-    label: 'Grammar',
-    color: 'var(--lt)',
-    border: 'color-mix(in srgb, var(--lt) 45%, transparent)',
-    bg: 'color-mix(in srgb, var(--lt) 10%, var(--paper))',
-    dot: '🔴',
-  },
+// Review personas: purple Reader observations, red Harper grammar fixes.
+// Color indicates type; no emoji dots.
+export const PERSONA_STYLES: Record<string, { label: string; color: string; border: string; bg: string }> = {
   reader: {
     label: 'Reader',
     color: 'var(--ai)',
     border: 'color-mix(in srgb, var(--ai) 45%, transparent)',
     bg: 'color-mix(in srgb, var(--ai) 10%, var(--paper))',
-    dot: '🟣',
   },
-  supervisor: {
-    label: 'Supervisor',
-    color: 'var(--yellow)',
-    border: 'color-mix(in srgb, var(--yellow) 45%, transparent)',
-    bg: 'color-mix(in srgb, var(--yellow) 10%, var(--paper))',
-    dot: '🟡',
-  },
-  researcher: {
-    label: 'Researcher',
-    color: 'var(--blue)',
-    border: 'color-mix(in srgb, var(--blue) 45%, transparent)',
-    bg: 'color-mix(in srgb, var(--blue) 10%, var(--paper))',
-    dot: '🔵',
+  grammar: {
+    label: 'Grammar',
+    color: 'var(--lt)',
+    border: 'color-mix(in srgb, var(--lt) 45%, transparent)',
+    bg: 'color-mix(in srgb, var(--lt) 10%, var(--paper))',
   },
 }
 
@@ -77,6 +63,28 @@ export default function InlineReviewPopup({
         setActiveIdx(prev => (prev + 1) % findings.length)
         return
       }
+
+      // 1–9 accepts fix n (feel-test keys)
+      if (/^[1-9]$/.test(e.key) && activeFinding.suggestions && activeFinding.suggestions.length > 0) {
+        const i = Number(e.key) - 1
+        const sug = activeFinding.suggestions?.[i]
+        if (sug) {
+          e.preventDefault()
+          onApplySuggestion(activeFinding, sug)
+        }
+        return
+      }
+
+      if ((e.key === 'Delete' || e.key === 'Backspace')) {
+        e.preventDefault()
+        onDismissFinding(activeFinding.id)
+        if (findings.length > 1) {
+          setActiveIdx(prev => Math.min(prev, findings.length - 2))
+        } else {
+          onClose()
+        }
+        return
+      }
     }
 
     const handleMouseDown = (e: MouseEvent) => {
@@ -91,7 +99,7 @@ export default function InlineReviewPopup({
       window.removeEventListener('keydown', handleKeyDown)
       document.removeEventListener('mousedown', handleMouseDown)
     }
-  }, [findings.length, onClose])
+  }, [findings, activeFinding, onClose, onApplySuggestion, onDismissFinding])
 
   if (!activeFinding) return null
 
@@ -100,7 +108,6 @@ export default function InlineReviewPopup({
     color: 'var(--blue)',
     border: 'var(--border)',
     bg: 'var(--paper)',
-    dot: '●',
   }
 
   const hasSuggestions = activeFinding.suggestions && activeFinding.suggestions.length > 0
@@ -108,233 +115,60 @@ export default function InlineReviewPopup({
   return (
     <div
       ref={popupRef}
-      className="fade"
+      role="listbox"
+      aria-label="Fixes"
+      className="caret-pop fade"
+      onMouseDown={e => e.preventDefault()}
       style={{
         position: 'fixed',
         top: position.y,
         left: position.x,
-        width: 'min(420px, calc(100vw - 32px))',
-        background: 'var(--paper, #fff)',
-        border: `1px solid ${activeMeta.border}`,
-        borderRadius: 'var(--radius-lg, 8px)',
-        boxShadow: '0 14px 34px -4px rgba(0,0,0,0.28), 0 6px 14px -4px rgba(0,0,0,0.15)',
+        width: 'min(320px, calc(100vw - 32px))',
+        background: 'var(--paper)',
+        border: `1px solid ${activeMeta.color}`,
+        borderRadius: 8,
+        padding: '6px 8px',
+        fontSize: 13,
+        lineHeight: 1.5,
+        boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
+        fontFamily: '"Source Serif 4", Georgia, serif',
+        color: 'var(--ink)',
         zIndex: 130,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-        padding: '10px 14px',
         boxSizing: 'border-box',
       }}
     >
-      {/* 1. Header with Persona Tag or Side-by-Side Tabs for Multiple Colors */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>
-        {findings.length > 1 ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflowX: 'auto', minWidth: 0 }}>
-            {findings.map((f, i) => {
-              const meta = PERSONA_STYLES[f.persona] || PERSONA_STYLES.grammar
-              const isSelected = i === currentIdx
-              return (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => { setActiveIdx(i); blip('select') }}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    padding: '2px 8px',
-                    fontSize: 11,
-                    fontWeight: isSelected ? 700 : 500,
-                    borderRadius: 9999,
-                    border: `1px solid ${isSelected ? meta.color : 'var(--border)'}`,
-                    background: isSelected ? meta.bg : 'transparent',
-                    color: isSelected ? meta.color : 'var(--ink)',
-                    cursor: 'pointer',
-                    minHeight: 'auto',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  <span>{meta.dot}</span>
-                  <span>{meta.label}</span>
-                </button>
-              )
-            })}
-          </div>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                padding: '2px 6px',
-                borderRadius: 4,
-                background: activeMeta.bg,
-                color: activeMeta.color,
-                border: `1px solid ${activeMeta.border}`,
-              }}
-            >
-              {activeMeta.dot} {activeMeta.label}
-            </span>
-            <span className="meta" style={{ fontSize: 11 }}>
-              {activeFinding.kind}
-            </span>
-          </div>
-        )}
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {findings.length > 1 && (
-            <button
-              type="button"
-              onClick={() => { setActiveIdx((currentIdx + 1) % findings.length); blip('select') }}
-              title="Next color / finding (Tab)"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--blue, #2563EB)',
-                cursor: 'pointer',
-                fontSize: 11,
-                fontWeight: 600,
-                padding: '1px 4px',
-                minHeight: 'auto',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Next tab ›
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={onClose}
-            title="Close (Esc)"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--muted)',
-              cursor: 'pointer',
-              fontSize: 13,
-              padding: '1px 4px',
-              minHeight: 'auto',
-            }}
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-
-      {/* 2. Quoted text excerpt */}
-      <div
-        style={{
-          fontSize: 12,
-          fontStyle: 'italic',
-          color: 'var(--ink)',
-          background: 'var(--dock, #f8f9fa)',
-          padding: '6px 10px',
-          borderRadius: 4,
-          borderLeft: `3px solid ${activeMeta.color}`,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        “{activeFinding.anchor.quotedText}”
-      </div>
-
-      {/* 3. Main Body: Fix Suggestions OR Persona Comment */}
       {hasSuggestions ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted)' }}>
-            Suggested Fixes ({activeFinding.suggestions?.length || 0})
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
-            {activeFinding.suggestions?.map((sug, i) => (
-              <div
-                key={sug.id || i}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                  padding: '6px 8px',
-                  background: 'var(--bg, #f4f4f5)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 4,
-                }}
-              >
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>
-                    {sug.text}
-                  </div>
-                  {sug.rationale && (
-                    <div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 2 }}>
-                      {sug.rationale}
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onApplySuggestion(activeFinding, sug)}
-                  style={{
-                    padding: '3px 10px',
-                    background: activeMeta.color,
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 4,
-                    fontSize: 11,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    minHeight: 'auto',
-                    flexShrink: 0,
-                  }}
-                >
-                  Accept
-                </button>
-              </div>
-            ))}
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {activeFinding.suggestions?.map((sug, i) => (
+            <div
+              key={sug.id || i}
+              role="option"
+              aria-selected={false}
+              onClick={() => onApplySuggestion(activeFinding, sug)}
+              style={{
+                padding: '0 6px',
+                borderRadius: 4,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                color: 'var(--muted)',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'color-mix(in srgb, var(--ai) 20%, transparent)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+            >
+              {sug.text}
+            </div>
+          ))}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: activeMeta.color }}>
-            {activeMeta.label} Comment
-          </div>
-          <div style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--ink)', padding: '2px 0' }}>
-            {activeFinding.explanation}
-          </div>
+        <div style={{ padding: '2px 6px', color: 'var(--ink)', fontSize: 13 }}>
+          {activeFinding.explanation}
         </div>
       )}
-
-      {/* 4. Bottom action strip */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 2 }}>
-        <button
-          type="button"
-          onClick={() => {
-            onDismissFinding(activeFinding.id)
-            if (findings.length > 1) {
-              setActiveIdx(prev => Math.min(prev, findings.length - 2))
-            } else {
-              onClose()
-            }
-          }}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--muted)',
-            cursor: 'pointer',
-            fontSize: 11,
-            padding: 0,
-            minHeight: 'auto',
-          }}
-        >
-          Dismiss
-        </button>
-
-        {findings.length > 1 && (
-          <span className="meta" style={{ fontSize: 10.5 }}>
-            {currentIdx + 1} of {findings.length} findings on this text
-          </span>
-        )}
+      <div style={{ display: 'flex', gap: 14, marginTop: 6, padding: '3px 6px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 13 }}>
+        {findings.length > 1 && <span>Next<kbd style={{ fontFamily: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>tab</kbd></span>}
+        <span>Dismiss<kbd style={{ fontFamily: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>esc</kbd></span>
       </div>
     </div>
   )

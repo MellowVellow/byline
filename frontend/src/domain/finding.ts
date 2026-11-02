@@ -1,10 +1,6 @@
-export type Persona = 'grammar' | 'reader' | 'supervisor' | 'researcher'
+export type Persona = 'reader' | 'grammar'
 
-export type FindingKind =
-  | 'language_error'
-  | 'reader_observation'
-  | 'supervisor_critique'
-  | 'research_claim'
+export type FindingKind = 'reader_observation' | 'language_error'
 
 export type FindingStatus = 'open' | 'resolved' | 'dismissed' | 'stale'
 
@@ -24,13 +20,6 @@ export interface Suggestion {
   rationale?: string
 }
 
-export interface EvidenceRecord {
-  url: string
-  title: string
-  excerpt: string
-  status: 'supported' | 'contradicted' | 'unverified'
-}
-
 export interface Finding {
   id: string
   documentId: string
@@ -43,6 +32,5 @@ export interface Finding {
   suggestions: Suggestion[]
   status: FindingStatus
   sourceRevision: number
-  evidence?: EvidenceRecord[]
   createdAt: number
 }

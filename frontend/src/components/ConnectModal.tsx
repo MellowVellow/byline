@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import type { Editor } from '@tiptap/react'
 import { CONNECT_PATTERNS, type ConnectCategory, type ConnectPattern } from '../domain/pattern'
 import { api } from '../lib/api'
@@ -8,10 +8,9 @@ export interface ConnectModalProps {
   isOpen: boolean
   onClose: () => void
   editor: Editor | null
-  documentGoal: string
 }
 
-export default function ConnectModal({ isOpen, onClose, editor, documentGoal }: ConnectModalProps) {
+export default function ConnectModal({ isOpen, onClose, editor }: ConnectModalProps) {
   const [tab, setTab] = useState<'static' | 'ai'>('static')
   const [selectedCat, setSelectedCat] = useState<ConnectCategory | 'All'>('All')
   const [searchQuery, setSearchQuery] = useState('')
@@ -22,6 +21,14 @@ export default function ConnectModal({ isOpen, onClose, editor, documentGoal }: 
   const [aiLoading, setAiLoading] = useState(false)
   const [aiOptions, setAiOptions] = useState<Array<{ relation_type: string; bridge_text: string; rationale: string }>>([])
   const [relationHint, setRelationHint] = useState('auto')
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  // Autofocus the search bar whenever the modal opens or the static tab shows
+  useEffect(() => {
+    if (!isOpen || tab !== 'static') return
+    const t = setTimeout(() => searchRef.current?.focus(), 60)
+    return () => clearTimeout(t)
+  }, [isOpen, tab])
 
   if (!isOpen) return null
 
@@ -80,8 +87,8 @@ export default function ConnectModal({ isOpen, onClose, editor, documentGoal }: 
     const after = editor.state.doc.textBetween(at, Math.min(editor.state.doc.content.size, at + 500), '\n')
 
     try {
+      // Text-only prompt: surrounding sentences, no document goal or intent.
       const res = await api.connect({
-        context: documentGoal || 'Analytical writing piece',
         before: before || 'Preceding assertion',
         after: after || 'Subsequent argument',
         relation_hint: relationHint,
@@ -167,6 +174,7 @@ export default function ConnectModal({ isOpen, onClose, editor, documentGoal }: 
             {/* Search & Categories */}
             <div style={{ display: 'grid', gap: 8 }}>
               <input
+                ref={searchRef}
                 type="text"
                 value={searchQuery}
                 placeholder="Search patterns (e.g. contrast, concession, consequence)…"
