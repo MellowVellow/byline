@@ -1,12 +1,12 @@
-/** Shared writing-config constants. Mirror: backend/app/constants.py — keep in sync. */
+/** Shared writing settings. Mirror: backend/app/constants.py — keep in sync. */
 export const DICTIONS = ['Formal', 'Casual', 'Slang', 'Simple', 'General', 'Academic', 'Technical', 'Buzzwords', 'Bullshitting']
 export const ASSISTS = ['Hint', 'Phrase', 'Sentence', 'Block', 'Question']
 export const ASSIST_DESCRIPTIONS: Record<string, string> = {
-  Hint: '1–3 word idea cues only.',
-  Phrase: 'Finish current clause, ≤8 words.',
-  Sentence: 'One fully developed sentence: picks up last thread, adds new evidence/cause/example, varied syntax, concrete ending, sets up next sentence.',
-  Block: 'Whole paragraph sequence: 3–5 flowing sentences — claim → support/example → implication/contrast → closing transition. One complete idea, ready to insert.',
-  Question: 'One question prompting next idea.',
+  Hint: '1–3 word cues.',
+  Phrase: 'Ends clause, max 8 words.',
+  Sentence: 'One sentence. Continues thread. Adds proof, cause, or sample. Ends with concrete point.',
+  Block: 'One paragraph, 3–5 sentences. Claim, support, result, close.',
+  Question: 'One question for next idea.',
 }
 export const PERSONAS = ['Skeptical reader', 'Ordinary reader', 'Expert reader', 'Supportive friend']
 

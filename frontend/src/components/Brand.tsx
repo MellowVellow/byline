@@ -62,7 +62,7 @@ export function Logo({ height = 28 }: { height?: number }) {
           }}
         >
           line
-          {/* 4 circles snug below the 4 letters of "line" as an underline */}
+          {/* 4 dots below "line": red grammar, purple reader, yellow selection, blue explore */}
           <span
             aria-hidden="true"
             style={{
@@ -102,20 +102,20 @@ export function Logo({ height = 28 }: { height?: number }) {
                 width: `${dotSize}px`,
                 height: `${dotSize}px`,
                 borderRadius: '50%',
-                background: 'var(--yellow)',
+                background: 'var(--link)',
                 flexShrink: 0,
               }}
-              title="Supervisor (Amber)"
+              title="Selection (Yellow)"
             />
             <span
               style={{
                 width: `${dotSize}px`,
                 height: `${dotSize}px`,
                 borderRadius: '50%',
-                background: 'var(--blue)',
+                background: 'var(--explore)',
                 flexShrink: 0,
               }}
-              title="Researcher (Blue)"
+              title="Explore (Blue)"
             />
           </span>
         </span>

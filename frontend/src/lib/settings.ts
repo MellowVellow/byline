@@ -7,10 +7,13 @@ export interface AppSettings {
   theme: ThemeMode
   ai: string
   grammar: string
-  sources: string
-  wordChoice: string
+  explore: string
+  fix: string
   selection: string
   suggest: string
+  /** Dark-mode surface overrides (empty = follow theme.css). */
+  uiBg: string
+  uiPanel: string
   editorFont: EditorFont
   fontSize: number
   lineHeight: number
@@ -29,86 +32,98 @@ export interface AppSettings {
   // Writing profile
   writingTheme: 'neutral' | 'academic' | 'gen-z' | 'buzzword'
   language: string
-  // Grammar auto-apply
-  autoApplyGrammar: boolean
 }
 
 export interface ColorPreset {
   label: string
   description: string
-  grammar: string   // Red / error / language
   ai: string        // Purple / reader
-  wordChoice: string// Amber / supervisor / flow
-  sources: string   // Blue / researcher / citations
+  grammar: string   // Red / grammar underline + hold marks
+  explore: string   // Blue / explore underline
+  fix: string       // Green / auto-fix flash
   suggest: string   // Grey / ghost suggestions
-  selection: string // Selection highlight
+  selection: string // Yellow / selection highlight
+  uiBg: string      // Dark-mode UI background override
+  uiPanel: string   // Dark-mode UI panel (rails) override
 }
 
-/** Rich, coordinated color presets driving the logo, annotations, cards, and paper underlines */
+/** Color presets for logo, cards, and text marks */
 export const COLOR_PRESETS: Record<string, ColorPreset> = {
   byline: {
-    label: 'Byline Classic',
-    description: 'Iconic editorial palette: bold crimson, deep royal purple, warm amber, cobalt blue',
-    grammar: '#C0281F',
+    label: 'Byline',
+    description: 'Default marks: red, purple, amber, blue',
     ai: '#6D3BE0',
-    wordChoice: '#8A5F00',
-    sources: '#1765CC',
+    grammar: '#C0281F',
+    explore: '#1765CC',
+    fix: '#16A34A',
     suggest: '#626A75',
     selection: '#F5E3B0',
+    uiBg: '#0F1115',
+    uiPanel: '#16181D',
   },
   oxford: {
     label: 'Oxford',
-    description: 'Scholarly distinction: crimson red, deep indigo reader, antique brass, cobalt',
-    grammar: '#BE123C',
+    description: 'Dark red, indigo, brass, blue',
     ai: '#4338CA',
-    wordChoice: '#B45309',
-    sources: '#1D4ED8',
+    grammar: '#B91C1C',
+    explore: '#1D4ED8',
+    fix: '#15803D',
     suggest: '#475569',
     selection: '#E0E7FF',
+    uiBg: '#111420',
+    uiPanel: '#181C28',
   },
   glacier: {
     label: 'Glacier',
-    description: 'Crisp & modern: rose, vibrant cyan reader, ochre flow, steel blue evidence',
-    grammar: '#E11D48',
+    description: 'Rose, cyan, ochre, steel blue',
     ai: '#0891B2',
-    wordChoice: '#D97706',
-    sources: '#2563EB',
+    grammar: '#E11D48',
+    explore: '#0284C7',
+    fix: '#059669',
     suggest: '#64748B',
     selection: '#CFFAFE',
+    uiBg: '#0E1418',
+    uiPanel: '#162026',
   },
   verdant: {
     label: 'Verdant',
-    description: 'Forest-inspired: scarlet berry, emerald green reader, olive gold, sky azure',
-    grammar: '#DC2626',
+    description: 'Red, green, olive, sky blue',
     ai: '#059669',
-    wordChoice: '#CA8A04',
-    sources: '#0284C7',
+    grammar: '#DC2626',
+    explore: '#0284C7',
+    fix: '#16A34A',
     suggest: '#6B7280',
     selection: '#D1FAE5',
+    uiBg: '#0E1512',
+    uiPanel: '#16211B',
   },
   sunset: {
     label: 'Sunset',
-    description: 'Warm evening: burnt orange, vivid magenta reader, warm gold, electric indigo',
-    grammar: '#EA580C',
+    description: 'Orange, magenta, gold, indigo',
     ai: '#C026D3',
-    wordChoice: '#EAB308',
-    sources: '#4F46E5',
+    grammar: '#EA580C',
+    explore: '#4F46E5',
+    fix: '#65A30D',
     suggest: '#78716C',
     selection: '#FDE68A',
+    uiBg: '#161210',
+    uiPanel: '#211914',
   },
   monochrome: {
     label: 'Monochrome',
-    description: 'Distraction-free high-contrast grayscale for deep focused drafting',
-    grammar: '#18181B',
+    description: 'Gray scale for focused drafting',
     ai: '#3F3F46',
-    wordChoice: '#71717A',
-    sources: '#52525B',
+    grammar: '#52525B',
+    explore: '#52525B',
+    fix: '#3F3F46',
     suggest: '#A1A1AA',
     selection: '#E4E4E7',
+    uiBg: '#131313',
+    uiPanel: '#1B1B1B',
   },
 }
 
-// Backwards compatibility aliases
+// Backwards-compatible names
 COLOR_PRESETS.default = COLOR_PRESETS.byline
 COLOR_PRESETS.ocean = COLOR_PRESETS.glacier
 COLOR_PRESETS.forest = COLOR_PRESETS.verdant
@@ -132,7 +147,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   reasoningEffort: 'minimal',
   writingTheme: 'neutral',
   language: 'en-US',
-  autoApplyGrammar: false,
 }
 
 const KEY = 'byline.settings.v1'
@@ -165,11 +179,22 @@ export function applySettings(s: AppSettings) {
 
   // Apply colors to root CSS custom properties
   root.style.setProperty('--ai', s.ai)
-  root.style.setProperty('--lt', s.grammar)
-  root.style.setProperty('--blue', s.sources)
-  root.style.setProperty('--yellow', s.wordChoice)
+  root.style.setProperty('--lt', s.grammar || COLOR_PRESETS.byline.grammar)
+  root.style.setProperty('--explore', s.explore || COLOR_PRESETS.byline.explore)
+  root.style.setProperty('--fix', s.fix || COLOR_PRESETS.byline.fix)
   root.style.setProperty('--grey', s.suggest || COLOR_PRESETS.byline.suggest)
   root.style.setProperty('--link', s.selection)
+
+  // Dark-mode surface overrides (light mode always follows theme.css)
+  if (resolved === 'dark') {
+    if (s.uiBg) root.style.setProperty('--bg', s.uiBg)
+    else root.style.removeProperty('--bg')
+    if (s.uiPanel) root.style.setProperty('--dock', s.uiPanel)
+    else root.style.removeProperty('--dock')
+  } else {
+    root.style.removeProperty('--bg')
+    root.style.removeProperty('--dock')
+  }
 
   // Typography & document setup
   root.style.setProperty(
@@ -195,29 +220,25 @@ export function saveSettings(s: AppSettings) {
 
 export interface Shortcut { keys: string; action: string; context?: string }
 export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
-  { group: 'AI Drafting & Assistance', items: [
-    { keys: 'Ctrl/⌘ Space', action: 'Suggest — request contextual ghost completions at caret', context: 'Editor' },
-    { keys: 'Ctrl/⌘ /', action: 'Sentence starters — open transition phrases & connect menu', context: 'Editor' },
-    { keys: '1 – 3', action: 'Accept suggestion #N', context: 'Suggestions open' },
-    { keys: 'Tab', action: 'Accept first suggestion', context: 'Suggestions open' },
-    { keys: 'Alt + R / `', action: 'Reroll — generate fresh suggestion options', context: 'Suggestions open' },
-    { keys: 'Esc', action: 'Dismiss suggestions / clear selection', context: 'Suggestions open' },
-    { keys: 'Double-click word', action: 'Synonyms & vocabulary explorer for selected word', context: 'Editor' },
+  { group: 'Drafting', items: [
+    { keys: 'Ctrl/⌘ Space', action: 'Request completions at cursor', context: 'Editor' },
+    { keys: 'Ctrl/⌘ /', action: 'Open links and connectors', context: 'Editor' },
+    { keys: '1 – 4', action: 'Set completion level (cue / question / fragment / sentence)', context: 'Options open' },
+    { keys: '1 – 9', action: 'Accept grid cell', context: 'Grid open' },
+    { keys: 'Tab', action: 'Accept first option', context: 'Options open' },
+    { keys: 'Alt + R / `', action: 'List new options', context: 'Options open' },
+    { keys: 'Ctrl/⌘ .', action: 'Show last options', context: 'Editor' },
+    { keys: 'Esc', action: 'Close options / clear selection', context: 'Options open' },
+    { keys: 'Double-click word', action: 'Show synonyms for word', context: 'Editor' },
   ] },
-  { group: 'Inline Review & Edit Mode', items: [
-    { keys: 'Click underline', action: 'Inspect issue & suggestions popup below cursor', context: 'Edit mode' },
-    { keys: 'Select text', action: 'Open contextual inline assistance popup below selection', context: 'Edit mode' },
-    { keys: 'Tab', action: 'Cycle next tab when multiple color categories overlap on text', context: 'Inline popup open' },
-    { keys: 'Enter / Click Accept', action: 'Apply suggested revision safely into draft text', context: 'Inline popup open' },
-    { keys: 'Esc', action: 'Dismiss inline review popup', context: 'Inline popup open' },
+  { group: 'Review & Edit', items: [
+    { keys: 'Click line', action: 'Show Reader note below cursor', context: 'Edit mode' },
+    { keys: 'Select text', action: 'Show options below selection', context: 'Edit mode' },
+    { keys: 'Tab', action: 'Show next Reader note', context: 'Note open' },
+    { keys: 'Enter / Click Accept', action: 'Apply change to draft', context: 'Note open' },
+    { keys: 'Esc', action: 'Close review note', context: 'Note open' },
   ] },
-  { group: 'Independent Outline & Structure', items: [
-    { keys: 'Drag Handle ⠿', action: 'Reorder sections or nest into hierarchy (Godot / Notion style)', context: 'Outline panel' },
-    { keys: 'Double-click title', action: 'Rename section title inline', context: 'Outline panel' },
-    { keys: '+ button', action: 'Add a new section directly below', context: 'Outline panel' },
-    { keys: 'Insert in Doc', action: 'Explicitly insert outline heading or expand proposed draft section', context: 'Outline panel' },
-  ] },
-  { group: 'Formatting & Typography', items: [
+  { group: 'Formatting', items: [
     { keys: 'Ctrl/⌘ B / I / U', action: 'Bold / italic / underline', context: 'Editor' },
     { keys: 'Ctrl/⌘ Shift X', action: 'Strikethrough', context: 'Editor' },
     { keys: 'Ctrl/⌘ E', action: 'Inline code', context: 'Editor' },
@@ -227,10 +248,10 @@ export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
     { keys: 'Ctrl/⌘ Shift B', action: 'Blockquote', context: 'Editor' },
     { keys: '/', action: 'Block menu on empty line (heading, list, quote, divider)', context: 'Empty block' },
   ] },
-  { group: 'General & Application', items: [
+  { group: 'General', items: [
     { keys: 'Ctrl/⌘ Z', action: 'Undo edit', context: 'Editor' },
     { keys: 'Ctrl/⌘ Shift Z / Ctrl Y', action: 'Redo edit', context: 'Editor' },
-    { keys: 'Ctrl/⌘ ,', action: 'Open Workspace Settings', context: 'App' },
-    { keys: 'Esc', action: 'Close modal / cancel active operation', context: 'Dialog open' },
+    { keys: 'Ctrl/⌘ ,', action: 'Open Settings', context: 'App' },
+    { keys: 'Esc', action: 'Close dialog / cancel task', context: 'Dialog open' },
   ] },
 ]

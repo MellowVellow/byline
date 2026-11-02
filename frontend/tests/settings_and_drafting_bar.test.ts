@@ -5,24 +5,20 @@ import { SUPPORTED_LANGUAGES, THEME_DEFINITIONS } from '../src/domain/writing-pr
 describe('Settings Revamp & Shortcuts', () => {
   it('contains the updated shortcut categories matching the current codebase features', () => {
     const groups = SHORTCUTS.map(g => g.group)
-    expect(groups).toContain('AI Drafting & Assistance')
-    expect(groups).toContain('Inline Review & Edit Mode')
-    expect(groups).toContain('Independent Outline & Structure')
-    expect(groups).toContain('Formatting & Typography')
-    expect(groups).toContain('General & Application')
+    expect(groups).toContain('Drafting')
+    expect(groups).toContain('Review & Edit')
+    expect(groups).not.toContain('Independent Outline & Structure')
+    expect(groups).toContain('Formatting')
+    expect(groups).toContain('General')
 
-    // AI drafting shortcuts
-    const aiGroup = SHORTCUTS.find(g => g.group === 'AI Drafting & Assistance')
+    // Drafting shortcuts
+    const aiGroup = SHORTCUTS.find(g => g.group === 'Drafting')
     expect(aiGroup?.items.some(i => i.keys.includes('Ctrl/⌘ Space'))).toBe(true)
 
-    // Inline review shortcuts
-    const reviewGroup = SHORTCUTS.find(g => g.group === 'Inline Review & Edit Mode')
-    expect(reviewGroup?.items.some(i => i.keys.includes('Click underline'))).toBe(true)
+    // Inline review shortcuts (Reader only)
+    const reviewGroup = SHORTCUTS.find(g => g.group === 'Review & Edit')
+    expect(reviewGroup?.items.some(i => i.keys.includes('Click line'))).toBe(true)
     expect(reviewGroup?.items.some(i => i.keys.includes('Tab'))).toBe(true)
-
-    // Outline shortcuts
-    const outlineGroup = SHORTCUTS.find(g => g.group === 'Independent Outline & Structure')
-    expect(outlineGroup?.items.some(i => i.keys.includes('Drag Handle ⠿'))).toBe(true)
   })
 
   it('provides default meta inference and editor UI settings', () => {

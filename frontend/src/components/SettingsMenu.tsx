@@ -15,12 +15,16 @@ import { Logo } from './Brand'
 
 type Tab = 'colors' | 'document' | 'accessibility' | 'shortcuts'
 
-const PERSONA_FIELDS: { key: 'grammar' | 'ai' | 'wordChoice' | 'sources' | 'suggest'; label: string; hint: string; defaultColor: string }[] = [
-  { key: 'grammar',    label: 'Grammar',    hint: 'Language correctness, punctuation, spelling',   defaultColor: '#C0281F' },
-  { key: 'ai',         label: 'Reader',     hint: 'Audience perception, tone & clarity reactions', defaultColor: '#6D3BE0' },
-  { key: 'wordChoice', label: 'Supervisor', hint: 'Outline alignment, flow, and logic structure',  defaultColor: '#8A5F00' },
-  { key: 'sources',    label: 'Researcher', hint: 'Fact grounding, evidence, and citations',      defaultColor: '#1765CC' },
-  { key: 'suggest',    label: 'Draft Ghost',hint: 'Contextual caret completions and suggestions',  defaultColor: '#626A75' },
+// Mark colors: red grammar, purple reader, blue explore, green fix, grey completions,
+// plus dark-mode surface overrides (UI background + panel).
+const PERSONA_FIELDS: { key: 'ai' | 'grammar' | 'explore' | 'fix' | 'suggest' | 'uiBg' | 'uiPanel'; label: string; hint: string; defaultColor: string }[] = [
+  { key: 'ai',         label: 'Reader',     hint: 'Reader notes on tone and clarity', defaultColor: '#6D3BE0' },
+  { key: 'grammar',    label: 'Grammar',    hint: 'Red line shown before correction',    defaultColor: '#C0281F' },
+  { key: 'explore',    label: 'Explore',    hint: 'Blue line for source-backed text',    defaultColor: '#1765CC' },
+  { key: 'fix',        label: 'Fix flash', hint: 'Green fade after a fix applies', defaultColor: '#16A34A' },
+  { key: 'suggest',    label: 'Completions',hint: 'Faint text at cursor',  defaultColor: '#626A75' },
+  { key: 'uiBg',       label: 'UI Background', hint: 'Dark-mode app background',          defaultColor: '#0F1115' },
+  { key: 'uiPanel',    label: 'UI Panel',   hint: 'Dark-mode rail background',    defaultColor: '#16181D' },
 ]
 
 export default function SettingsMenu({
@@ -53,8 +57,8 @@ export default function SettingsMenu({
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'colors',        label: 'Colors & Theme' },
-    { id: 'document',      label: 'Document Setup' },
-    { id: 'accessibility', label: 'Accessibility & Audio' },
+    { id: 'document',      label: 'Document' },
+    { id: 'accessibility', label: 'Audio & Display' },
     { id: 'shortcuts',     label: 'Shortcuts' },
   ]
 
@@ -91,7 +95,7 @@ export default function SettingsMenu({
         <div className="library-head">
           <div>
             <strong>Settings</strong>
-            <div className="meta" style={{ marginTop: 2 }}>Workspace, typography, audio & interface preferences</div>
+            <div className="meta" style={{ marginTop: 2 }}>Layout, type, audio, and display</div>
           </div>
           <span className="spacer" />
           <button
@@ -137,7 +141,7 @@ export default function SettingsMenu({
         <div className="library-scroll" style={{ padding: '20px 24px', maxHeight: '72vh', overflowY: 'auto' }}>
 
           {/* ══════════════════════════════════════════════════
-              TAB 1: COLOR SETUP & THEME MODE
+              TAB 1: COLORS & THEME
           ══════════════════════════════════════════════════ */}
           {tab === 'colors' && (
             <div style={{ display: 'grid', gap: 24 }}>
@@ -168,16 +172,20 @@ export default function SettingsMenu({
                   <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', margin: 0 }}>
                     Color Palette Presets
                   </label>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>Matches Logo, Cards & Underlines</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>Sets logo, cards, and lines</span>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
                   {Object.entries(COLOR_PRESETS).filter(([k]) => !['default', 'ocean', 'forest'].includes(k)).map(([k, p]) => {
                     const isSelected =
-                      settings.grammar === p.grammar &&
                       settings.ai === p.ai &&
-                      settings.wordChoice === p.wordChoice &&
-                      settings.sources === p.sources
+                      settings.grammar === p.grammar &&
+                      settings.explore === p.explore &&
+                      settings.fix === p.fix &&
+                      settings.suggest === p.suggest &&
+                      settings.selection === p.selection &&
+                      settings.uiBg === p.uiBg &&
+                      settings.uiPanel === p.uiPanel
 
                     return (
                       <button
@@ -185,12 +193,14 @@ export default function SettingsMenu({
                         type="button"
                         onClick={() => {
                           set({
-                            grammar: p.grammar,
                             ai: p.ai,
-                            wordChoice: p.wordChoice,
-                            sources: p.sources,
+                            grammar: p.grammar,
+                            explore: p.explore,
+                            fix: p.fix,
                             suggest: p.suggest,
                             selection: p.selection,
+                            uiBg: p.uiBg,
+                            uiPanel: p.uiPanel,
                           })
                         }}
                         style={{
@@ -210,8 +220,8 @@ export default function SettingsMenu({
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                           <span style={{ width: 11, height: 11, borderRadius: '50%', background: p.grammar }} title="Grammar" />
                           <span style={{ width: 11, height: 11, borderRadius: '50%', background: p.ai }} title="Reader" />
-                          <span style={{ width: 11, height: 11, borderRadius: '50%', background: p.wordChoice }} title="Supervisor" />
-                          <span style={{ width: 11, height: 11, borderRadius: '50%', background: p.sources }} title="Researcher" />
+                          <span style={{ width: 11, height: 11, borderRadius: '50%', background: p.explore }} title="Explore" />
+                          <span style={{ width: 11, height: 11, borderRadius: '50%', background: p.fix }} title="Auto-fix" />
                         </div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{p.label}</div>
                         <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.35 }}>{p.description}</div>
@@ -224,7 +234,7 @@ export default function SettingsMenu({
               {/* Individual Persona Color Pickers */}
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', display: 'block', marginBottom: 10 }}>
-                  Persona & Accent Customization
+                  Mark Colors
                 </label>
                 <div style={{ display: 'grid', gap: 8 }}>
                   {PERSONA_FIELDS.map(f => (
@@ -319,11 +329,14 @@ export default function SettingsMenu({
                   <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: settings.ai, color: '#fff', fontWeight: 600 }}>
                     Reader
                   </span>
-                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: settings.wordChoice, color: '#fff', fontWeight: 600 }}>
-                    Supervisor
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: settings.explore, color: '#fff', fontWeight: 600 }}>
+                    Explore
                   </span>
-                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: settings.sources, color: '#fff', fontWeight: 600 }}>
-                    Researcher
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: settings.fix, color: '#fff', fontWeight: 600 }}>
+                    Fix
+                  </span>
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: settings.suggest, color: '#fff', fontWeight: 600 }}>
+                    Complete
                   </span>
                 </div>
               </div>
@@ -332,7 +345,7 @@ export default function SettingsMenu({
           )}
 
           {/* ══════════════════════════════════════════════════
-              TAB 2: DOCUMENT SETUP (FONT, LINE, FULL/WIDE WIDTH)
+              TAB 2: DOCUMENT (FONT, LINE, WIDTH)
           ══════════════════════════════════════════════════ */}
           {tab === 'document' && (
             <div style={{ display: 'grid', gap: 22 }}>
@@ -344,9 +357,9 @@ export default function SettingsMenu({
                 </label>
                 <div className="mode-toggle" style={{ display: 'flex', maxWidth: 360 }}>
                   {([
-                    ['serif', 'Source Serif Pro'],
-                    ['sans', 'Inter (Sans)'],
-                    ['mono', 'Monospace'],
+                    ['serif', 'Serif'],
+                    ['sans', 'Sans'],
+                    ['mono', 'Mono'],
                   ] as const).map(([v, l]) => (
                     <button
                       key={v}
@@ -360,7 +373,7 @@ export default function SettingsMenu({
                   ))}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-                  Source Serif Pro provides the classic literary editorial experience for long-form prose.
+                  Serif suits long prose.
                 </div>
               </div>
 
@@ -392,7 +405,7 @@ export default function SettingsMenu({
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                   <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', margin: 0 }}>
-                    Line Height (Leading)
+                    Line Height
                   </label>
                   <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>{settings.lineHeight.toFixed(2)}</span>
                 </div>
@@ -416,9 +429,9 @@ export default function SettingsMenu({
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', margin: 0 }}>
-                    Paper Layout Width
+                    Page Width
                   </label>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>Controls reading column span</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>Sets text column width</span>
                 </div>
                 <div className="mode-toggle" style={{ display: 'flex', maxWidth: 440 }}>
                   {([
@@ -439,11 +452,11 @@ export default function SettingsMenu({
                   ))}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-                  Select "Full" or "Wide" to span the paper editor out across the middle canvas.
+                  Full and Wide use the full center area.
                 </div>
               </div>
 
-              {/* Spellcheck & Grammar Toggles */}
+              {/* Spellcheck toggle (grammar corrections stay on) */}
               <div style={{ display: 'grid', gap: 6, paddingTop: 4 }}>
                 <label
                   style={{
@@ -452,12 +465,11 @@ export default function SettingsMenu({
                     justifyContent: 'space-between',
                     cursor: 'pointer',
                     padding: '8px 0',
-                    borderBottom: '1px solid color-mix(in srgb, var(--border) 60%, transparent)',
                   }}
                 >
                   <div>
                     <strong style={{ fontSize: 13, color: 'var(--ink)', display: 'block' }}>Browser Spellcheck</strong>
-                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>Native browser red squiggly spellchecker in document editor</span>
+                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>Browser spell lines in editor</span>
                   </div>
                   <button
                     type="button"
@@ -473,41 +485,13 @@ export default function SettingsMenu({
                     <span className="knob" />
                   </button>
                 </label>
-
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    cursor: 'pointer',
-                    padding: '8px 0',
-                  }}
-                >
-                  <div>
-                    <strong style={{ fontSize: 13, color: 'var(--ink)', display: 'block' }}>Auto-apply Grammar Fixes</strong>
-                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>Automatically apply high-confidence grammar edits in Edit mode</span>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={settings.autoApplyGrammar}
-                    aria-label="Auto-apply grammar fixes"
-                    className={`switch ${settings.autoApplyGrammar ? 'on' : ''}`}
-                    onClick={e => {
-                      e.preventDefault()
-                      set({ autoApplyGrammar: !settings.autoApplyGrammar })
-                    }}
-                  >
-                    <span className="knob" />
-                  </button>
-                </label>
               </div>
 
             </div>
           )}
 
           {/* ══════════════════════════════════════════════════
-              TAB 3: ACCESSIBILITY & AUDIO (MERGED SFX)
+              TAB 3: AUDIO & DISPLAY
           ══════════════════════════════════════════════════ */}
           {tab === 'accessibility' && (
             <div style={{ display: 'grid', gap: 24 }}>
@@ -515,7 +499,7 @@ export default function SettingsMenu({
               {/* Section 1: Audio / SFX (Soundscape & Tone Controls) */}
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)', paddingBottom: 6, borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
-                  Audio Feedback & Synth Tone
+                  Audio & Tone
                 </div>
 
                 {/* Master SFX Switch */}
@@ -532,8 +516,8 @@ export default function SettingsMenu({
                   }}
                 >
                   <div>
-                    <strong style={{ fontSize: 13, color: 'var(--ink)', display: 'block' }}>UI Sound Effects (Melodic SFX)</strong>
-                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>Subtle acoustic chimes for accepting suggestions, toggles, and findings</span>
+                    <strong style={{ fontSize: 13, color: 'var(--ink)', display: 'block' }}>Interface Sounds</strong>
+                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>Short tones for accept, toggle, and notes</span>
                   </div>
                   <button
                     type="button"
@@ -555,14 +539,14 @@ export default function SettingsMenu({
                 {/* Instrument / Timbre Selector */}
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
-                    Synthesizer Instrument / Timbre
+                    Instrument
                   </label>
                   <div className="mode-toggle" style={{ display: 'flex', maxWidth: 440 }}>
                     {([
-                      ['triangle', 'Soft Bell'],
-                      ['sine', 'Pure Tone'],
-                      ['square', 'Chiptune (8-Bit)'],
-                      ['sawtooth', 'Bright String'],
+                      ['triangle', 'Bell'],
+                      ['sine', 'Tone'],
+                      ['square', '8-Bit'],
+                      ['sawtooth', 'String'],
                     ] as const).map(([inst, label]) => (
                       <button
                         key={inst}
@@ -581,7 +565,7 @@ export default function SettingsMenu({
                 <div style={{ marginBottom: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', margin: 0 }}>
-                      Pitch & Tone Tuning
+                      Pitch
                     </label>
                     <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>
                       {pitch === 0 ? 'Normal (C4)' : pitch > 0 ? `+${pitch} semitones (Higher)` : `${pitch} semitones (Lower)`}
@@ -606,7 +590,7 @@ export default function SettingsMenu({
                 {/* Audition Testing Buttons */}
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
-                    Audition Sound Cues
+                    Test Sounds
                   </label>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {[
@@ -638,7 +622,7 @@ export default function SettingsMenu({
               {/* Section 2: Visual Accessibility & Metrics */}
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)', paddingBottom: 6, borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
-                  Display & Accessibility Controls
+                  Display
                 </div>
 
                 <div style={{ display: 'grid', gap: 6 }}>
@@ -654,9 +638,9 @@ export default function SettingsMenu({
                     }}
                   >
                     <div>
-                      <strong style={{ fontSize: 13, color: 'var(--ink)', display: 'block' }}>Show Word & Character Count</strong>
+                      <strong style={{ fontSize: 13, color: 'var(--ink)', display: 'block' }}>Word Count</strong>
                       <span style={{ fontSize: 11, color: 'var(--muted)' }}>
-                        Displays real-time live word and character counters in the sticky drafting toolbar
+                        Shows word and character counts in toolbar
                       </span>
                     </div>
                     <button
@@ -687,7 +671,7 @@ export default function SettingsMenu({
                     <div>
                       <strong style={{ fontSize: 13, color: 'var(--ink)', display: 'block' }}>Reduce Motion</strong>
                       <span style={{ fontSize: 11, color: 'var(--muted)' }}>
-                        Disable pulse glows, sliding drawers, and animated keyframe transitions
+                        Stops pulse, slide, and transition effects
                       </span>
                     </div>
                     <button
@@ -725,7 +709,7 @@ export default function SettingsMenu({
                   lineHeight: 1.5,
                 }}
               >
-                Key controls: <strong>1, 2, 3</strong> accept alternatives · <strong>Tab</strong> accepts first or cycles overlapping review tabs · <strong>Alt + R</strong> rerolls suggestions · <strong>Click underline</strong> opens inline suggestions
+                Key controls: <strong>1, 2, 3</strong> accept items · <strong>Tab</strong> accepts first · <strong>Alt + R</strong> lists new options · <strong>Select text</strong> shows options
               </div>
 
               {SHORTCUTS.map(g => (
