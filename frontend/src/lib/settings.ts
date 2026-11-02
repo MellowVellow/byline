@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type EditorFont = 'serif' | 'sans' | 'mono'
 export type PaperWidth = 'narrow' | 'normal' | 'wide' | 'full'
@@ -34,6 +36,10 @@ export interface AppSettings {
   spellcheck: boolean
   // Meta-authored inference settings
   metaModel: string
+  /** Per-request provider routing: auto cascades; explicit choices never fall back. */
+  metaProvider: 'auto' | 'baseten' | 'meta'
+  /** Shared backend API key (X-API-Key). Empty = backend enforces nothing. */
+  apiKey: string
   temperature: number
   maxTokens: number
   topP: number
@@ -42,6 +48,27 @@ export interface AppSettings {
   writingTheme: 'neutral' | 'academic' | 'gen-z' | 'buzzword'
   language: string
 }
+
+/** Runtime validation for stored settings. Unknown keys stripped, wrong
+ *  types rejected per-field so one corrupt value can't poison the shape. */
+const SettingsSchema = z.object({
+  theme: z.enum(['light', 'dark', 'system']),
+  metaProvider: z.enum(['auto', 'baseten', 'meta']),
+  apiKey: z.string().max(200),
+  editorFont: z.enum(['serif', 'sans', 'mono']),
+  fontSize: z.number().min(10).max(40),
+  lineHeight: z.number().min(1).max(3),
+  paperWidth: z.enum(['narrow', 'normal', 'wide', 'full']),
+  temperature: z.number().min(0).max(2),
+  maxTokens: z.number().int().min(1).max(8000),
+  topP: z.number().min(0).max(1),
+  reasoningEffort: z.enum(['minimal', 'low', 'medium']),
+  reduceMotion: z.boolean(),
+  spellcheck: z.boolean(),
+  showWordCount: z.boolean(),
+  writingTheme: z.enum(['neutral', 'academic', 'gen-z', 'buzzword']),
+  language: z.string().max(20),
+}).partial()
 
 export interface ColorPreset {
   label: string
@@ -199,6 +226,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   reduceMotion: false,
   spellcheck: false,
   metaModel: 'meta-llama/llama-3.3-70b-instruct',
+  metaProvider: 'auto',
+  apiKey: '',
   temperature: 0.7,
   maxTokens: 800,
   topP: 0.9,
@@ -211,8 +240,13 @@ const KEY = 'byline.settings.v1'
 
 export function loadSettings(): AppSettings {
   try {
-    const s = JSON.parse(localStorage.getItem(KEY) || 'null')
-    if (s) return { ...DEFAULT_SETTINGS, ...s }
+    const raw = localStorage.getItem(KEY)
+    if (raw) {
+      const parsed = SettingsSchema.safeParse(JSON.parse(raw))
+      // Unknown keys dropped, wrong types fall back to defaults: stored
+      // settings can never poison the runtime shape.
+      if (parsed.success) return { ...DEFAULT_SETTINGS, ...parsed.data }
+    }
   } catch { /* fall through */ }
   const legacy = localStorage.getItem('byline.theme')
   return { ...DEFAULT_SETTINGS, theme: legacy === 'light' || legacy === 'dark' ? legacy : 'system' }
@@ -263,14 +297,14 @@ export function applySettings(s: AppSettings) {
     if (s.uiBgLight) root.style.setProperty('--bg', s.uiBgLight)
     if (s.uiPanelLight) root.style.setProperty('--dock', s.uiPanelLight)
     // Writing space, margin line, caret, buttons follow preset in light mode
-    if ((s as any).paper) root.style.setProperty('--paper', (s as any).paper)
-    if ((s as any).paperLine) root.style.setProperty('--proof', (s as any).paperLine)
-    if ((s as any).caret) {
-      root.style.setProperty('--caret', (s as any).caret)
-      root.style.setProperty('caret-color', (s as any).caret)
+    if (s.paper) root.style.setProperty('--paper', s.paper)
+    if (s.paperLine) root.style.setProperty('--proof', s.paperLine)
+    if (s.caret) {
+      root.style.setProperty('--caret', s.caret)
+      root.style.setProperty('caret-color', s.caret)
     }
-    if ((s as any).btnBg) root.style.setProperty('--btn-bg', (s as any).btnBg)
-    if ((s as any).btnInk) root.style.setProperty('--btn-ink', (s as any).btnInk)
+    if (s.btnBg) root.style.setProperty('--btn-bg', s.btnBg)
+    if (s.btnInk) root.style.setProperty('--btn-ink', s.btnInk)
   }
 
   // Typography & document setup

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { COLOR_PRESETS, DEFAULT_SETTINGS, SHORTCUTS, type AppSettings } from '../lib/settings'
+import { api } from '../lib/api'
 import {
   sfxMuted,
   sfxToggle,
@@ -13,7 +14,7 @@ import {
 } from '../lib/sfx'
 import { Logo } from './Brand'
 
-type Tab = 'colors' | 'document' | 'accessibility' | 'shortcuts'
+type Tab = 'colors' | 'document' | 'ai' | 'accessibility' | 'shortcuts'
 
 // Mark colors: red grammar, purple reader, blue explore, green fix, grey completions,
 // plus UI surfaces (dark + light), writing space, caret, buttons.
@@ -47,6 +48,19 @@ export default function SettingsMenu({
   const [muted, setMuted] = useState(sfxMuted())
   const [instrument, setInstrumentState] = useState<SfxInstrument>(getSfxInstrument)
   const [pitch, setPitchState] = useState<number>(getSfxPitch)
+  const [modelInfo, setModelInfo] = useState<any>(null)
+  const [usage, setUsage] = useState<any>(null)
+
+  useEffect(() => {
+    if (tab !== 'ai') return
+    let alive = true
+    Promise.all([api.models(), api.usage()]).then(([m, u]) => {
+      if (!alive) return
+      setModelInfo(m)
+      setUsage(u)
+    })
+    return () => { alive = false }
+  }, [tab])
 
   const set = (p: Partial<AppSettings>) => {
     blip('select')
@@ -65,6 +79,7 @@ export default function SettingsMenu({
   const TABS: { id: Tab; label: string }[] = [
     { id: 'colors',        label: 'Colors & Theme' },
     { id: 'document',      label: 'Document' },
+    { id: 'ai',            label: 'AI Routing' },
     { id: 'accessibility', label: 'Audio & Display' },
     { id: 'shortcuts',     label: 'Shortcuts' },
   ]
@@ -357,6 +372,107 @@ export default function SettingsMenu({
                 </div>
               </div>
 
+            </div>
+          )}
+
+          {/* ══════════════════════════════════════════════════
+              TAB 2: AI ROUTING + USAGE
+          ══════════════════════════════════════════════════ */}
+          {tab === 'ai' && (
+            <div style={{ display: 'grid', gap: 22 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', display: 'block', marginBottom: 8 }}>
+                  Inference Provider
+                </label>
+                <div className="mode-toggle" style={{ display: 'flex', maxWidth: 440 }}>
+                  {([
+                    ['auto', 'Auto', 'Baseten → Meta → OpenRouter', true],
+                    ['baseten', 'Baseten', 'muse-spark-open-1026', !modelInfo || modelInfo.baseten_available],
+                    ['meta', 'Meta API', 'muse-spark-1.3', !modelInfo || modelInfo.meta_api_available],
+                  ] as const).map(([id, label, desc, available]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={settings.metaProvider === id ? 'active' : ''}
+                      disabled={!available}
+                      title={available ? desc : `${label} is not configured on the server`}
+                      style={{ flex: 1, fontSize: 12, opacity: available ? 1 : 0.45 }}
+                      onClick={() => set({ metaProvider: id })}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
+                  {settings.metaProvider === 'auto'
+                    ? 'Automatic: tries Baseten first, then Meta, then OpenRouter, then offline mock.'
+                    : 'Explicit choice: no fallback. The request fails if this provider is unavailable.'}
+                </div>
+                {modelInfo && (
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                    Server active: <strong style={{ color: 'var(--ink)' }}>{modelInfo.active_model}</strong> · {modelInfo.active_provider}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', display: 'block', marginBottom: 8 }}>
+                  API Key
+                </label>
+                <input
+                  type="password"
+                  value={settings.apiKey || ''}
+                  placeholder="Shared backend key (empty = dev-open backend)"
+                  autoComplete="off"
+                  onChange={e => set({ apiKey: e.target.value.trim() })}
+                  style={{ width: '100%', maxWidth: 440, padding: '6px 8px', fontSize: 12, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--dock)', color: 'var(--ink)', boxSizing: 'border-box' }}
+                />
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                  Sent as X-API-Key. Required once the server sets API_KEY.
+                </div>
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', margin: 0 }}>
+                    This IP's Usage
+                  </label>
+                  {usage?.reset_at && (
+                    <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>
+                      resets {new Date(usage.reset_at * 1000).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                {usage?.ok ? (
+                  <>
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12 }}>
+                      <span><strong>{usage.used_tokens.toLocaleString()}</strong> / {usage.limit_tokens.toLocaleString()} tokens</span>
+                      <span>≈ <strong>${Number(usage.est_usd || 0).toFixed(4)}</strong></span>
+                      <span>{usage.requests} requests</span>
+                    </div>
+                    <div style={{ marginTop: 8, height: 6, background: 'var(--hover)', borderRadius: 3, overflow: 'hidden', maxWidth: 440 }}>
+                      <div style={{ width: `${Math.min(100, usage.limit_tokens ? (usage.used_tokens / usage.limit_tokens) * 100 : 0)}%`, height: '100%', background: 'var(--explore)' }} />
+                    </div>
+                    {usage.used_tokens >= usage.limit_tokens && (
+                      <div style={{ fontSize: 11, color: 'var(--lt)', marginTop: 6 }}>
+                        Quota reached. AI requests return 429 until the window resets.
+                      </div>
+                    )}
+                    {usage.by_provider && Object.keys(usage.by_provider).length > 0 && (
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>
+                        {Object.entries(usage.by_provider).map(([p, v]: any) => (
+                          <span key={p} style={{ marginRight: 12 }}>{p}: {v.tokens.toLocaleString()} tok / {v.requests} calls</span>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>Usage unavailable — backend not reachable.</div>
+                )}
+                <div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 8 }}>
+                  Quota is token-based; the dollar figure is an estimate using placeholder prices.
+                </div>
+              </div>
             </div>
           )}
 

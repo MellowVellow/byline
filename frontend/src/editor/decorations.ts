@@ -57,12 +57,15 @@ function groupOverlapping(anchors: Array<{ id: string; kind: string; from: numbe
 function buildAnchors(doc: any): Decoration[] {
   if (modeStore.mode !== 'editing') return []
 
+  // Findings anchor sentence-scale quotes; a span beyond this is a stale or
+  // misresolved anchor (e.g. whole-document), never a legitimate underline.
+  const MAX_ANCHOR_CHARS = 500
   const anchors: Array<{ id: string; kind: string; from: number; to: number }> = []
   for (const a of anchorStore.anchors) {
     const r = anchorStore.ranges.get(a.id)
     if (!r || r.to > doc.content.size || r.from >= r.to) continue
     const span = r.to - r.from
-    if (span > doc.textContent.length * 0.8) continue
+    if (span > MAX_ANCHOR_CHARS) continue
     anchors.push({ id: a.id, kind: a.kind, from: r.from, to: r.to })
   }
 

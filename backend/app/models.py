@@ -1,5 +1,5 @@
 from __future__ import annotations
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 S = lambda n: Field(default="", max_length=n)  # noqa: E731
 
@@ -30,7 +30,7 @@ class GrammarIn(BaseModel):
     text: str = S(20000)
 
 class WaitlistIn(BaseModel):
-    email: str = Field(min_length=3, max_length=320); note: str = S(500); company: str = S(200)
+    email: EmailStr; note: str = S(500); company: str = S(200)
 
 class ClaimIn(BaseModel):
     quote: str = S(2000); context: str = S(4000)
@@ -50,7 +50,7 @@ class ExploreIn(BaseModel):
     count: int = Field(default=8, ge=1, le=8)
 
 class OutlineGenIn(BaseModel):
-    answers: dict = Field(default_factory=dict)
+    answers: dict = Field(default_factory=dict, max_length=50)
 
 class DatasetIn(BaseModel):
     pairs: list[dict] = Field(default_factory=list, max_length=200)
@@ -59,7 +59,7 @@ class SetupQuestionsIn(BaseModel):
     goal: str = S(2000); context: str = S(4000)
 
 class SetupAgentIn(BaseModel):
-    raw_goal: str = S(4000); transcript: str = S(4000); answers: dict = Field(default_factory=dict)
+    raw_goal: str = S(4000); transcript: str = S(4000); answers: dict = Field(default_factory=dict, max_length=50)
 
 class CustomRuleOut(BaseModel):
     id: str = S(80); category: str = Field(default="violet", max_length=30); rule: str = S(1000)

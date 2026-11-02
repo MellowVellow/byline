@@ -40,6 +40,7 @@ import type { ThemeId } from '../domain/document'
 import type { Finding, Suggestion } from '../domain/finding'
 import { THEME_DEFINITIONS, SUPPORTED_LANGUAGES } from '../domain/writing-profile'
 import { loadSettings, saveSettings, type AppSettings } from '../lib/settings'
+import { idbSetDoc, idbGetDoc } from '../lib/storage'
 import { api } from '../lib/api'
 import { hashKey, cacheGet, cacheSet, saveLastGhost, loadLastGhost } from '../lib/ai-cache'
 import { GOLDEN_PATH_SAMPLE_DOC } from '../lib/fallback'
@@ -112,6 +113,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   })
   const [appSettings, setAppSettings] = useState<AppSettings>(loadSettings)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // Non-blocking error toast (replaces alert()).
+  const [notice, setNotice] = useState<string | null>(null)
+  const noticeTimer = useRef<number | null>(null)
+  const notify = (msg: string) => {
+    setNotice(msg)
+    if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 4000)
+  }
   const [connectOpen, setConnectOpen] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
   // Private context note (display-only scratch above the draft; never sent to AI)
@@ -140,6 +149,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
   const ghostAbort = useRef<AbortController | null>(null)
   // Armed-delay state: trigger held 350ms to confirm a real pause before firing
   const ghostArmed = useRef<{ key: string; at: number } | null>(null)
+  // Idle-poll memo: skip textBetween + trigger evaluation when idle
+  const lastPoll = useRef({ rev: -1, from: -1 })
   const GHOST_ARM_MS = 350
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
 
@@ -307,7 +318,18 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       const chars = (editor.storage as any).characterCount?.characters() || 0
       setCounts({ words, chars })
       if (!demo) {
-        localStorage.setItem('byline.doc.html', editor.getHTML())
+        // Debounced persist: serializing the full doc on every keystroke
+        // blocks the main thread; flush happens 1.5s after typing stops
+        // (plus a pagehide flush below so no window is lost).
+        if (saveTimer.current) window.clearTimeout(saveTimer.current)
+        saveTimer.current = window.setTimeout(() => {
+          try {
+            const html = editor.getHTML()
+            localStorage.setItem('byline.doc.html', html)
+            // Async durable backup (IndexedDB quota >> localStorage).
+            void idbSetDoc(html)
+          } catch { /* quota full: keep in-memory doc */ }
+        }, 1500)
       }
       globalAnalysisService.validateAnchors(editor)
       syncEditorDecorations(editor)
@@ -440,28 +462,30 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     }
   }, [findings, editor, syncEditorDecorations])
 
-  // Populate a sample Reader finding if findings are empty (Reader is the only review persona)
+  // Populate a sample Reader finding in demo mode only — never inject
+  // phantom findings into real documents.
   useEffect(() => {
-    if (findings.length === 0) {
-      const demoFindings: Finding[] = [
-        {
-          id: 'f-demo-2',
-          documentId: 'demo-doc',
-          persona: 'reader',
-          kind: 'reader_observation',
-          anchor: {
-            quotedText: 'low population density often lengthens the payback horizon',
-            documentRevision: 1,
-          },
-          explanation: 'Reader perspective: A skeptical reader may ask how dense corridors can justify transit if suburban periphery remains sparse.',
-          suggestions: [],
-          status: 'open',
-          sourceRevision: 1,
-          createdAt: Date.now(),
-        },
-      ]
-      globalAnalysisService.setFindings(demoFindings)
+    if (!demo || findings.length !== 0) {
+      return
     }
+    const demoFindings: Finding[] = [
+      {
+        id: 'f-demo-2',
+        documentId: 'demo-doc',
+        persona: 'reader',
+        kind: 'reader_observation',
+        anchor: {
+          quotedText: 'low population density often lengthens the payback horizon',
+          documentRevision: 1,
+        },
+        explanation: 'Reader perspective: A skeptical reader may ask how dense corridors can justify transit if suburban periphery remains sparse.',
+        suggestions: [],
+        status: 'open',
+        sourceRevision: 1,
+        createdAt: Date.now(),
+      },
+    ]
+    globalAnalysisService.setFindings(demoFindings)
   }, [demo])
 
   // --- DRAFT ASSISTANCE & GHOST TEXT FOR BOTH MODES ---
@@ -682,9 +706,16 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const id = setInterval(() => {
       try {
         if (!editor || !editor.isFocused) return
+        if (document.hidden) return
         if (draftLoadingRef.current) return
         const { empty, from } = editor.state.selection as { empty: boolean; from: number; to: number }
         if (!empty) return
+        // Idle gate: skip the expensive textBetween + evaluate when neither
+        // the document nor the caret moved since the last poll.
+        const lp = lastPoll.current
+        if (lp.rev === docRevisionRef.current && lp.from === from) return
+        lp.rev = docRevisionRef.current
+        lp.from = from
         // Skip while a ghost popup or inline ghost is already visible
         const groups = ghostGroupsRef.current
         const ghostEmpty = GHOST_LEVELS.every(l => groups[l].length === 0)
@@ -808,6 +839,34 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
 
   // --- SELECTION GRID (Synonyms / Paraphrase / Tone, one call, app parses) ---
   const selTimerRef = useRef<number | null>(null)
+  // Debounced doc persistence (see onUpdate) + flush-on-hide so the last
+  // 1.5s window is never lost when the tab closes.
+  const saveTimer = useRef<number | null>(null)
+  useEffect(() => {
+    const flush = () => {
+      if (saveTimer.current) { window.clearTimeout(saveTimer.current); saveTimer.current = null }
+      try {
+        if (editor && !demo) {
+          const html = editor.getHTML()
+          localStorage.setItem('byline.doc.html', html)
+          void idbSetDoc(html)
+        }
+      } catch { /* ignore */ }
+    }
+    window.addEventListener('pagehide', flush);
+    // Recovery: localStorage empty but an IndexedDB backup exists (e.g. quota
+    // eviction) — restore it instead of starting blank.
+    if (editor && !demo) {
+      let empty = true
+      try { empty = !localStorage.getItem('byline.doc.html') } catch { empty = false }
+      if (empty) {
+        void idbGetDoc().then(html => {
+          if (html && html.trim() && editor && !editor.isDestroyed) editor.commands.setContent(html)
+        })
+      }
+    }
+    return () => { window.removeEventListener('pagehide', flush); flush() }
+  }, [editor, demo])
 
   const parseSelGrid = (res: any): SelGrid => {
     if (res?.grid && typeof res.grid === 'object') {
@@ -880,7 +939,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const { from, to, selectedText } = selectionContext
     const currentSlice = editor.state.doc.textBetween(from, to)
     if (currentSlice.trim() !== selectedText.trim()) {
-      alert('Selected text was modified during request. Edit aborted safely.')
+      notify('Selected text was modified during request. Edit aborted safely.')
       setSelectionContext(null)
       setSelGrid(EMPTY_GRID)
       return
@@ -891,7 +950,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       setSelectionContext(null)
       setSelGrid(EMPTY_GRID)
     } catch {
-      alert('Failed to insert replacement.')
+      notify('Failed to insert replacement.')
     }
   }
 
@@ -931,7 +990,7 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         return remaining.length > 0 ? { ...prev, findings: remaining } : null
       })
     } else {
-      alert(res.error || 'Failed to apply replacement.')
+      notify(res.error || 'Failed to apply replacement.')
     }
   }
 
@@ -1144,8 +1203,9 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         }
       }
 
-      // Offline / demo fallback if empty
-      if (readerFindings.length === 0) {
+      // Demo-only fallback: sample findings when the backend is unreachable.
+      // Real documents get an honest empty result, never phantom findings.
+      if (demo && readerFindings.length === 0) {
         readerFindings.push(
           {
             id: `demo-read-1`,
@@ -1201,6 +1261,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
     const candidates = list
       .filter(f => f.suggestions[0]?.text)
       .sort((a, b) => (b.anchor.startOffset ?? 0) - (a.anchor.startOffset ?? 0))
+    let tr = editor.state.tr
+    let touched = false
 
     for (const f of candidates) {
       const replacement = f.suggestions[0].text
@@ -1208,12 +1270,14 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       if (!resolved) continue
       if (replacement === resolved.matchedText) continue
       try {
-        const tr = editor.state.tr.replaceWith(
+        // Batched: accumulate into one transaction (descending offsets stay
+        // valid), single dispatch below instead of one tx per finding.
+        tr = tr.replaceWith(
           resolved.from,
           resolved.to,
           editor.schema.text(replacement)
         )
-        editor.view.dispatch(tr)
+        touched = true
         applied.add(f.id)
         popStore.pops.push({
           id: f.id,
@@ -1225,6 +1289,8 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
         // skip unsafe replacement
       }
     }
+
+    if (touched) editor.view.dispatch(tr)
 
     if (applied.size > 0) {
       syncPops(editor)
@@ -1424,6 +1490,20 @@ export default function EditorPage({ demo = false }: { demo?: boolean }) {
       onTouchEnd={handleTouchEnd}
       style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--bg)' }}
     >
+      {notice && (
+        <div
+          role="alert"
+          onClick={() => setNotice(null)}
+          style={{
+            position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+            background: 'var(--ink)', color: 'var(--bg)', fontSize: 13, fontWeight: 600,
+            padding: '8px 16px', borderRadius: 6, zIndex: 999, cursor: 'pointer',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.25)', maxWidth: '90vw',
+          }}
+        >
+          {notice}
+        </div>
+      )}
       {/* 1. Top Navigation Bar (Centered Mode, Exposable Theme, Light/Dark) */}
       <TopNavigation
         mode={mode}

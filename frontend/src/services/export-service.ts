@@ -1,7 +1,10 @@
 import type { Editor } from '@tiptap/react'
+import TurndownService from 'turndown'
 import { exportDocx } from '../lib/docx-export'
 
 export type ExportFormat = 'docx' | 'markdown' | 'txt'
+
+const turndown = new TurndownService({ headingStyle: 'atx', bulletListMarker: '-', emDelimiter: '*' })
 
 export const exportService = {
   async export(editor: Editor, format: ExportFormat, title = 'Byline-Draft') {
@@ -28,23 +31,12 @@ export const exportService = {
   },
 
   htmlToMarkdown(html: string): string {
-    return html
-      .replace(/<h1>(.*?)<\/h1>/gi, '# $1\n\n')
-      .replace(/<h2>(.*?)<\/h2>/gi, '## $1\n\n')
-      .replace(/<h3>(.*?)<\/h3>/gi, '### $1\n\n')
-      .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
-      .replace(/<b>(.*?)<\/b>/gi, '**$1**')
-      .replace(/<em>(.*?)<\/em>/gi, '*$1*')
-      .replace(/<i>(.*?)<\/i>/gi, '*$1*')
-      .replace(/<p>(.*?)<\/p>/gi, '$1\n\n')
-      .replace(/<blockquote>(.*?)<\/blockquote>/gi, '> $1\n\n')
-      .replace(/<li>(.*?)<\/li>/gi, '- $1\n')
-      .replace(/<ul>(.*?)<\/ul>/gi, '$1\n')
-      .replace(/<ol>(.*?)<\/ol>/gi, '$1\n')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<[^>]+>/g, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
+    try {
+      return turndown.turndown(html || '').replace(/\n{3,}/g, '\n\n').trim()
+    } catch {
+      // Fallback: strip tags if the converter chokes on hostile markup.
+      return (html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    }
   },
 
   triggerDownload(filename: string, content: string, mime: string) {

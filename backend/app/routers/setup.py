@@ -1,7 +1,7 @@
 import json
 from fastapi import APIRouter, UploadFile, File
 import httpx
-from .. import llm, prompts
+from .. import llm, prompts, budget
 from ..config import settings
 from ..models import OutlineGenIn, SetupAgentIn, SetupQuestionsIn
 from ..lint_rules import LINT_RULE_LIBRARY
@@ -31,12 +31,13 @@ async def outline_generate(body: OutlineGenIn):
 async def transcribe(file: UploadFile = File(...)):
     try:
         content = await file.read()
-        if len(content) > 30 * 1024 * 1024: return fail(error="audio >30MB")
+        if len(content) > settings.body_limit_mb * 1024 * 1024: return fail(error="audio_too_large")
         req = json.dumps({"mode": "PUSH_TO_TALK", "model": "muse-voice-transcribe-1.0", "audioEncoding": "WAV"})
         async with httpx.AsyncClient(timeout=90) as cl:
             r = await cl.post(f"{settings.meta_base_url}/asr/transcribe", headers={"Authorization": f"Bearer {settings.meta_api_key}"},
                               data={"request": req}, files={"audio": (file.filename or "audio.wav", content, "audio/wav")})
             r.raise_for_status(); d = r.json()
+        budget.charge(budget.current_ip(), 1000, "/api/transcribe", "meta", "muse-voice-transcribe-1.0")
         return ok(transcript=d.get("transcript", ""), turns=d.get("turns", []))
     except Exception as e: return err(e)
 
@@ -54,6 +55,8 @@ async def setup_questions(body: SetupQuestionsIn):
                        "options": [str(o)[:80] for o in (q.get("options") or []) if isinstance(o, (str, int))][:5]})
         if len(qs) >= 3: return ok(questions=qs, model=model, usage=usage, meta=meta("setup-questions", s, u, usage, model, 0, 0.4, 1100))
         raise ValueError("too few questions")
+    except (llm.ProviderUnavailable, budget.BudgetExceeded):
+        raise
     except Exception:
         return ok(questions=fallback_questions(body.goal, body.context), model="fallback", usage={})
 
@@ -88,5 +91,7 @@ async def setup_agent(body: SetupAgentIn):
             payload["ghost_text_filters"]["starter_categories"] = [str(t)[:40] for t in gf["starter_categories"] if isinstance(t, str)][:5]
         if isinstance(data.get("followup_question"), str): payload["followup_question"] = data["followup_question"][:240]
         return ok(model=model, usage=usage, **payload)
+    except (llm.ProviderUnavailable, budget.BudgetExceeded):
+        raise
     except Exception:
         return ok(model="deterministic", usage={}, **payload)

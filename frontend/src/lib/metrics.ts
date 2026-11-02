@@ -10,7 +10,6 @@ export interface CallMeta {
   ms: number
   usage: { in: number; out: number; reasoning: number }
   params: { temperature: number; max_tokens: number; reasoning_effort: string }
-  prompt?: { system: string; user: string }
   errorReason?: string
 }
 
@@ -35,14 +34,13 @@ const EVENTS_KEY = 'byline.metrics.events.v1'
 const USAGE_KEY = 'byline.metrics.usage.v1'
 const MAX_EVENTS = 120
 
-// Baseline seeded demo stats so user sees realistic metrics out of the box
 const DEFAULT_USAGE: UsageTelemetry = {
-  suggestionsOffered: 48,
-  suggestionsAccepted: 37,
-  revisionsOffered: 24,
-  revisionsAccepted: 20,
-  totalSessions: 3,
-  lastActive: Date.now(),
+  suggestionsOffered: 0,
+  suggestionsAccepted: 0,
+  revisionsOffered: 0,
+  revisionsAccepted: 0,
+  totalSessions: 0,
+  lastActive: 0,
   ghostFired: 0,
   ghostCacheSaved: 0,
   ghostAborted: 0,
@@ -113,8 +111,10 @@ export function recordCall(meta: any, ok = true, errorReason?: string) {
   if (!meta?.endpoint) return
   try {
     const list: CallEvent[] = JSON.parse(localStorage.getItem(EVENTS_KEY) || '[]')
+    const safe = { ...(meta || {}) }
+    delete safe.prompt
     list.unshift({
-      ...meta,
+      ...safe,
       ts: Date.now(),
       ok,
       errorReason: errorReason || (!ok ? 'Inference validation timeout or schema mismatch' : undefined),
@@ -127,49 +127,14 @@ export function recordCall(meta: any, ok = true, errorReason?: string) {
 export function loadCalls(): CallEvent[] {
   try {
     const raw = localStorage.getItem(EVENTS_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const list: any[] = JSON.parse(raw)
+      for (const item of list) delete item.prompt
+      return list
+    }
   } catch { /* noop */ }
 
-  // Default seeded call log for live demo demonstration
-  const now = Date.now()
-  return [
-    {
-      ts: now - 12000,
-      endpoint: '/api/suggest',
-      model: 'meta-llama/llama-3.3-70b-instruct',
-      ms: 284,
-      usage: { in: 412, out: 64, reasoning: 0 },
-      params: { temperature: 0.7, max_tokens: 800, reasoning_effort: 'minimal' },
-      ok: true,
-      prompt: {
-        system: 'You are an editorial writing assistant. Suggest 3 concise, elegant continuations.',
-        user: 'Context: High-speed rail infrastructure in sprawling metropolitan regions...',
-      },
-    },
-    {
-      ts: now - 34000,
-      endpoint: '/api/grammar',
-      model: 'harper-local-wasm',
-      ms: 18,
-      usage: { in: 240, out: 12, reasoning: 0 },
-      params: { temperature: 0.0, max_tokens: 200, reasoning_effort: 'minimal' },
-      ok: true,
-      prompt: { system: 'Harper linter engine rule check', user: 'Checking paragraph token stream' },
-    },
-    {
-      ts: now - 72000,
-      endpoint: '/api/reactions',
-      model: 'meta-llama/llama-3.3-70b-instruct',
-      ms: 540,
-      usage: { in: 820, out: 180, reasoning: 120 },
-      params: { temperature: 0.6, max_tokens: 800, reasoning_effort: 'low' },
-      ok: true,
-      prompt: {
-        system: 'Read as an educated skeptical peer and identify ambiguous assumptions.',
-        user: 'Intercity air travel corridors face worsening ground delays...',
-      },
-    },
-  ]
+  return []
 }
 
 export function clearCalls() {

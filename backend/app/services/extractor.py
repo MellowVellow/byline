@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import re
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -14,6 +15,34 @@ log = logging.getLogger("byline.extractor")
 UA = {"User-Agent": "Byline-Research/1.0 (+https://byline.app)"}
 MAX_HTML = 2 * 1024 * 1024
 MIN_TEXT = 500
+# Redirects are followed manually so every hop is re-validated; httpx's
+# follow_redirects would fetch whatever Location header an attacker returns.
+MAX_REDIRECTS = 5
+_REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+# Non-standard ports are a classic SSRF hole (internal admin panels, etc.).
+_ALLOWED_PORTS = {80, 443}
+
+
+def _validate_fetch_url(url: str) -> bool:
+    """True only if this exact URL is safe to fetch right now."""
+    try:
+        p = urlparse(url)
+    except Exception:  # noqa: BLE001
+        return False
+    if p.scheme not in ("http", "https") or not p.hostname:
+        return False
+    if p.username or p.password:
+        return False
+    try:
+        port = p.port or (443 if p.scheme == "https" else 80)
+    except ValueError:
+        return False
+    if port not in _ALLOWED_PORTS:
+        return False
+    # Validated again immediately before every connect (including each
+    # redirect hop) to narrow the DNS-rebinding (TOCTOU) window. Residual
+    # risk is inherent without connect-time IP pinning.
+    return bool(is_safe_public_url(url))
 
 
 def _fallback_text(html: str) -> str:
@@ -23,18 +52,48 @@ def _fallback_text(html: str) -> str:
     return txt
 
 
+async def _read_capped(r: httpx.Response, cap: int = MAX_HTML) -> str:
+    """Stream the body and stop downloading once cap bytes are buffered."""
+    parts: list[str] = []
+    size = 0
+    async for chunk in r.aiter_text():
+        size += len(chunk)
+        if size >= cap:
+            keep = len(chunk) - (size - cap)
+            if keep > 0:
+                parts.append(chunk[:keep])
+            break
+        parts.append(chunk)
+    return "".join(parts)
+
+
 async def extract_page(url: str, timeout: float = 15.0) -> dict | None:
     """Fetch url + parse via trafilatura. Returns page dict or None on failure."""
     url = (url or "").strip()
-    if not url.startswith(("http://", "https://")):
-        return None
-    if not is_safe_public_url(url):
+    if not _validate_fetch_url(url):
         return None
     try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, headers=UA) as cl:
-            r = await cl.get(url)
-            r.raise_for_status()
-            html = r.text[:MAX_HTML]
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=False, headers=UA) as cl:
+            current, html, moved = url, None, False
+            for _ in range(MAX_REDIRECTS + 1):
+                if not _validate_fetch_url(current):
+                    log.info("extract blocked hop %s", current[:120])
+                    return None
+                async with cl.stream("GET", current) as r:
+                    loc = r.headers.get("location", "")
+                    if r.status_code in _REDIRECT_STATUSES and loc:
+                        current = urljoin(current, loc.strip())
+                        moved = True
+                    else:
+                        r.raise_for_status()
+                        html = await _read_capped(r)
+                        moved = False
+                if not moved:
+                    break
+            else:
+                log.info("extract too many redirects %s", url[:120])
+                return None
+            assert html is not None
     except Exception as e:  # noqa: BLE001
         log.info("extract fetch fail %s: %s", url[:120], e)
         return None

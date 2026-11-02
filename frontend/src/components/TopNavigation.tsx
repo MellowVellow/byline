@@ -485,6 +485,18 @@ export default function TopNavigation({
 
         {/* Desktop right buttons */}
         <div className="desktop-only-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+          {/* Metrics */}
+          {onOpenMetrics && (
+            <button
+              type="button"
+              onClick={() => { blip('open'); onOpenMetrics() }}
+              title="Metrics & usage"
+              style={btnBase}
+            >
+              Metrics
+            </button>
+          )}
+
           {/* Tour */}
           <button
             type="button"
@@ -571,6 +583,9 @@ export default function TopNavigation({
               }}
             >
               <button type="button" onClick={() => { setMobileMenuOpen(false); onOpenSetup() }} style={{ width: '100%', padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}>Setup</button>
+              {onOpenMetrics && (
+                <button type="button" onClick={() => { setMobileMenuOpen(false); onOpenMetrics() }} style={{ width: '100%', padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}>Metrics</button>
+              )}
               <button type="button" onClick={() => { setMobileMenuOpen(false); onOpenTutorial?.() }} style={{ width: '100%', padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}>Tour</button>
               <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
               <div style={{ padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>

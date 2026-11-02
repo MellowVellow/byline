@@ -61,20 +61,27 @@ async def plan_queries(query: str, context: str = "", n: int = 4) -> list[str]:
 
 async def search_candidates(queries: list[str], limit: int = SEARCH_CANDIDATES) -> list[dict]:
     """Meta Responses web_search per subquery. Returns deduped [{title,url,snippet}]."""
+    sem = asyncio.Semaphore(3)
+
+    async def _one(q: str):
+        async with sem:
+            try:
+                return await llm.responses_call(
+                    f"Research question: {q}\nUse web search. List the most relevant sources with titles and URLs.",
+                    instructions="Research assistant. Ground every statement in web search results and cite them.",
+                    tools=[{"type": "web_search", "search_context_size": "medium"}],
+                    include=["web_search_call.results"],
+                    max_output_tokens=900,
+                )
+            except Exception:
+                return None
+
+    # Concurrent subqueries; dedup below preserves query order for determinism.
+    results = await asyncio.gather(*[_one(q) for q in queries[:5]])
     out: list[dict] = []
     seen: set[str] = set()
-    for q in queries[:5]:
-        try:
-            r = await llm.responses_call(
-                f"Research question: {q}\nUse web search. List the most relevant sources with titles and URLs.",
-                instructions="Research assistant. Ground every statement in web search results and cite them.",
-                tools=[{"type": "web_search", "search_context_size": "medium"}],
-                include=["web_search_call.results"],
-                max_output_tokens=900,
-            )
-        except Exception:
-            continue
-        if r.get("mock"):
+    for r in results:
+        if not r or r.get("mock"):
             continue
         items = list(r.get("search_results") or [])
         for a in r.get("annotations") or []:
@@ -240,7 +247,7 @@ async def run_explore(query: str, context: str = "", count: int = MAX_SOURCES,
                                      "source_title": str(f.get("source_title", ""))[:300], "url": url,
                                      "locator": str(f.get("locator", ""))[:100],
                                      "excerpt": str(f.get("excerpt", ""))[:500],
-                                     "verdict": "supported", "why": "Grounded in web search results."})
+                                     "verdict": "unverified", "why": "Single-shot web-search result; excerpt not fetched/verified."})
                     await _emit(on_event, "finding", findings[-1])
                 summary = "; ".join(f["text"] for f in findings[:3])[:800]
                 if findings:

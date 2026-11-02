@@ -3,12 +3,20 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-_env = ROOT / ".env"
-if _env.exists():
-    for line in _env.read_text().splitlines():
-        if "=" in line and not line.strip().startswith("#"):
-            k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip())
+# Battle-tested .env parsing (quotes, comments, inline comments). Never
+# overrides real environment variables — matches the old setdefault semantics.
+# Settings stay as dynamic properties (not a frozen BaseSettings snapshot) so
+# tests and operators can change env vars at runtime.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(ROOT / ".env", override=False)
+except ImportError:  # pragma: no cover - dependency always installed in practice
+    _env = ROOT / ".env"
+    if _env.exists():
+        for line in _env.read_text().splitlines():
+            if "=" in line and not line.strip().startswith("#"):
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip())
 
 # Verified Meta-authored model identifiers across approved providers
 APPROVED_META_MODELS = {
@@ -88,6 +96,65 @@ class Settings:
         return (os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_ANON_KEY") or "").strip().strip("'\"")
 
     @property
+    def waitlist_local_fallback(self) -> bool:
+        return os.getenv("WAITLIST_LOCAL_FALLBACK", "").strip().lower() in ("1", "true", "yes")
+
+    # --- Per-IP usage budget (token quota, displayed as a $ estimate) ---
+    @property
+    def ip_budget_enabled(self) -> bool:
+        return os.getenv("IP_BUDGET_ENABLED", "1").strip().lower() not in ("0", "false", "no")
+
+    @property
+    def ip_token_budget(self) -> int:
+        try:
+            return max(0, int(os.getenv("IP_TOKEN_BUDGET", "1000000")))
+        except ValueError:
+            return 1_000_000
+
+    @property
+    def ip_budget_window_hours(self) -> float:
+        try:
+            return max(0.1, float(os.getenv("IP_BUDGET_WINDOW_HOURS", "24")))
+        except ValueError:
+            return 24.0
+
+    @property
+    def price_in_per_m(self) -> float:
+        try:
+            return max(0.0, float(os.getenv("PRICE_IN_PER_M", "0.50")))
+        except ValueError:
+            return 0.50
+
+    @property
+    def price_out_per_m(self) -> float:
+        try:
+            return max(0.0, float(os.getenv("PRICE_OUT_PER_M", "1.50")))
+        except ValueError:
+            return 1.50
+
+    @property
+    def trust_proxy(self) -> bool:
+        return os.getenv("TRUST_PROXY", "").strip().lower() in ("1", "true", "yes")
+
+    @property
+    def usage_db_path(self) -> Path:
+        return Path(os.getenv("USAGE_DB_PATH", str(ROOT / "data" / "usage.db"))).expanduser()
+
+    @property
+    def admin_token(self) -> str:
+        return os.getenv("ADMIN_TOKEN", "").strip()
+
+    @property
+    def api_key(self) -> str:
+        """Single shared API key. Empty = auth disabled (local dev only)."""
+        return os.getenv("API_KEY", "").strip()
+
+    @property
+    def env(self) -> str:
+        """Deployment environment: dev | prod. Prod fails closed (no mocks)."""
+        return os.getenv("ENV", "dev").strip().lower()
+
+    @property
     def cors_origins(self) -> str:
         return os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:4173")
 
@@ -97,6 +164,14 @@ class Settings:
             return float(os.getenv("REQUEST_TIMEOUT", "60"))
         except ValueError:
             return 60.0
+
+    @property
+    def body_limit_mb(self) -> int:
+        """Single max-request-body cap enforced on JSON and file uploads alike."""
+        try:
+            return max(1, int(os.getenv("BODY_LIMIT_MB", "22")))
+        except ValueError:
+            return 22
 
     @property
     def local_base_url(self) -> str:

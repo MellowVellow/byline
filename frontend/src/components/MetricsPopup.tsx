@@ -1,7 +1,8 @@
-import React, { Fragment, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { loadCalls, clearCalls, loadUsageStats, type CallEvent, type UsageTelemetry } from '../lib/metrics'
 import { BENCH_MODELS, BENCH_MODES, BENCH_PROMPTS, BENCH_PARAMS } from '../lib/benchmarks'
 import { blip } from '../lib/sfx'
+import { api } from '../lib/api'
 
 type Tab = 'overview' | 'errors' | 'live' | 'benchmarks'
 
@@ -9,7 +10,7 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
   const [tab, setTab] = useState<Tab>('overview')
   const [calls, setCalls] = useState<CallEvent[]>(loadCalls)
   const [usage, setUsage] = useState<UsageTelemetry>(loadUsageStats)
-  const [openPromptIdx, setOpenPromptIdx] = useState<number | null>(null)
+  const [serverUsage, setServerUsage] = useState<any>(null)
 
   useEffect(() => {
     blip('open')
@@ -20,6 +21,8 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
       setCalls(loadCalls())
       setUsage(loadUsageStats())
     }
+    const loadServer = () => { api.usage().then(u => { if (u) setServerUsage(u) }) }
+    loadServer()
 
     window.addEventListener('keydown', handleKey)
     window.addEventListener('byline-metrics', handleUpdate)
@@ -38,17 +41,17 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
   const ghostAcceptRate =
     usage.suggestionsOffered > 0
       ? Math.round((usage.suggestionsAccepted / usage.suggestionsOffered) * 100)
-      : 77
+      : 0
 
   const revisionAcceptRate =
     usage.revisionsOffered > 0
       ? Math.round((usage.revisionsAccepted / usage.revisionsOffered) * 100)
-      : 83
+      : 0
 
   const totalTokensIn = calls.reduce((n, c) => n + (c.usage?.in || 0), 0)
   const totalTokensOut = calls.reduce((n, c) => n + (c.usage?.out || 0), 0)
   const totalTokensReasoning = calls.reduce((n, c) => n + (c.usage?.reasoning || 0), 0)
-  const avgLatency = totalCalls > 0 ? Math.round(calls.reduce((n, c) => n + (c.ms || 0), 0) / totalCalls) : 310
+  const avgLatency = totalCalls > 0 ? Math.round(calls.reduce((n, c) => n + (c.ms || 0), 0) / totalCalls) : 0
 
   const handleClear = () => {
     blip('dismiss')
@@ -233,6 +236,43 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
           ══════════════════════════════════════════════════ */}
           {tab === 'overview' && (
             <div style={{ display: 'grid', gap: 20 }}>
+              {/* Server-side per-IP quota (authoritative) */}
+              <div style={{ background: 'var(--dock)', padding: '12px 16px', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', margin: 0 }}>
+                    Server-side Usage (this IP)
+                  </h3>
+                  {serverUsage?.reset_at && (
+                    <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>
+                      Resets {new Date(serverUsage.reset_at * 1000).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                {serverUsage?.ok ? (
+                  <>
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, marginBottom: 8 }}>
+                      <span><strong>{serverUsage.used_tokens.toLocaleString()}</strong> / {serverUsage.limit_tokens.toLocaleString()} tokens</span>
+                      <span>≈ <strong>${Number(serverUsage.est_usd || 0).toFixed(4)}</strong></span>
+                      <span>{serverUsage.requests} requests</span>
+                    </div>
+                    <div style={{ height: 6, background: 'var(--hover)', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.min(100, serverUsage.limit_tokens ? (serverUsage.used_tokens / serverUsage.limit_tokens) * 100 : 0)}%`, height: '100%', background: 'var(--explore)' }} />
+                    </div>
+                    {serverUsage.by_provider && Object.keys(serverUsage.by_provider).length > 0 && (
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>
+                        {Object.entries(serverUsage.by_provider).map(([prov, v]: any) => (
+                          <span key={prov} style={{ marginRight: 14 }}>{prov}: {v.tokens.toLocaleString()} tok / {v.requests} calls</span>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 6 }}>
+                      Authoritative token quota enforced by the backend; dollar value is an estimate.
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>Server usage unavailable — backend not reachable.</div>
+                )}
+              </div>
               {/* Acceptance Comparison */}
               <div>
                 <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', margin: '0 0 10px' }}>
@@ -416,7 +456,7 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
             <div style={{ display: 'grid', gap: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  Showing {calls.length} recent model calls. Click "Inspect" to expand full system/user prompts.
+                  Showing {calls.length} recent model calls. Prompt bodies are never stored.
                 </span>
                 <button type="button" onClick={handleClear} style={{ fontSize: 11, padding: '3px 8px' }}>
                   Clear Log
@@ -438,48 +478,24 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
                         <th>Latency</th>
                         <th>In / Out / Think</th>
                         <th>Status</th>
-                        <th>Payload</th>
                       </tr>
                     </thead>
                     <tbody>
                       {calls.map((c, i) => (
-                        <Fragment key={c.ts + '-' + i}>
-                          <tr>
-                            <td style={{ whiteSpace: 'nowrap' }}>{new Date(c.ts).toLocaleTimeString()}</td>
-                            <td><code>{c.endpoint}</code></td>
-                            <td style={{ fontSize: 11.5 }}>{c.model}</td>
-                            <td>{c.ms}ms</td>
-                            <td style={{ fontVariantNumeric: 'tabular-nums' }}>
-                              {c.usage?.in || 0} / {c.usage?.out || 0} / {c.usage?.reasoning || 0}
-                            </td>
-                            <td>
-                              <span style={{ color: c.ok ? '#15803D' : 'var(--lt)', fontWeight: 700 }}>
-                                {c.ok ? '✔︎ OK' : '⚠︎ Error'}
-                              </span>
-                            </td>
-                            <td>
-                              <button
-                                type="button"
-                                onClick={() => setOpenPromptIdx(openPromptIdx === i ? null : i)}
-                                style={{ padding: '2px 8px', fontSize: 11 }}
-                              >
-                                {openPromptIdx === i ? 'Hide' : 'Inspect'}
-                              </button>
-                            </td>
-                          </tr>
-                          {openPromptIdx === i && (
-                            <tr>
-                              <td colSpan={7} style={{ background: 'var(--dock)', padding: 12 }}>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>
-                                  PROMPT PAYLOAD ({c.model})
-                                </div>
-                                <pre className="metrics-prompt">
-                                  {`SYSTEM:\n${c.prompt?.system || '(none)'}\n\nUSER:\n${c.prompt?.user || '(none)'}`}
-                                </pre>
-                              </td>
-                            </tr>
-                          )}
-                        </Fragment>
+                        <tr key={c.ts + '-' + i}>
+                          <td style={{ whiteSpace: 'nowrap' }}>{new Date(c.ts).toLocaleTimeString()}</td>
+                          <td><code>{c.endpoint}</code></td>
+                          <td style={{ fontSize: 11.5 }}>{c.model}</td>
+                          <td>{c.ms}ms</td>
+                          <td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                            {c.usage?.in || 0} / {c.usage?.out || 0} / {c.usage?.reasoning || 0}
+                          </td>
+                          <td>
+                            <span style={{ color: c.ok ? '#15803D' : 'var(--lt)', fontWeight: 700 }}>
+                              {c.ok ? '✔︎ OK' : '⚠︎ Error'}
+                            </span>
+                          </td>
+                        </tr>
                       ))}
                     </tbody>
                   </table>
@@ -495,10 +511,10 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
             <div style={{ display: 'grid', gap: 20 }}>
               <div>
                 <h3 className="metrics-h" style={{ margin: '0 0 4px' }}>
-                  Model Latency & Reasoning Benchmarks (results/bench_muse.json)
+                  Model Latency & Reasoning Benchmarks (stored snapshot)
                 </h3>
                 <div className="meta" style={{ marginBottom: 10 }}>
-                  Settings: {BENCH_PARAMS} · Quote-verbatim validation 100% across all Meta Llama & Muse models.
+                  Settings: {BENCH_PARAMS} · Historical snapshot, not live measurements — rerun bench scripts to refresh.
                 </div>
                 <div className="metrics-table-wrap">
                   <table className="metrics-table">

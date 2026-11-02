@@ -71,13 +71,18 @@ export function resolveAnchor(editor: Editor, anchor: TextAnchor): ResolvedRange
 
   // 0. Offset-aware fast path (Harper spans): map text offsets directly to
   // PM positions. Verifies quoted text to avoid fixing wrong ranges.
+  // Separator slots map to -1 and are rejected explicitly (not via fallthrough).
   if (anchor.startOffset != null && anchor.endOffset != null && anchor.endOffset > anchor.startOffset) {
     const len = anchor.endOffset - anchor.startOffset
     if (anchor.startOffset >= 0 && anchor.endOffset <= posMap.length) {
       const fromPos = posMap[anchor.startOffset]
       const lastIdx = anchor.endOffset - 1
-      const toPos = posMap[lastIdx] != null && posMap[lastIdx] >= 0 ? posMap[lastIdx] + 1 : -1
-      if (fromPos >= 0 && toPos > fromPos) {
+      const lastPos = posMap[lastIdx]
+      if (fromPos == null || fromPos < 0 || lastPos == null || lastPos < 0) {
+        return null
+      }
+      const toPos = lastPos + 1
+      if (toPos > fromPos) {
         try {
           const actualText = editor.state.doc.textBetween(fromPos, toPos)
           // Exact or length-matched (Harper problem text may differ in case/trim)
@@ -137,9 +142,15 @@ export function resolveAnchor(editor: Editor, anchor: TextAnchor): ResolvedRange
   }
 
   const fromPos = posMap[targetIdx]
-  const toPos = posMap[targetIdx + quote.length - 1] + 1
+  const lastPos = posMap[targetIdx + quote.length - 1]
+  // Explicit separator rejection: a -1 slot means the span touches a synthetic
+  // block boundary, so the offsets are not trustworthy.
+  if (fromPos == null || fromPos < 0 || lastPos == null || lastPos < 0) {
+    return null
+  }
+  const toPos = lastPos + 1
 
-  if (fromPos < 0 || toPos <= fromPos) {
+  if (toPos <= fromPos) {
     return null
   }
 

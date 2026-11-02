@@ -1,17 +1,37 @@
+import { loadSettings } from './settings'
+import { z } from 'zod'
+
+/** Backend envelope: every JSON response carries ok:boolean. Anything else
+ *  (proxy error page, truncated body) is treated as a transport failure. */
+const Envelope = z.object({ ok: z.boolean() }).passthrough()
+
 const BASE = (import.meta as any).env?.VITE_API_URL || ''
+function authHeaders(): Record<string, string> {
+  const h: Record<string, string> = {}
+  try {
+    const s = loadSettings()
+    const p = s.metaProvider
+    h['X-Byline-Provider'] = p === 'baseten' || p === 'meta' ? p : 'auto'
+    if (s.apiKey) h['X-API-Key'] = s.apiKey
+  } catch {
+    h['X-Byline-Provider'] = 'auto'
+  }
+  return h
+}
+const providerHeaders = authHeaders
 async function post(path: string, body: unknown, signal?: AbortSignal): Promise<any | null> {
   try {
-    const r = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal })
+    const r = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...providerHeaders() }, body: JSON.stringify(body), signal })
     if (!r.ok) return null
-    const d = await r.json()
-    return d?.ok ? d : null
+    const v = Envelope.safeParse(await r.json().catch(() => null))
+    return v.success && v.data.ok ? v.data : null
   } catch { return null }
 }
 async function postRaw(path: string, body: unknown, signal?: AbortSignal): Promise<any> {
   try {
-    const r = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal })
-    const d = await r.json().catch(() => null)
-    if (d) return d
+    const r = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...providerHeaders() }, body: JSON.stringify(body), signal })
+    const v = Envelope.safeParse(await r.json().catch(() => null))
+    if (v.success) return v.data
     return { ok: false, error: `HTTP ${r.status} (no JSON from backend)` }
   } catch (e: any) {
     if (e?.name === 'AbortError') return { ok: false, aborted: true }
@@ -28,11 +48,13 @@ export interface ExploreResponse {
 }
 export const api = {
   health: async () => { try { const r = await fetch(`${BASE}/api/health`); return r.ok ? await r.json() : null } catch { return null } },
+  models: async () => { try { const r = await fetch(`${BASE}/api/models`); return r.ok ? await r.json() : null } catch { return null } },
+  usage: async () => { try { const r = await fetch(`${BASE}/api/usage`, { headers: providerHeaders() }); return r.ok ? await r.json() : null } catch { return null } },
   complete: (b: unknown, s?: AbortSignal) => post('/api/complete', b, s),
   reactions: (b: unknown, s?: AbortSignal) => post('/api/reactions', b, s),
   connect: (b: unknown, s?: AbortSignal) => postRaw('/api/connect', b, s),
   synonyms: (b: unknown) => post('/api/synonyms', b),
-  waitlist: (email: string, note = '') => post('/api/waitlist', { email, note }),
+  waitlist: (email: string, note = '') => postRaw('/api/waitlist', { email, note }),
   // Fixed: full-fidelity (no silent null) research path for Explore flow.
   explore: (b: { query: string; context?: string; count?: number }, s?: AbortSignal): Promise<ExploreResponse> =>
     postRaw('/api/explore', b, s),
@@ -47,7 +69,7 @@ export const api = {
       let summary = ''
       let offline = false
       try {
-        const r = await fetch(`${BASE}/api/explore/stream?${params}`, { signal })
+        const r = await fetch(`${BASE}/api/explore/stream?${params}`, { signal, headers: providerHeaders() })
         if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`)
         const reader = r.body.getReader()
         const dec = new TextDecoder()

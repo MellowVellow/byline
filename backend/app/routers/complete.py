@@ -1,7 +1,7 @@
 import re
 import time
 from fastapi import APIRouter
-from .. import llm, prompts, cache
+from .. import llm, prompts, cache, budget
 from ..config import settings
 from ..models import CompleteIn
 from .common import ok, fail, err, meta
@@ -29,7 +29,11 @@ def merge_partial(before: str, suggestion: str) -> str:
     if len(partial) > 3: return suggestion
     if partial.lower() in _COMMON_SHORT or suggestion.lower().startswith(partial.lower()): return suggestion
     if _zipf is not None:
-        first = re.match(r"[A-Za-z]+", suggestion).group(0).lower()  # type: ignore[union-attr]
+        # Unicode-aware first-word match: suggestion[0].islower() is True for
+        # non-ASCII cased chars (e.g. 'é'), where [A-Za-z]+ would miss → None.
+        first_m = re.match(r"[^\W\d_]+", suggestion, re.UNICODE)
+        if not first_m: return suggestion
+        first = first_m.group(0).lower()
         merged = (partial + first).lower()
         # merge only when merged word is a real, more frequent word than fragment alone ('need'>'eed', but 'nare'<'are')
         if not (_zipf(merged, "en") >= 3.0 and _zipf(merged, "en") > _zipf(first, "en")): return suggestion
@@ -93,6 +97,8 @@ async def complete(body: CompleteIn):
                     cache.set(ck, levels)
                     return ok(levels=levels, version=body.version, model=model, ms=0, usage=usage,
                               meta=meta("complete", s, u, usage, model, 0, 0.8, 700))
+            except (llm.ProviderUnavailable, budget.BudgetExceeded):
+                raise
             except Exception:
                 pass
             return fail(version=body.version)

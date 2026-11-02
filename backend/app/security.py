@@ -9,9 +9,18 @@ from urllib.parse import urlparse
 _BUCKETS: dict[str, list[float]] = {}
 _BUCKET_LOCK = threading.Lock()
 
+def reset_for_tests() -> None:
+    """Clear all rate-limit buckets. Tests only."""
+    with _BUCKET_LOCK:
+        _BUCKETS.clear()
+
 def rate_ok(key: str, limit: int = 60, window: float = 60.0) -> bool:
     now = time.time()
     with _BUCKET_LOCK:
+        if len(_BUCKETS) > 4096:
+            stale = [k for k, v in _BUCKETS.items() if not v or now - v[-1] >= window * 2]
+            for k in stale:
+                _BUCKETS.pop(k, None)
         hits = [t for t in _BUCKETS.get(key, []) if now - t < window]
         if len(hits) >= limit:
             _BUCKETS[key] = hits
@@ -25,7 +34,14 @@ def is_safe_public_url(url: str) -> bool:
         p = urlparse(url)
         if p.scheme not in ("http", "https") or not p.hostname:
             return False
+        # Reject embedded credentials: userinfo must never reach the fetcher.
+        if p.username or p.password:
+            return False
         host = p.hostname
+        # Never fetch loopback-ish names even if DNS would resolve them publicly.
+        low = host.lower().rstrip(".")
+        if low == "localhost" or low.endswith((".local", ".localhost", ".internal", ".lan")):
+            return False
         try:
             ip = ipaddress.ip_address(host)
             return ip.is_global

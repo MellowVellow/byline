@@ -4,7 +4,7 @@ import httpx
 import json
 import time
 from fastapi.responses import StreamingResponse
-from .. import llm, prompts, citations
+from .. import llm, prompts, citations, budget
 from ..config import settings
 from ..models import TextIn, ResearchIn, ExploreIn, CiteIn, BiblioIn
 from ..quote import filter_anchored
@@ -94,7 +94,7 @@ async def research(body: ResearchIn):
 async def research_upload(file: UploadFile = File(...), question: str = "Extract the key facts relevant to my writing, with sources."):
     try:
         content = await file.read()
-        if len(content) > 20 * 1024 * 1024: return fail(error="file >20MB")
+        if len(content) > settings.body_limit_mb * 1024 * 1024: return fail(error="file_too_large")
         # Local parse first: docx/csv/xlsx/txt/md → text fallback when Meta Files rejects binary
         local_text = citations.extract_doc_text(file.filename or "", content)
         if local_text:
@@ -154,7 +154,14 @@ async def explore_stream(query: str = Query(default="", max_length=1000),
             yield f"event: error\ndata: {json.dumps({'error': 'empty query'})}\n\n"
         return StreamingResponse(_empty(), media_type="text/event-stream")
 
+    ip, provider = budget.current_ip(), budget.current_provider()
+
     async def _gen():
+        # Streaming bodies run in a different task; re-bind request contextvars
+        # so per-IP quota and provider choice survive the hand-off.
+        budget.ip_ctx.set(ip)
+        budget.provider_ctx.set(provider)
+        budget.endpoint_ctx.set("/api/explore/stream")
         queue: asyncio.Queue = asyncio.Queue()
 
         async def _cb(event: str, data: dict):

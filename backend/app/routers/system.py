@@ -1,9 +1,13 @@
-from fastapi import APIRouter
-import httpx, json
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+import httpx, json, logging, hmac
 from ..config import settings, ROOT, APPROVED_META_MODELS
 from ..models import DatasetIn, WaitlistIn
+from ..security import rate_ok
 from .common import ok, fail, err
+from .. import budget
 
+log = logging.getLogger("byline.waitlist")
 router = APIRouter()
 
 @router.get("/api/health")
@@ -43,35 +47,97 @@ async def get_approved_models():
 
 @router.post("/api/dataset")
 async def dataset(body: DatasetIn):
+    """Append accepted completions for future tuning. Key-gated via middleware; disk-capped."""
     try:
         p = ROOT / "data" / "dataset.jsonl"; p.parent.mkdir(exist_ok=True)
+        if p.exists() and p.stat().st_size > 5 * 1024 * 1024:
+            return fail(error="dataset_full")
         n = 0
         with p.open("a") as f:
             for pair in body.pairs[:200]:
-                if pair.get("before") and pair.get("accepted"):
-                    f.write(json.dumps({"context": pair.get("context", ""), "before": pair["before"], "accepted": pair["accepted"], "assist": pair.get("assist", ""), "ts": pair.get("ts", 0)}) + "\n"); n += 1
+                before = str(pair.get("before") or "")[:8000]
+                accepted = str(pair.get("accepted") or "")[:8000]
+                if before and accepted:
+                    f.write(json.dumps({"context": str(pair.get("context", ""))[:4000], "before": before, "accepted": accepted, "assist": str(pair.get("assist", ""))[:40], "ts": pair.get("ts", 0)}) + "\n"); n += 1
         total = sum(1 for _ in p.open()) if p.exists() else 0
         return ok(added=n, total=total)
     except Exception as e: return err(e)
 
+async def _supabase_add(email: str, note: str) -> str:
+    """Insert one waitlist row via PostgREST. Returns "added" or "duplicate"."""
+    url = f"{settings.supabase_url}/rest/v1/waitlist"
+    base_headers = {
+        "apikey": settings.supabase_key,
+        "Authorization": f"Bearer {settings.supabase_key}",
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=10) as cl:
+        async def post(prefer: str):
+            return await cl.post(
+                url,
+                json={"email": email, "note": note},
+                headers={**base_headers, "Prefer": prefer},
+                params={"on_conflict": "email"},
+            )
+
+        # Ignore duplicate emails instead of failing the submission.
+        r = await post("return=minimal,resolution=ignore-duplicates")
+        if r.status_code == 400:
+            # Older PostgREST: fall back to plain insert; 409 means duplicate.
+            r = await post("return=minimal")
+
+    if r.status_code in (200, 201, 204):
+        return "added"
+    if r.status_code == 409:
+        return "duplicate"
+    log.warning("supabase waitlist insert failed: %s %s", r.status_code, r.text[:200])
+    raise RuntimeError(f"supabase_{r.status_code}")
+
+
 @router.post("/api/waitlist")
 async def waitlist(body: WaitlistIn):
-    email = body.email.strip().lower()
-    if body.company: return ok(store="supabase")
-    if "@" not in email: return fail(error="invalid email")
+    email = str(body.email).strip().lower()
+    note = (body.note or "").strip()[:500]
+    # Strict public throttle: 10 submissions/min per IP (honeypot hits count too).
+    if not rate_ok(f"waitlist:{budget.current_ip() or 'unknown'}", limit=10, window=60.0):
+        return JSONResponse({"ok": False, "error": "waitlist_rate_limited"}, status_code=429)
+    # Honeypot: bots fill this hidden field. Pretend success.
+    if body.company:
+        return ok(store="ignored")
+
     if settings.supabase_url and settings.supabase_key:
         try:
-            async with httpx.AsyncClient(timeout=10) as cl:
-                r = await cl.post(f"{settings.supabase_url}/rest/v1/waitlist",
-                                  json={"email": email, "note": body.note},
-                                  headers={"apikey": settings.supabase_key, "Authorization": f"Bearer {settings.supabase_key}", "Content-Type": "application/json", "Prefer": "return=minimal"})
-                if r.status_code in (200, 201, 204, 409): return ok(store="supabase")
-        except Exception: pass
+            status = await _supabase_add(email, note)
+            return ok(store="supabase", already=status == "duplicate")
+        except Exception as e:  # noqa: BLE001
+            log.warning("waitlist supabase unavailable: %s: %s", type(e).__name__, str(e)[:200])
+            if not settings.waitlist_local_fallback:
+                return fail(error="waitlist_unavailable")
+    elif not settings.waitlist_local_fallback:
+        return fail(error="waitlist_unconfigured")
+
     try:
         p = ROOT / "data" / "waitlist.jsonl"; p.parent.mkdir(exist_ok=True)
-        with p.open("a") as f: f.write(json.dumps({"email": email, "note": body.note}) + "\n")
+        with p.open("a") as f: f.write(json.dumps({"email": email, "note": note}) + "\n")
         return ok(store="local-file")
     except Exception as e: return err(e)
+
+
+@router.get("/api/usage")
+async def usage():
+    """Current IP's token quota, spend estimate, and per-provider breakdown."""
+    return ok(**budget.snapshot(budget.current_ip() or "unknown"))
+
+
+@router.get("/api/metrics/usage")
+async def usage_metrics(request: Request):
+    """Aggregate server-side usage. Requires ADMIN_TOKEN via X-Admin-Token."""
+    if not settings.admin_token:
+        return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
+    if not hmac.compare_digest(request.headers.get("x-admin-token", ""), settings.admin_token):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    return ok(**budget.aggregate())
 
 
 @router.get("/")

@@ -2,20 +2,39 @@
 Strictly restricted to Meta models (Meta Model API, OpenRouter Meta models, Baseten Meta models).
 """
 from __future__ import annotations
-import json, logging, re, time
+import asyncio
+import json, logging, random, re, threading, time
 from typing import Any
 import httpx
 from .config import settings, validate_meta_model, APPROVED_META_MODELS
+from . import budget
 
 log = logging.getLogger("byline.llm")
 
-_CLIENT: httpx.AsyncClient | None = None
+# One client per running event loop: a global client created outside a loop
+# breaks under multi-loop servers/tests, and a never-closed client leaks.
+_CLIENTS: dict[int, httpx.AsyncClient] = {}
+_CLIENTS_LOCK = threading.Lock()
 
 def _client() -> httpx.AsyncClient:
-    global _CLIENT
-    if _CLIENT is None or _CLIENT.is_closed:
-        _CLIENT = httpx.AsyncClient(timeout=settings.request_timeout)
-    return _CLIENT
+    key = id(asyncio.get_running_loop())
+    with _CLIENTS_LOCK:
+        client = _CLIENTS.get(key)
+        if client is None or client.is_closed:
+            client = httpx.AsyncClient(timeout=settings.request_timeout)
+            _CLIENTS[key] = client
+        return client
+
+async def aclose_clients() -> None:
+    """Close all loop-bound clients. Called on app shutdown."""
+    with _CLIENTS_LOCK:
+        clients = list(_CLIENTS.values())
+        _CLIENTS.clear()
+    for client in clients:
+        try:
+            await client.aclose()
+        except Exception:  # noqa: BLE001
+            pass
 
 class LLMError(RuntimeError): pass
 
@@ -54,11 +73,32 @@ async def _call(url: str, key: str, model: str, system: str, user: str, max_toke
         headers["X-Title"] = "Byline"
     if custom_headers:
         headers.update(custom_headers)
-    r = await _client().post(url, json=body, headers=headers)
-    r.raise_for_status()
-    d = r.json()
-    content = (d["choices"][0]["message"].get("content") or "") if d.get("choices") else ""
-    return content, d.get("usage") or {}
+    # Retry transient failures only (429/5xx, transport errors): chat calls
+    # are billed, so non-retryable errors fail fast instead of double-spending.
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        try:
+            r = await _client().post(url, json=body, headers=headers)
+            r.raise_for_status()
+            d = r.json()
+            content = (d["choices"][0]["message"].get("content") or "") if d.get("choices") else ""
+            return content, d.get("usage") or {}
+        except httpx.HTTPStatusError as e:
+            last_exc = e
+            status = e.response.status_code if e.response is not None else 0
+            if status not in (429, 502, 503, 504) or attempt == 2:
+                raise
+            try:
+                delay = min(float(e.response.headers.get("retry-after", "") or 0) or 0, 10)
+            except (TypeError, ValueError):
+                delay = 0
+            await asyncio.sleep(delay or min(2 ** attempt + random.random(), 8))
+        except httpx.TransportError as e:
+            last_exc = e
+            if attempt == 2:
+                raise
+            await asyncio.sleep(min(2 ** attempt + random.random(), 8))
+    raise last_exc or LLMError("llm call failed")
 
 def _mock_meta_response(system: str, user: str) -> tuple[str, dict, str]:
     """Deterministic development/offline mock engine simulating Meta Llama 3.3 / Muse outputs."""
@@ -160,124 +200,144 @@ def _mock_meta_response(system: str, user: str) -> tuple[str, dict, str]:
 
     return "deliberate writing assistance, keeping the writer in control.", {"total_tokens": 30}, "mock:meta-llama-3.3-70b-instruct"
 
-async def chat(system: str, user: str, *, model: str | None = None, max_tokens: int = 800, temperature: float = 0.7) -> tuple[str, dict, str]:
-    """Execute chat completion using approved Meta models exclusively.
-    Priority order:
-      1. Baseten (meta-models/muse-spark-open-1026) — primary
-      2. Meta Model API (Muse Spark/Glimmer) — fallback
-      3. OpenRouter (Meta Llama allowlist) — fallback when configured
-      4. Internal deterministic Mock Meta Engine (offline/dev fallback)
-    """
-    # Hackathon: always route through muse-spark-open-1026 on Baseten
-    HACKATHON_MODEL = settings.baseten_model or "meta-models/muse-spark-open-1026"
-    errors: list[str] = []
+class ProviderUnavailable(LLMError):
+    """Raised when an explicitly requested provider cannot serve the call."""
 
-    # 1. Baseten — primary (muse-spark-open-1026, hackathon)
-    if settings.baseten_api_key:
-        candidate_urls = [
-            f"{settings.baseten_base_url}/chat/completions",
-            "https://inference.baseten.co/v1/chat/completions",
-            "https://bridge.baseten.co/v1/chat/completions",
-        ]
-        # Deduplicate endpoints preserving order
-        seen = set()
-        endpoints = [u for u in candidate_urls if not (u in seen or seen.add(u))]
 
-        for endpoint in endpoints:
-            try:
-                c, u = await _call(
-                    endpoint,
-                    settings.baseten_api_key,
-                    HACKATHON_MODEL,
-                    system,
-                    user,
-                    max_tokens,
-                    temperature,
-                    is_meta_api=False,
-                )
-                if c.strip():
-                    log.info("Baseten inference succeeded via %s with model %s", endpoint, HACKATHON_MODEL)
-                    return c, u, HACKATHON_MODEL
-                errors.append(f"baseten ({endpoint}): empty content")
-            except httpx.HTTPStatusError as e:
-                # If 401/403 with Bearer, retry with Api-Key auth scheme
-                if e.response.status_code in (401, 403):
-                    try:
-                        c, u = await _call(
-                            endpoint,
-                            settings.baseten_api_key,
-                            HACKATHON_MODEL,
-                            system,
-                            user,
-                            max_tokens,
-                            temperature,
-                            is_meta_api=False,
-                            custom_headers={"Authorization": f"Api-Key {settings.baseten_api_key}"},
-                        )
-                        if c.strip():
-                            log.info("Baseten inference succeeded via Api-Key scheme on %s", endpoint)
-                            return c, u, HACKATHON_MODEL
-                    except Exception as retry_err:  # noqa: BLE001
-                        errors.append(f"baseten Api-Key retry ({endpoint}): {retry_err}")
-                errors.append(f"baseten ({endpoint}): HTTP {e.response.status_code}: {e}")
-                # Try next endpoint on 404/502/503
-                if e.response.status_code in (404, 502, 503):
-                    continue
-            except Exception as e:  # noqa: BLE001
-                errors.append(f"baseten ({endpoint}): {type(e).__name__}: {e}")
+async def _baseten_attempt(system: str, user: str, max_tokens: int, temperature: float,
+                           errors: list[str]) -> tuple[str, dict, str, str] | None:
+    if not settings.baseten_api_key:
+        errors.append("baseten: BASETEN_API_KEY not configured")
+        return None
+    model = settings.baseten_model or "meta-models/muse-spark-open-1026"
+    candidate_urls = [
+        f"{settings.baseten_base_url}/chat/completions",
+        "https://inference.baseten.co/v1/chat/completions",
+        "https://bridge.baseten.co/v1/chat/completions",
+    ]
+    seen: set[str] = set()
+    endpoints = [u for u in candidate_urls if not (u in seen or seen.add(u))]
+
+    for endpoint in endpoints:
+        try:
+            c, u = await _call(endpoint, settings.baseten_api_key, model, system, user,
+                               max_tokens, temperature, is_meta_api=False)
+            if c.strip():
+                log.info("Baseten inference succeeded via %s with model %s", endpoint, model)
+                return c, u, model, "baseten"
+            errors.append(f"baseten ({endpoint}): empty content")
+        except httpx.HTTPStatusError as e:
+            # If 401/403 with Bearer, retry with Api-Key auth scheme
+            if e.response.status_code in (401, 403):
+                try:
+                    c, u = await _call(endpoint, settings.baseten_api_key, model, system, user,
+                                       max_tokens, temperature, is_meta_api=False,
+                                       custom_headers={"Authorization": f"Api-Key {settings.baseten_api_key}"})
+                    if c.strip():
+                        log.info("Baseten inference succeeded via Api-Key scheme on %s", endpoint)
+                        return c, u, model, "baseten"
+                except Exception as retry_err:  # noqa: BLE001
+                    errors.append(f"baseten Api-Key retry ({endpoint}): {retry_err}")
+            errors.append(f"baseten ({endpoint}): HTTP {e.response.status_code}: {e}")
+            if e.response.status_code in (404, 502, 503):
                 continue
-
-    # 2. Meta Model API — fallback
-    if settings.meta_api_key:
-        meta_m = validate_meta_model(settings.meta_model)
-        try:
-            c, u = await _call(
-                f"{settings.meta_base_url}/chat/completions",
-                settings.meta_api_key,
-                meta_m,
-                system,
-                user,
-                max_tokens,
-                temperature,
-                is_meta_api=True,
-            )
-            if c.strip():
-                return c, u, meta_m
-            errors.append("meta_api: empty content")
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 402:
-                errors.append(f"meta_api: 402 Payment Required (Meta credit limit reached; check BASETEN_API_KEY): {e}")
-            else:
-                errors.append(f"meta_api: HTTP {e.response.status_code}: {e}")
         except Exception as e:  # noqa: BLE001
-            errors.append(f"meta_api: {type(e).__name__}: {e}")
+            errors.append(f"baseten ({endpoint}): {type(e).__name__}: {e}")
+            continue
+    return None
 
-    # 3. OpenRouter — fallback (Meta allowlist only, requires OPENROUTER_API_KEY)
-    if settings.openrouter_api_key:
-        or_m = validate_meta_model(settings.openrouter_model)
-        try:
-            c, u = await _call(
-                f"{settings.openrouter_base_url}/chat/completions",
-                settings.openrouter_api_key,
-                or_m,
-                system,
-                user,
-                max_tokens,
-                temperature,
-                is_meta_api=False,
+
+async def _meta_attempt(system: str, user: str, max_tokens: int, temperature: float,
+                        errors: list[str]) -> tuple[str, dict, str, str] | None:
+    if not settings.meta_api_key:
+        errors.append("meta_api: META_API_KEY not configured")
+        return None
+    meta_m = validate_meta_model(settings.meta_model)
+    try:
+        c, u = await _call(f"{settings.meta_base_url}/chat/completions", settings.meta_api_key,
+                           meta_m, system, user, max_tokens, temperature, is_meta_api=True)
+        if c.strip():
+            return c, u, meta_m, "meta"
+        errors.append("meta_api: empty content")
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 402:
+            errors.append(f"meta_api: 402 Payment Required (Meta credit limit reached): {e}")
+        else:
+            errors.append(f"meta_api: HTTP {e.response.status_code}: {e}")
+    except Exception as e:  # noqa: BLE001
+        errors.append(f"meta_api: {type(e).__name__}: {e}")
+    return None
+
+
+async def _openrouter_attempt(system: str, user: str, max_tokens: int, temperature: float,
+                              errors: list[str]) -> tuple[str, dict, str, str] | None:
+    if not settings.openrouter_api_key:
+        return None
+    or_m = validate_meta_model(settings.openrouter_model)
+    try:
+        c, u = await _call(f"{settings.openrouter_base_url}/chat/completions",
+                           settings.openrouter_api_key, or_m, system, user, max_tokens,
+                           temperature, is_meta_api=False)
+        if c.strip():
+            log.info("OpenRouter inference succeeded with model %s", or_m)
+            return c, u, or_m, "openrouter"
+        errors.append("openrouter: empty content")
+    except httpx.HTTPStatusError as e:
+        errors.append(f"openrouter: HTTP {e.response.status_code}: {e}")
+    except Exception as e:  # noqa: BLE001
+        errors.append(f"openrouter: {type(e).__name__}: {e}")
+    return None
+
+
+async def chat(system: str, user: str, *, model: str | None = None, max_tokens: int = 800, temperature: float = 0.7) -> tuple[str, dict, str]:
+    """Execute a chat completion on approved Meta models, with per-IP accounting.
+
+    Provider routing is selected per request via the ``X-Byline-Provider``
+    header (``auto`` | ``baseten`` | ``meta``). ``auto`` keeps the cascade
+    Baseten -> Meta -> OpenRouter -> offline mock. Explicit choices never
+    fall back to another provider.
+    """
+    pref = budget.current_provider()
+    errors: list[str] = []
+    rid = budget.reserve(
+        budget.current_ip(),
+        budget.estimate_prompt_tokens(system, user, max_tokens),
+        budget.current_endpoint(),
+    )
+    try:
+        if pref == "baseten":
+            res = await _baseten_attempt(system, user, max_tokens, temperature, errors)
+            if res is None:
+                raise ProviderUnavailable("baseten unavailable: " + ("; ".join(errors) or "not configured"))
+        elif pref == "meta":
+            res = await _meta_attempt(system, user, max_tokens, temperature, errors)
+            if res is None:
+                raise ProviderUnavailable("meta unavailable: " + ("; ".join(errors) or "not configured"))
+        else:
+            res = (
+                await _baseten_attempt(system, user, max_tokens, temperature, errors)
+                or await _meta_attempt(system, user, max_tokens, temperature, errors)
+                or await _openrouter_attempt(system, user, max_tokens, temperature, errors)
             )
-            if c.strip():
-                log.info("OpenRouter inference succeeded with model %s", or_m)
-                return c, u, or_m
-            errors.append("openrouter: empty content")
-        except httpx.HTTPStatusError as e:
-            errors.append(f"openrouter: HTTP {e.response.status_code}: {e}")
-        except Exception as e:  # noqa: BLE001
-            errors.append(f"openrouter: {type(e).__name__}: {e}")
 
-    # 4. Safe offline deterministic mock engine (preserves Meta-only output without non-Meta runtime fallback)
-    log.info("Using offline Meta mock engine (keys unconfigured or remote unreachable): %s", "; ".join(errors) or "no keys")
-    return _mock_meta_response(system, user)
+        if res is None:
+            if settings.env in ("prod", "production"):
+                raise ProviderUnavailable(
+                    "LLM unavailable in prod (no mock fallback): "
+                    + ("; ".join(errors) or "no keys"))
+            log.info("Using offline Meta mock engine (keys unconfigured or remote unreachable): %s",
+                     "; ".join(errors) or "no keys")
+            c, u, m = _mock_meta_response(system, user)
+            budget.settle(rid, u, m, "mock", mock=True)
+            return c, u, m
+
+        c, u, m, provider = res
+        budget.settle(rid, u, m, provider)
+        return c, u, m
+    except Exception:
+        budget.release(rid)
+        raise
+
 
 async def json_call(system: str, user: str, *, model: str | None = None, max_tokens: int = 900, temperature: float = 0.5) -> tuple[dict, dict, str]:
     c, u, m = await chat(system, user, model=model, max_tokens=max_tokens, temperature=temperature)
@@ -296,10 +356,22 @@ async def responses_call(input_data, *, instructions: str = "", tools=None, incl
     Uses Meta API key (required for Responses API web-search capability).
     Baseten handles chat completions; Meta API handles grounded web-search Responses calls.
     """
+    pref = budget.current_provider()
+    if pref == "baseten":
+        raise ProviderUnavailable("baseten does not support web-search Responses calls; choose auto or meta")
+    rid = budget.reserve(
+        budget.current_ip(),
+        budget.estimate_prompt_tokens(instructions or "", str(input_data), max_output_tokens),
+        budget.current_endpoint(),
+    )
     if not settings.meta_api_key:
+        if pref == "meta" or settings.env in ("prod", "production"):
+            budget.release(rid)
+            raise ProviderUnavailable("meta unavailable: META_API_KEY not configured")
         # Offline mock research response — clearly tagged so callers never
         # mistake it for a real citation. Uses mock.local (RFC-2606-style
         # invalid host) instead of a plausible real-world URL.
+        budget.settle(rid, {"total_tokens": 150}, "mock:muse-spark-open-1026", "mock", mock=True)
         return {
             "text": "Evidence qualifies the claim: while preliminary analyses indicate positive correlation, long-term confounding variables require structured moderation.",
             "annotations": [{"title": "Mock evidence (offline, unverified)", "url": "https://mock.local/offline-evidence"}],
@@ -329,7 +401,11 @@ async def responses_call(input_data, *, instructions: str = "", tools=None, incl
         r.raise_for_status()
         d = r.json()
     except Exception as e:
+        if pref == "meta" or settings.env in ("prod", "production"):
+            budget.release(rid)
+            raise ProviderUnavailable(f"meta responses call failed: {e}") from e
         log.warning("Meta Responses API call failed (%s), returning grounded mock response", e)
+        budget.settle(rid, {"total_tokens": 150}, "mock:muse-spark-open-1026", "mock", mock=True)
         return {
             "text": "Evidence qualifies the claim: while preliminary analyses indicate positive correlation, long-term confounding variables require structured moderation.",
             "annotations": [{"title": "Mock evidence (offline, unverified)", "url": "https://mock.local/offline-evidence"}],
@@ -347,6 +423,7 @@ async def responses_call(input_data, *, instructions: str = "", tools=None, incl
                     annotations.extend(c.get("annotations", []) or [])
         if item.get("type") == "web_search_call":
             results.extend((item.get("action") or {}).get("results", []) or item.get("results", []) or [])
+    budget.settle(rid, d.get("usage") or {}, resp_model, "meta")
     return {
         "text": "\n".join(texts),
         "annotations": annotations,

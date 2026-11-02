@@ -44,14 +44,28 @@ const FAQS = [
 export default function Landing() {
   const [email, setEmail] = useState('')
   const [msg, setMsg] = useState('')
+  const [pending, setPending] = useState(false)
   const [openFaq, setOpenFaq] = useState<number | null>(null)
 
   async function join(e: React.FormEvent) {
     e.preventDefault()
-    const d = await api.waitlist(email)
-    if (d?.ok) setMsg(`Added to waitlist. ✔︎`)
-    else { localStorage.setItem('byline.waitlist', email); setMsg('Saved in browser — syncs at launch. ✔︎') }
-    setEmail('')
+    const value = email.trim()
+    if (!value || pending) return
+    setPending(true)
+    setMsg('')
+    try {
+      const d = await api.waitlist(value)
+      if (d?.ok) {
+        setMsg(d.already ? 'You are already on the list. ✔︎' : 'Added to waitlist. ✔︎')
+        setEmail('')
+      } else if (d?.error === 'waitlist_unavailable') {
+        setMsg('Waitlist is temporarily unavailable. Try again shortly.')
+      } else {
+        setMsg('Could not join the waitlist. Check the email and try again.')
+      }
+    } finally {
+      setPending(false)
+    }
   }
 
   return (
@@ -74,9 +88,9 @@ export default function Landing() {
 
               <form className="waitlist" onSubmit={join}>
                 <label className="sr-only" htmlFor="waitlist-email" />
-                <input id="waitlist-email" type="email" autoComplete="email" inputMode="email" required placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} />
+                <input id="waitlist-email" type="email" autoComplete="email" inputMode="email" required placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} disabled={pending} />
                 <a className="btn primary" href="/demo">Try demo</a>
-                <button type="submit">Join waitlist</button>
+                <button type="submit" disabled={pending}>{pending ? 'Joining…' : 'Join waitlist'}</button>
               </form>
               {msg && <p className="fade" role="status" aria-live="polite">{msg}</p>}
 
