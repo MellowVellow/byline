@@ -7,7 +7,6 @@ export const CONNECT_CONNECTORS = [
   [['For example,', 'Take this:', 'Like'], ['For instance,', 'A case in point:', 'Notably,']],
 ] as const
 
-const LINKED = /^(however|but|yet|so|also|still|instead|moreover|plus)\b/i
 const CASUAL = /n['’]t|’s\b|crazy|just|lots|really|gonna/i
 const FIGURE = /\b(trillions?|billions?|millions?|\d[\d,.]*\s?(%|percent))/i
 
@@ -53,22 +52,10 @@ export function hasConnectSelection(text: string): boolean {
   return sentenceCount(text) >= 2
 }
 
-export function isLinked(sentence: string): boolean {
-  return LINKED.test(sentence)
-}
-
 export function guessConnectRelation(previous: string, next: string): number {
   if (/\b(not|no|little|never)\b|n['’]t/i.test(previous) || /\b(but|however|although|yet|though)\b/i.test(next)) return 0
   if (/^(for example|such as)/i.test(next)) return 3
   return /\b(build|because|cause|so)\b/i.test(next) ? 1 : 2
-}
-
-export function connectRelationLabel(seam: ConnectSeam, alts: ConnectAlt[]): string {
-  return CONNECT_RELATIONS[alts[seam.v]?.rel] || CONNECT_RELATIONS[0]
-}
-
-export function connectVariantLabel(seam: ConnectSeam, alts: ConnectAlt[]): string {
-  return alts[seam.v]?.text || ''
 }
 
 export function firstAltOfRel(alts: ConnectAlt[], rel: number): number {
@@ -105,7 +92,6 @@ export function buildSeamAlts(sentence: string, prev: string, casual: boolean): 
   const seen = new Set<string>()
   const reg = casual ? 0 : 1
 
-  // Include existing connector if the sentence already starts with one
   const existing = extractConnector(sentence)
   if (existing) {
     const rel = guessConnectRelation(prev, sentence)

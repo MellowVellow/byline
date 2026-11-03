@@ -12,13 +12,10 @@ export interface AppSettings {
   fix: string
   selection: string
   suggest: string
-  /** Dark-mode surface overrides (empty = follow theme.css). */
   uiBg: string
   uiPanel: string
-  /** Light-mode surface overrides (empty = follow theme.css). */
   uiBgLight: string
   uiPanelLight: string
-  /** Writing space + caret accents per preset. */
   paper: string
   paperLine: string
   verticalRule: string
@@ -34,25 +31,18 @@ export interface AppSettings {
   showMetrics?: boolean
   reduceMotion: boolean
   spellcheck: boolean
-  // Meta-authored inference settings
   metaModel: string
-  /** Per-request provider routing: auto cascades; explicit choices never fall back. */
   metaProvider: 'auto' | 'baseten' | 'meta'
-  /** Shared backend API key (X-API-Key). Empty = backend enforces nothing. */
   apiKey: string
   temperature: number
   maxTokens: number
   topP: number
   reasoningEffort: 'minimal' | 'low' | 'medium'
-  // Writing profile
   writingTheme: 'neutral' | 'academic' | 'gen-z' | 'buzzword'
   language: string
-  /** Ghost suggestion trigger thresholds (ms). */
   slowMs: number
 }
 
-/** Runtime validation for stored settings. Unknown keys stripped, wrong
- *  types rejected per-field so one corrupt value can't poison the shape. */
 const SettingsSchema = z.object({
   theme: z.enum(['light', 'dark', 'system']),
   metaProvider: z.enum(['auto', 'baseten', 'meta']),
@@ -111,7 +101,6 @@ export interface ColorPreset {
   btnInk: string    // Primary button text
 }
 
-/** Color presets for logo, cards, and text marks */
 export const COLOR_PRESETS: Record<string, ColorPreset> = {
   byline: {
     label: 'Byline',
@@ -229,7 +218,6 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
   },
 }
 
-// Backwards-compatible names
 COLOR_PRESETS.default = COLOR_PRESETS.byline
 COLOR_PRESETS.ocean = COLOR_PRESETS.glacier
 COLOR_PRESETS.forest = COLOR_PRESETS.verdant
@@ -265,11 +253,8 @@ export function loadSettings(): AppSettings {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const parsed = SettingsSchema.safeParse(JSON.parse(raw))
-      // Unknown keys dropped, wrong types fall back to defaults: stored
-      // settings can never poison the runtime shape.
       if (parsed.success) {
         const data = { ...parsed.data }
-        // Retired layout: Full (100% span) collapses to Wide.
         if (data.paperWidth === 'full') data.paperWidth = 'wide'
         return { ...DEFAULT_SETTINGS, ...data }
       }
@@ -296,33 +281,24 @@ export function applySettings(s: AppSettings) {
   localStorage.setItem('byline.theme', resolved)
   dispatchEvent(new Event('byline-theme'))
 
-  // Apply colors to root CSS custom properties
   root.style.setProperty('--ai', s.ai)
   root.style.setProperty('--lt', s.grammar || COLOR_PRESETS.byline.grammar)
   root.style.setProperty('--fix', s.fix || COLOR_PRESETS.byline.fix)
   root.style.setProperty('--grey', s.suggest || COLOR_PRESETS.byline.suggest)
   root.style.setProperty('--link', s.selection)
 
-  // Surfaces: clear every mode-specific override first so toggling resolved
-  // theme never leaves stale cross-mode inline vars (the reported bug:
-  // dark --bg persisted after switching to light while --ink/--border
-  // flipped via theme.css). --ink/--border/--muted always come from
-  // theme.css and must never linger inline (clears legacy writes).
   for (const k of ['--bg', '--dock', '--paper', '--proof', '--caret', 'caret-color',
     '--btn-bg', '--btn-ink', '--ink', '--border', '--muted',
     '--paper-0', '--paper-1', '--paper-2', '--ink-1', '--ink-2', '--ink-4', '--ink-5']) {
     root.style.removeProperty(k)
   }
 
-  // Dark-mode surface overrides (light mode always follows theme.css)
   if (resolved === 'dark') {
     if (s.uiBg) root.style.setProperty('--bg', s.uiBg)
     if (s.uiPanel) root.style.setProperty('--dock', s.uiPanel)
-    // Dark keeps theme.css surfaces: never apply light paper/caret/buttons here.
   } else {
     if (s.uiBgLight) root.style.setProperty('--bg', s.uiBgLight)
     if (s.uiPanelLight) root.style.setProperty('--dock', s.uiPanelLight)
-    // Writing space, margin line, caret, buttons follow preset in light mode
     if (s.paper) root.style.setProperty('--paper', s.paper)
     if (s.paperLine) root.style.setProperty('--proof', s.paperLine)
     if (s.verticalRule) root.style.setProperty('--vertical-rule', s.verticalRule)
@@ -334,7 +310,6 @@ export function applySettings(s: AppSettings) {
     if (s.btnInk) root.style.setProperty('--btn-ink', s.btnInk)
   }
 
-  // Typography & document setup
   root.style.setProperty(
     '--editor-font',
     s.editorFont === 'serif'
@@ -347,7 +322,6 @@ export function applySettings(s: AppSettings) {
   root.style.setProperty('--editor-lh', String(s.lineHeight))
   root.style.setProperty('--paper-w', s.paperWidth === 'narrow' ? '58ch' : s.paperWidth === 'wide' ? '92ch' : s.paperWidth === 'full' ? '100%' : '72ch')
 
-  // Notify listeners (Logo, etc.) that colors changed
   dispatchEvent(new Event('byline-colors'))
 }
 

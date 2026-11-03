@@ -17,8 +17,6 @@ import { SUPPORTED_LANGUAGES } from '../domain/writing-profile'
 
 type Tab = 'colors' | 'document' | 'ai' | 'accessibility' | 'shortcuts'
 
-// Mark colors: red grammar, purple reader, blue explore, green fix, grey completions,
-// plus UI surfaces (dark + light), writing space, caret, buttons.
 const PERSONA_FIELDS: { key: 'ai' | 'grammar' | 'fix' | 'suggest' | 'uiBg' | 'uiPanel' | 'uiBgLight' | 'uiPanelLight' | 'paper' | 'paperLine' | 'caret' | 'btnBg' | 'btnInk'; label: string; hint: string; defaultColor: string }[] = [
   { key: 'ai',         label: 'Reader',     hint: 'Reader notes on tone and clarity', defaultColor: '#B094E9' },
   { key: 'grammar',    label: 'Grammar',    hint: 'Red line shown before correction',    defaultColor: '#D83343' },

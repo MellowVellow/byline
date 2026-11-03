@@ -31,15 +31,12 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
     }
   }, [onClose])
 
-  // Computed metrics
   const totalCalls = calls.length
   const failedCalls = calls.filter(c => !c.ok).length
   const errorRate = totalCalls > 0 ? ((failedCalls / totalCalls) * 100).toFixed(1) : '0.0'
   const reliabilityRate = totalCalls > 0 ? (((totalCalls - failedCalls) / totalCalls) * 100).toFixed(1) : '100.0'
 
   const ghostFired = usage.ghostFired || 0
-  const ghostRerolls = usage.ghostRerolls || 0
-  const rerollRate = ghostFired > 0 ? Math.round((ghostRerolls / ghostFired) * 100) : 0
   const totalAccepted = (usage.suggestionsAccepted || 0) + (usage.revisionsAccepted || 0)
   const totalOffered = (usage.suggestionsOffered || 0) + (usage.revisionsOffered || 0)
   const acceptShare = totalOffered > 0 ? Math.round((totalAccepted / totalOffered) * 100) : 0
@@ -128,29 +125,6 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
             </div>
             <div style={{ marginTop: 6, height: 4, background: 'var(--hover)', borderRadius: 2, overflow: 'hidden' }}>
               <div style={{ width: '100%', height: '100%', background: 'var(--ai)' }} />
-            </div>
-          </div>
-
-          {/* Reroll Rate */}
-          <div
-            style={{
-              background: 'var(--paper)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-lg, 6px)',
-              padding: '10px 14px',
-            }}
-          >
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.04em' }}>
-              Reroll Rate
-            </div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--blue)', margin: '4px 0 2px' }}>
-              {rerollRate}%
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-              {ghostRerolls.toLocaleString()} rerolls across {ghostFired.toLocaleString()} generations
-            </div>
-            <div style={{ marginTop: 6, height: 4, background: 'var(--hover)', borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ width: `${Math.min(100, rerollRate)}%`, height: '100%', background: 'var(--blue)' }} />
             </div>
           </div>
 
@@ -451,7 +425,6 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
               </div>
             </div>
           )}
-
 
 
         </div>

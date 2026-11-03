@@ -1,5 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
-import type { Finding, FindingStatus, Suggestion } from '../domain/finding'
+import type { Finding, FindingStatus, Persona, Suggestion } from '../domain/finding'
+import { groupFindingsByNote, noteKey } from '../domain/finding'
+
+export type PersonaFilter = Persona | 'all'
 import type { Editor } from '@tiptap/react'
 import { resolveAnchor, applySafeReplacement } from '../editor/anchoring'
 import { blip, sfxAccept, sfxDismiss } from '../lib/sfx'
@@ -12,11 +15,12 @@ export interface ReviewDockProps {
   editor: Editor | null
   highlightedFindingId?: string | null
   onToggleCollapse?: () => void
-  /** Fired after a dock apply succeeds, so the host can refresh grammar. */
   onApplied?: () => void
+  /** Persona filter. Controlled when onPersonaFilterChange is given. */
+  personaFilter?: PersonaFilter
+  onPersonaFilterChange?: (p: PersonaFilter) => void
 }
 
-/** Reader accent (purple observations). */
 export const READER_ACCENT = {
   label: 'Reader',
   color: 'var(--ai)',
@@ -25,7 +29,6 @@ export const READER_ACCENT = {
   dot: '🟣',
 }
 
-/** Grammar accent (red Harper fixes, shown in Edit mode). */
 export const GRAMMAR_ACCENT = {
   label: 'Grammar',
   color: 'var(--lt)',
@@ -34,12 +37,10 @@ export const GRAMMAR_ACCENT = {
   dot: '🔴',
 }
 
-/** Per-finding accent: grammar findings render red, everything else reader-purple. */
 export function accentFor(finding: { persona: string }) {
   return finding.persona === 'grammar' ? GRAMMAR_ACCENT : READER_ACCENT
 }
 
-/** Dock quote preview: cut beyond 20 words (full text stays in title + editor). */
 export function truncateQuote(q: string, maxWords = 20): string {
   const words = q.trim().split(/\s+/)
   return words.length > maxWords ? words.slice(0, maxWords).join(' ') + '...' : q
@@ -59,6 +60,18 @@ const STATUS_OPTIONS: { id: FindingStatus | 'all'; label: string }[] = [
   { id: 'stale', label: 'Stale' },
 ]
 
+const PERSONA_LABELS: Record<PersonaFilter, string> = {
+  all: 'All',
+  reader: 'Reader',
+  grammar: 'Grammar',
+}
+
+const PERSONA_OPTIONS: { id: PersonaFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'reader', label: 'Reader' },
+  { id: 'grammar', label: 'Grammar' },
+]
+
 export default function ReviewDock({
   findings,
   onStatusChange,
@@ -68,22 +81,32 @@ export default function ReviewDock({
   highlightedFindingId,
   onToggleCollapse,
   onApplied,
+  personaFilter,
+  onPersonaFilterChange,
 }: ReviewDockProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedStatus, setSelectedStatus] = useState<FindingStatus | 'all'>('open')
   const [sortBy, setSortBy] = useState<'document' | 'newest'>('document')
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [sortMenuOpen, setSortMenuOpen] = useState(false)
+  const [personaMenuOpen, setPersonaMenuOpen] = useState(false)
+  const [innerPersona, setInnerPersona] = useState<PersonaFilter>('all')
+  const selectedPersona = personaFilter ?? innerPersona
+  const setSelectedPersona = (p: PersonaFilter) => {
+    if (personaFilter === undefined) setInnerPersona(p)
+    onPersonaFilterChange?.(p)
+  }
 
   const popoverRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setFilterMenuOpen(false); setSortMenuOpen(false) } }
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setFilterMenuOpen(false); setSortMenuOpen(false); setPersonaMenuOpen(false) } }
     const handleClick = (e: MouseEvent) => {
       const target = e.target as Node
       if (!popoverRef.current?.contains(target)) {
         setFilterMenuOpen(false)
         setSortMenuOpen(false)
+        setPersonaMenuOpen(false)
       }
     }
     addEventListener('keydown', handleKey)
@@ -130,6 +153,7 @@ export default function ReviewDock({
   }
 
   const filtered = findings.filter(f => {
+    if (selectedPersona !== 'all' && f.persona !== selectedPersona) return false
     if (selectedStatus !== 'all' && f.status !== selectedStatus) return false
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
@@ -145,6 +169,8 @@ export default function ReviewDock({
     if (sortBy === 'newest') return (b.createdAt ?? 0) - (a.createdAt ?? 0)
     return 0
   })
+
+  const groups = groupFindingsByNote(sorted)
 
   const openCount = findings.filter(f => f.status === 'open' || f.status === 'stale').length
   const meta = READER_ACCENT
@@ -162,10 +188,16 @@ export default function ReviewDock({
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <button
             type="button"
+            className="primary"
             onClick={() => { blip('open'); void onRunAnalysis() }}
             disabled={analyzing}
             title="Run Reader review"
-            style={{ padding: '3px 10px', fontSize: 11.5, fontWeight: 700, minHeight: 'auto' }}
+            style={{
+              padding: '5px 14px', fontSize: 12.5, fontWeight: 800, minHeight: 'auto',
+              borderRadius: 99, whiteSpace: 'nowrap',
+              boxShadow: '0 2px 12px color-mix(in srgb, var(--btn-bg, var(--ai)) 55%, transparent)',
+              cursor: analyzing ? 'wait' : 'pointer',
+            }}
           >
             {analyzing ? (
               <span className="reading-pulse">Reading…</span>
@@ -177,8 +209,13 @@ export default function ReviewDock({
             <button
               type="button"
               onClick={() => { blip('toggle'); onToggleCollapse() }}
-              title="Collapse Reader Dock"
-              style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '2px 6px', minHeight: 'auto', fontSize: 13, fontWeight: 700 }}
+              title="Collapse dock — hides underlines"
+              style={{
+                background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer',
+                padding: '2px 6px', minHeight: 'auto', fontSize: 13, fontWeight: 700,
+                textDecoration: 'underline', textDecorationColor: 'var(--ai)',
+                textDecorationThickness: 2, textUnderlineOffset: 3,
+              }}
             >
               ‹
             </button>
@@ -205,7 +242,7 @@ export default function ReviewDock({
           <button
             type="button"
             title="Filter by status"
-            onClick={() => { blip('open'); setFilterMenuOpen(v => !v); setSortMenuOpen(false) }}
+            onClick={() => { blip('open'); setFilterMenuOpen(v => !v); setSortMenuOpen(false); setPersonaMenuOpen(false) }}
             style={{
               display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', fontSize: 12,
               border: selectedStatus !== 'all' ? '1px solid var(--blue)' : '1px solid var(--border)',
@@ -235,7 +272,7 @@ export default function ReviewDock({
                     onClick={() => { blip('select'); setSelectedStatus(s.id); setFilterMenuOpen(false) }}
                     style={{
                       width: '100%', padding: '7px 12px', textAlign: 'left', background: selectedStatus === s.id ? 'var(--hover)' : 'none', border: 'none',
-                      cursor: 'pointer', fontSize: 12,
+                      cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap',
                       color: selectedStatus === s.id ? 'var(--blue)' : 'var(--ink)',
                       fontWeight: selectedStatus === s.id ? 700 : 400,
                       minHeight: 'auto', display: 'flex', alignItems: 'center', gap: 6,
@@ -253,8 +290,57 @@ export default function ReviewDock({
         <div style={{ position: 'relative' }}>
           <button
             type="button"
+            title="Filter by persona (also toggles underlines)"
+            onClick={() => { blip('open'); setPersonaMenuOpen(v => !v); setFilterMenuOpen(false); setSortMenuOpen(false) }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', fontSize: 12,
+              border: selectedPersona !== 'all' ? '1px solid var(--blue)' : '1px solid var(--border)',
+              borderRadius: 4,
+              background: selectedPersona !== 'all' ? 'color-mix(in srgb, var(--blue) 10%, transparent)' : 'transparent',
+              color: selectedPersona !== 'all' ? 'var(--blue)' : 'var(--ink)', cursor: 'pointer', minHeight: 'auto', flexShrink: 0,
+            }}
+          >
+            {selectedPersona === 'all' ? 'Persona' : PERSONA_LABELS[selectedPersona]} <span style={{ fontSize: 10, opacity: 0.7 }}>▾</span>
+          </button>
+
+          {personaMenuOpen && (
+            <div
+              style={{
+                position: 'absolute', top: 'calc(100% + 4px)', left: 0,
+                background: 'var(--paper)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-lg)',
+                boxShadow: '0 12px 28px -4px rgba(0,0,0,0.22), 0 8px 12px -6px rgba(0,0,0,0.12)',
+                zIndex: 120, overflow: 'hidden', minWidth: 180,
+              }}
+            >
+              <div style={{ padding: '2px 0' }}>
+                {PERSONA_OPTIONS.map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => { blip('select'); setSelectedPersona(s.id); setPersonaMenuOpen(false) }}
+                    style={{
+                      width: '100%', padding: '7px 12px', textAlign: 'left', background: selectedPersona === s.id ? 'var(--hover)' : 'none', border: 'none',
+                      cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap',
+                      color: selectedPersona === s.id ? 'var(--blue)' : 'var(--ink)',
+                      fontWeight: selectedPersona === s.id ? 700 : 400,
+                      minHeight: 'auto', display: 'flex', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    {selectedPersona === s.id && <span style={{ fontSize: 10 }}>✓</span>}
+                    {PERSONA_LABELS[s.id]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ position: 'relative' }}>
+          <button
+            type="button"
             title="Sort comments"
-            onClick={() => { blip('open'); setSortMenuOpen(v => !v); setFilterMenuOpen(false) }}
+            onClick={() => { blip('open'); setSortMenuOpen(v => !v); setFilterMenuOpen(false); setPersonaMenuOpen(false) }}
             style={{
               display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', fontSize: 12,
               border: sortBy !== 'document' ? '1px solid var(--blue)' : '1px solid var(--border)',
@@ -269,7 +355,7 @@ export default function ReviewDock({
           {sortMenuOpen && (
             <div
               style={{
-                position: 'absolute', top: 'calc(100% + 4px)', left: 0,
+                position: 'absolute', top: 'calc(100% + 4px)', right: 0,
                 background: 'var(--paper)', border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-lg)',
                 boxShadow: '0 12px 28px -4px rgba(0,0,0,0.22), 0 8px 12px -6px rgba(0,0,0,0.12)',
@@ -284,7 +370,7 @@ export default function ReviewDock({
                     onClick={() => { blip('select'); setSortBy(v); setSortMenuOpen(false) }}
                     style={{
                       width: '100%', padding: '7px 12px', textAlign: 'left', background: sortBy === v ? 'var(--hover)' : 'none', border: 'none',
-                      cursor: 'pointer', fontSize: 12,
+                      cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap',
                       color: sortBy === v ? 'var(--blue)' : 'var(--ink)',
                       fontWeight: sortBy === v ? 700 : 400,
                       minHeight: 'auto', display: 'flex', alignItems: 'center', gap: 6,
@@ -299,10 +385,10 @@ export default function ReviewDock({
           )}
         </div>
 
-        {(selectedStatus !== 'open' || sortBy !== 'document') && (
+        {(selectedPersona !== 'all' || selectedStatus !== 'open' || sortBy !== 'document') && (
           <button
             type="button"
-            onClick={() => { blip('dismiss'); setSelectedStatus('open'); setSortBy('document') }}
+            onClick={() => { blip('dismiss'); setSelectedPersona('all'); setSelectedStatus('open'); setSortBy('document') }}
             title="Clear filters and sort"
             style={{ padding: '4px 8px', fontSize: 11, color: 'var(--muted)', border: 'none', background: 'none', cursor: 'pointer', minHeight: 'auto' }}
           >
@@ -311,7 +397,7 @@ export default function ReviewDock({
         )}
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 14px 12px', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, minWidth: 0 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 14px 12px', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, minWidth: 0 }}>
         {sorted.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--ink-4)', fontSize: 13, paddingTop: 40 }}>
             No comments in this view.
@@ -320,27 +406,22 @@ export default function ReviewDock({
             </div>
           </div>
         ) : (
-          sorted.map(f => {
-            const isHighlighted = highlightedFindingId === f.id
-            const meta = accentFor(f)
+          groups.map(g => {
+            const first = g.items[0]
+            const meta = accentFor(first)
             return (
               <div
-                key={f.id}
-                id={`finding-card-${f.id}`}
+                key={g.key + ':' + first.id}
                 style={{
-                  border: isHighlighted
-                    ? `2px solid ${meta.color}`
-                    : `1px solid ${f.status === 'stale' ? 'var(--ink-2)' : meta.border}`,
+                  border: `1px solid ${meta.border}`,
                   borderLeft: `4px solid ${meta.color}`,
                   borderRadius: 6,
-                  padding: '10px 12px',
-                  background: f.status === 'resolved' ? 'var(--paper-2)' : 'var(--paper-1)',
-                  opacity: f.status === 'resolved' || f.status === 'dismissed' ? 0.6 : 1,
-                  display: 'grid', gap: 8,
+                  padding: '8px 10px',
+                  background: 'var(--paper-1)',
+                  display: 'grid', gap: 6,
                   minWidth: 0,
                   height: 'fit-content',
                   flexShrink: 0,
-                  boxShadow: isHighlighted ? '0 0 0 1px color-mix(in srgb, var(--ink) 20%, transparent)' : 'none',
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -353,93 +434,112 @@ export default function ReviewDock({
                     >
                       {meta.label}
                     </span>
-                    {f.status === 'stale' && (
+                    {g.items.length > 1 && (
                       <span style={{ fontSize: 10, color: 'var(--ink-4)', background: 'var(--ink-1)', padding: '1px 4px', borderRadius: 2 }}>
-                        Stale Anchor
+                        ×{g.items.length}
                       </span>
-                    )}
-                    {f.status === 'dismissed' && (
-                      <span style={{ fontSize: 10, color: 'var(--ink-4)', background: 'var(--ink-1)', padding: '1px 4px', borderRadius: 2 }}>
-                        Dismissed
-                      </span>
-                    )}
-                    {f.status === 'resolved' && (
-                      <span style={{ fontSize: 10, color: '#15803D', fontWeight: 600 }}>{'✓'} Resolved</span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); handleJumpToText(f) }}
-                      title="Jump to quote in editor"
-                      style={{ background: 'none', border: 'none', color: '#1765CC', cursor: 'pointer', fontSize: 11 }}
-                    >
-                      Jump ↗
-                    </button>
-                    {f.status === 'open' && (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); handleDismiss(f.id) }}
-                        title="Dismiss"
-                        style={{ background: 'none', border: 'none', color: 'var(--ink-4)', cursor: 'pointer', fontSize: 11 }}
-                      >
-                        ✕
-                      </button>
                     )}
                   </div>
                 </div>
-
-                {f.anchor?.quotedText && (
-                  <div
-                    title={f.anchor.quotedText}
-                    style={{
-                      fontFamily: '"Source Serif 4", serif', fontStyle: 'italic', fontSize: 13,
-                      color: 'var(--ink-5)', background: 'var(--paper-2)', padding: '4px 8px',
-                      borderRadius: 4, borderLeft: `2px solid ${meta.color}`,
-                    }}
-                  >
-                    “{truncateQuote(f.anchor.quotedText)}”
-                  </div>
-                )}
 
                 <div style={{ fontSize: 12, color: 'var(--ink-5)', lineHeight: 1.45 }}>
-                  {f.explanation}
+                  {g.explanation}
                 </div>
 
-                {f.suggestions && f.suggestions.length > 0 && f.status === 'open' && (
-                  <div style={{ display: 'grid', gap: 6, marginTop: 4 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-4)', textTransform: 'uppercase' }}>
-                      Suggested Revisions ({f.suggestions.length})
-                    </div>
-                    {f.suggestions.map((sug, sIdx) => (
-                      <div
-                        key={sug.id || sIdx}
-                        style={{
-                          padding: '6px 8px', background: 'var(--paper-2)', border: '1px solid var(--ink-2)',
-                          borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                        }}
-                      >
-                        <div style={{ flex: 1, fontSize: 12, color: 'var(--ink-5)' }}>
-                          <span style={{ fontWeight: 700, color: meta.color, marginRight: 6 }}>{sIdx + 1}.</span>
-                          {sug.text}
-                          {sug.rationale && (
-                            <div style={{ fontSize: 10, color: 'var(--ink-4)', marginTop: 2 }}>{sug.rationale}</div>
-                          )}
-                        </div>
+                {g.items.map(f => {
+                  const isHighlighted = highlightedFindingId === f.id
+                  return (
+                    <div key={f.id} id={`finding-card-${f.id}`} style={{ display: 'grid', gap: 4, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        {f.anchor?.quotedText && (
+                          <div
+                            title={f.anchor.quotedText}
+                            style={{
+                              flex: 1,
+                              fontFamily: '"Source Serif 4", serif', fontStyle: 'italic', fontSize: 13,
+                              lineHeight: 1.4,
+                              color: 'var(--ink-5)', background: 'var(--paper-2)', padding: '3px 6px',
+                              borderRadius: 4, borderLeft: `2px solid ${meta.color}`,
+                              minWidth: 0, overflowWrap: 'anywhere', wordBreak: 'break-word',
+                              outline: isHighlighted ? `2px solid ${meta.color}` : 'none',
+                            }}
+                          >
+                            “{truncateQuote(f.anchor.quotedText)}”
+                          </div>
+                        )}
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); handleAcceptSuggestion(f, sug) }}
-                          style={{
-                            padding: '3px 8px', background: meta.color, color: '#fff', border: 'none',
-                            borderRadius: 3, fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-                          }}
+                          onClick={(e) => { e.stopPropagation(); handleJumpToText(f) }}
+                          title="Jump to quote in editor"
+                          style={{ background: 'none', border: 'none', color: '#1765CC', cursor: 'pointer', fontSize: 11, whiteSpace: 'nowrap' }}
                         >
-                          Accept
+                          Jump ↗
                         </button>
+                        {f.status === 'open' && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleDismiss(f.id) }}
+                            title="Dismiss"
+                            style={{ background: 'none', border: 'none', color: 'var(--ink-4)', cursor: 'pointer', fontSize: 11 }}
+                          >
+                            ✕
+                          </button>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
+                      {f.status === 'stale' && (
+                        <span style={{ fontSize: 10, color: 'var(--ink-4)', background: 'var(--ink-1)', padding: '1px 4px', borderRadius: 2, justifySelf: 'start' }}>
+                          Stale Anchor
+                        </span>
+                      )}
+                      {f.status === 'dismissed' && (
+                        <span style={{ fontSize: 10, color: 'var(--ink-4)', background: 'var(--ink-1)', padding: '1px 4px', borderRadius: 2, justifySelf: 'start' }}>
+                          Dismissed
+                        </span>
+                      )}
+                      {f.status === 'resolved' && (
+                        <span style={{ fontSize: 10, color: '#15803D', fontWeight: 600 }}>{'✓'} Resolved</span>
+                      )}
+
+                      {f.suggestions && f.suggestions.length > 0 && f.status === 'open' && (
+                        <div style={{ display: 'grid', gap: 2 }}>
+                          {f.suggestions.map((sug, sIdx) => (
+                            <div
+                              key={sug.id || sIdx}
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => { e.stopPropagation(); handleAcceptSuggestion(f, sug) }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  handleAcceptSuggestion(f, sug)
+                                }
+                              }}
+                              title="Click to apply"
+                              style={{
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                cursor: 'pointer',
+                                fontFamily: '"Source Serif 4", Georgia, serif',
+                                fontSize: 13,
+                                lineHeight: 1.45,
+                                color: 'var(--ink)',
+                                overflowWrap: 'anywhere',
+                              }}
+                              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'color-mix(in srgb, var(--ai) 20%, transparent)' }}
+                              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+                            >
+                              {sug.text}
+                              {sug.rationale && noteKey({ persona: first.persona, explanation: sug.rationale }) !== g.key && (
+                                <div style={{ fontSize: 10, color: 'var(--ink-4)', marginTop: 1 }}>{sug.rationale}</div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )
           })

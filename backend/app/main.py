@@ -13,7 +13,7 @@ from .routers import system, complete, annotate, research, lint, connect
 
 logging.basicConfig(level=logging.INFO)
 if settings.env in ("prod", "production") and not settings.api_key:
-    raise RuntimeError("API_KEY must be set when ENV=prod (refusing to serve an open API)")
+    raise RuntimeError("API_KEY must be set when ENV=prod")
 if not settings.api_key:
     logging.getLogger("byline.api").warning("API_KEY unset: API is open (local dev only)")
 
@@ -33,9 +33,7 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-Byline-Provider", "X-Admin-Token"],
 )
 
-# Read-only or no-inference endpoints: no budget pre-check.
 _BUDGET_EXEMPT = {"/api/health", "/api/models", "/api/usage", "/api/metrics/usage"}
-# Public endpoints: no API key required (waitlist keeps its own strict throttle).
 _AUTH_EXEMPT = {"/", "/api/health", "/api/models", "/api/usage", "/api/waitlist",
                 "/api/metrics/usage"}
 _PROVIDERS = {"auto", "baseten", "meta"}
@@ -99,7 +97,6 @@ async def guard(request: Request, call_next):
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("Referrer-Policy", "no-referrer")
     resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-    # API serves JSON only: lock down framing and active content by default.
     resp.headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'")
     resp.headers.setdefault("X-Frame-Options", "DENY")
     if settings.env in ("prod", "production"):

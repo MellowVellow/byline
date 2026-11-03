@@ -134,9 +134,6 @@ export function ThemeToggle() {
     return () => window.removeEventListener('byline-theme', sync)
   }, [])
   function toggle() {
-    // Single source of truth: flip resolved theme through the settings store
-    // so applySettings() clears stale preset vars (previously toggle wrote
-    // dataset.theme directly and left inline --bg/--dock behind).
     blip('toggle')
     const s = loadSettings()
     const resolved = resolveTheme(s.theme)

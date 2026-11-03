@@ -24,7 +24,6 @@ export const contextService = {
     const before = editor.state.doc.textBetween(Math.max(0, at - maxChars), at, '\n')
     const after = editor.state.doc.textBetween(at, Math.min(docSize, at + maxChars), '\n')
 
-    // Find current block text
     const $pos = editor.state.doc.resolve(at)
     const blockStart = $pos.start()
     const blockEnd = $pos.end()

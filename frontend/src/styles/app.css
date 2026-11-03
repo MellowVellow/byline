@@ -132,10 +132,6 @@
 .ghost-row{padding:6px 8px;border-radius:6px;cursor:pointer;color:var(--muted);font-size:13.5px;line-height:1.45}
 .ghost-row:hover{background:var(--hover)}
 .ghost-row.sel{color:var(--ink);font-weight:700;background:var(--hover)}
-/* Anchor underlines are painted by decorations.ts as background paint (behind the
-   text, no descender gaps). Classes below must NOT draw their own line: PM merges
-   class + inline style onto one span, and that stacked into the old solid+dotted
-   double. Solid bar = reader, SVG squiggle = grammar, gradient = merged overlap. */
 .anch-grammar{cursor:pointer}
 .anch-vocabulary{box-shadow:inset 0 -3px 0 color-mix(in srgb,var(--lt) 85%,transparent);cursor:pointer}
 .anch-claim{background:color-mix(in srgb,var(--blue) 20%,transparent);border-radius:3px;text-decoration-line:underline;text-decoration-style:wavy;text-decoration-color:var(--blue);text-decoration-thickness:1.5px;text-underline-offset:4px;cursor:pointer}
@@ -188,7 +184,6 @@ button.primary .kbd,.popup .primary .kbd{background:transparent;color:inherit;bo
 /* AI off: right rail visually disabled (switch itself stays live in dock header) */
 .ai-off .dock-section{opacity:.45;filter:grayscale(.7)}
 .ai-off .dock-section .dock-scroll,.ai-off .dock-foot button{pointer-events:none}
-/* Suggestions = drafting AI: never disabled by ai-off */
 .ai-off .suggest-dock{opacity:1;filter:none}
 .ai-off .suggest-dock .dock-scroll,.ai-off .suggest-dock .dock-foot button{pointer-events:auto}
 /* TAB double-click disabled + underline-selected dock item */
@@ -625,15 +620,19 @@ header.topbar { overflow: visible !important; }
 }
 .connect-popup {
   max-height: calc(100vh - 68px);
+  max-width: min(340px, calc(100vw - 32px));
   overflow: auto;
   background: var(--paper);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-pop);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.06);
   display: flex;
   flex-direction: column;
-  padding: 12px;
-  gap: 10px;
+  padding: 10px 12px;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
 }
 .connect-popup-head {
   display: flex;
@@ -643,20 +642,11 @@ header.topbar { overflow: visible !important; }
 }
 .connect-popup-head strong { font-size: 14px; }
 .connect-popup-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
-.connect-popup-reroll {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  font-size: 14px;
-  line-height: 1;
-}
 .connect-popup-list { display: grid; gap: 6px; }
 .connect-seam {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  padding: 6px;
+  display: grid;
+  gap: 4px;
+  padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--paper);
@@ -664,15 +654,11 @@ header.topbar { overflow: visible !important; }
 }
 .connect-seam.off { opacity: 0.45; }
 .connect-seam input { margin: 0; accent-color: var(--ai); }
-.connect-seam-n { color: var(--muted); width: 12px; text-align: center; }
-.connect-seam-muted { color: var(--muted); font-size: 11.5px; }
-.connect-one {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-}
+.connect-seam-top { display: flex; align-items: center; gap: 6px; }
+.connect-seam-top .connect-alt-count { margin-left: auto; }
+.connect-seam-main { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.connect-seam-main .connect-variant { flex: 1; }
+.connect-seam-muted { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
 .connect-rel {
   font-size: 11px;
   padding: 2px 8px;
@@ -702,14 +688,6 @@ header.topbar { overflow: visible !important; }
   font-size: 11px;
   white-space: nowrap;
 }
-.connect-alt-nav {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  font-size: 14px;
-  line-height: 1;
-  border-radius: 6px;
-}
 .connect-figure {
   border-top: 1px solid var(--border);
   padding-top: 8px;
@@ -717,19 +695,6 @@ header.topbar { overflow: visible !important; }
   font-size: 11.5px;
   line-height: 1.4;
 }
-.connect-popup-foot {
-  display: flex;
-  gap: 8px;
-  margin-top: auto;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-}
-.connect-keep, .connect-undo {
-  flex: 1;
-  padding: 6px 10px;
-  font-size: 12px;
-}
-.connect-keep { background: var(--ai); color: var(--btn-ink); border-color: var(--ai); font-weight: 600; }
 .connect-popup-hint { color: var(--muted); font-size: 10.5px; line-height: 1.5; }
 .connect-popup kbd {
   font: inherit;
@@ -763,4 +728,11 @@ header.topbar { overflow: visible !important; }
   .mobile-sheet-open .word-count-pill { bottom: calc(42vh + 12px); }
   .topbar { gap: 4px; }
   .mobile-bottom-area .caret-pop { animation: rise-in 0.22s ease-out both; }
+  /* Touch-sized tap targets in the footer sheet; kbd hints are desktop-only */
+  .mobile-bottom-area button { min-height: 40px !important; padding: 8px 10px !important; font-size: 13.5px; }
+  .mobile-bottom-area [role="option"] { padding: 10px 8px !important; font-size: 14px !important; }
+  .mobile-bottom-area kbd { display: none !important; }
+  .mobile-bottom-area .connect-popup { max-width: none; }
+  .mobile-suggest-fab { align-items: center; justify-content: center; }
+  .mobile-suggest-fab:disabled { opacity: 0.6; }
 }

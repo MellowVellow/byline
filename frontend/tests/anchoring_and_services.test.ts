@@ -1,25 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { CONNECT_PATTERNS } from '../src/domain/pattern'
 import { THEME_DEFINITIONS } from '../src/domain/writing-profile'
 import { AnalysisService } from '../src/services/analysis-service'
 import type { Finding } from '../src/domain/finding'
 
-describe('Domain Models & Connect Patterns', () => {
-  it('loads all 12 Connect pattern categories', () => {
-    const categories = new Set(CONNECT_PATTERNS.map(p => p.category))
-    expect(categories.has('Addition')).toBe(true)
-    expect(categories.has('Contrast')).toBe(true)
-    expect(categories.has('Cause and effect')).toBe(true)
-    expect(categories.has('Evidence')).toBe(true)
-    expect(categories.has('Concession')).toBe(true)
-    expect(categories.has('Comparison')).toBe(true)
-    expect(categories.has('Elaboration')).toBe(true)
-    expect(categories.has('Qualification')).toBe(true)
-    expect(categories.has('Synthesis')).toBe(true)
-    expect(categories.has('Sequence')).toBe(true)
-    expect(categories.has('Example')).toBe(true)
-    expect(categories.has('Problem and solution')).toBe(true)
-  })
+describe('Domain Models', () => {
 
   it('defines the 4 required writing themes', () => {
     expect(THEME_DEFINITIONS.neutral).toBeDefined()

@@ -64,7 +64,7 @@ def retry_hint(assist: str) -> str:
     if assist == "Question": return "\nRETRY: previous format invalid — return exactly 3 questions, one per line, each ending with a question mark."
     return "\nRETRY: previous format invalid — follow ASSIST exactly, full sentences only, no fragments."
 
-# Prefetch depth: initial call returns N per level (half shown, half instant rerolls).
+# Prefetch depth: initial call returns N per level.
 LEVELS_N = 6
 
 def _clean_list(items, cap_words: int, limit: int = LEVELS_N) -> list[str]:
@@ -79,11 +79,6 @@ def _clean_list(items, cap_words: int, limit: int = LEVELS_N) -> list[str]:
 @router.post("/api/complete")
 async def complete(body: CompleteIn):
     try:
-        # Grouped single-call payload: assist_level "All" returns all four ghost
-        # levels at once ({cue, question, fragment, sentence}), LEVELS_N deep per
-        # level so reroll alternates ride along with the first call. Rerolls carry
-        # `avoid` (previously: fell into the single-level path and 422'd on >3
-        # avoid items) and bypass cache by design.
         if body.assist_level == "All":
             ck = cache.key("complete:all", body.context, body.level, body.before[-400:], body.after[:200])
             if not body.avoid:
@@ -110,10 +105,6 @@ async def complete(body: CompleteIn):
                 pass
             return fail(version=body.version)
         s, u = prompts.complete_prompt(body.context, body.level, body.before, body.after, body.assist_level, body.facts, body.last_two, body.avoid)
-        # Priority: remote cascade (Baseten → Meta → OpenRouter → mock) by default.
-        # Local vLLM is opt-in first-choice only when LOCAL_PREFER=1, else it
-        # serves as a secondary fallback before giving up — avoids silently
-        # preferring an unconfigured/local model over the hackathon primary.
         async def _try_local():
             t0 = time.perf_counter(); local_raw = await llm.local_text(s, u); dt = time.perf_counter() - t0
             sugg = post_process(body.before, parse_options(local_raw, body.assist_level), body.assist_level)

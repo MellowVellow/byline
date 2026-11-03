@@ -20,7 +20,6 @@ export class AnalysisService {
   }
 
   addFindings(incoming: Finding[]) {
-    // Preserve existing findings, merge or append new ones by ID
     const existingMap = new Map(this.findings.map(f => [f.id, f]))
     for (const f of incoming) {
       existingMap.set(f.id, f)
@@ -29,9 +28,6 @@ export class AnalysisService {
     this.notify()
   }
 
-  /** Replace all findings of one persona (e.g. refresh Harper underlines) without
-   * touching others. Dismissed/resolved verdicts survive by quoted-text match so a
-   * re-lint doesn't resurrect findings the writer already handled. */
   replacePersona(persona: Persona, incoming: Finding[]) {
     const keep = this.findings.filter(f => f.persona !== persona)
     const oldStatus = new Map(

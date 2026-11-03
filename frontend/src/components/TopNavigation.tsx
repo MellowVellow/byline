@@ -13,7 +13,6 @@ export interface TopNavigationProps {
   mobileDrawerOpen?: boolean
   findingsCount?: number
 
-  // Suggest (still callable via keyboard, but button removed from topbar)
   onSuggest: () => void
   draftLoading: boolean
 }
@@ -37,7 +36,6 @@ export default function TopNavigation({
     if (editor) void exportService.export(editor, format, 'Byline-Draft')
   }
 
-  // Close all dropdowns on outside click / Escape
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement
@@ -129,6 +127,17 @@ export default function TopNavigation({
 
       {/* ── RIGHT: Export, Theme ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+        {/* Mobile one-tap Suggest (no Ctrl+Space on touch keyboards) */}
+        <button
+          type="button"
+          className="mobile-only-btn"
+          onClick={() => { blip('select'); onSuggest() }}
+          disabled={draftLoading}
+          title="Get writing suggestions"
+          style={{ padding: '2px 8px', fontSize: 12.5, minHeight: 28, fontWeight: 700, opacity: draftLoading ? 0.6 : 1 }}
+        >
+          {draftLoading ? '…' : '✨'}
+        </button>
 
         {/* Desktop right buttons */}
         <div className="desktop-only-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
@@ -213,6 +222,8 @@ export default function TopNavigation({
               {onOpenMetrics && (
                 <button type="button" onClick={() => { blip('open'); setMobileMenuOpen(false); onOpenMetrics() }} style={{ width: '100%', padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}>Metrics</button>
               )}
+              <button type="button" onClick={() => { blip('select'); setMobileMenuOpen(false); onSuggest() }} disabled={draftLoading} style={{ width: '100%', padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, opacity: draftLoading ? 0.6 : 1 }}>{draftLoading ? 'Suggesting…' : '✨ Suggest'}</button>
+              <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
               <div style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Export</div>
               {(['docx', 'markdown', 'txt'] as ExportFormat[]).map((fmt, i) => (
                 <button

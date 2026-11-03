@@ -81,10 +81,8 @@ async def _supabase_add(email: str, note: str) -> str:
                 params={"on_conflict": "email"},
             )
 
-        # Ignore duplicate emails instead of failing the submission.
         r = await post("return=minimal,resolution=ignore-duplicates")
         if r.status_code == 400:
-            # Older PostgREST: fall back to plain insert; 409 means duplicate.
             r = await post("return=minimal")
 
     if r.status_code in (200, 201, 204):
@@ -99,10 +97,8 @@ async def _supabase_add(email: str, note: str) -> str:
 async def waitlist(body: WaitlistIn):
     email = str(body.email).strip().lower()
     note = (body.note or "").strip()[:500]
-    # Strict public throttle: 10 submissions/min per IP (honeypot hits count too).
     if not rate_ok(f"waitlist:{budget.current_ip() or 'unknown'}", limit=10, window=60.0):
         return JSONResponse({"ok": False, "error": "waitlist_rate_limited"}, status_code=429)
-    # Honeypot: bots fill this hidden field. Pretend success.
     if body.company:
         return ok(store="ignored")
 

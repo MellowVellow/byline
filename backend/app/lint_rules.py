@@ -1,8 +1,4 @@
-"""Backend lint rule catalog (id, name, short rule) for setup-agent LLM prompt.
-
-Full catalog (descriptions/examples/UI) lives in frontend/src/lib/rules.ts.
-IDs must match exactly — enforced by tests/test_lint_rules_parity.py.
-"""
+"""Backend lint rule catalog (id, name, short rule)."""
 
 LINT_RULE_LIBRARY: list[tuple[str, str, str]] = [
     ("R_AMB_01", "BLUF", "Main takeaway first"),

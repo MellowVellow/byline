@@ -1,8 +1,3 @@
-/**
- * Live call metrics & telemetry:
- * - Stored locally in localStorage (events & acceptance telemetry)
- * - Tracks acceptance rates, user usage, and model error rates
- */
 
 export interface CallMeta {
   endpoint: string
@@ -22,13 +17,11 @@ export interface UsageTelemetry {
   revisionsAccepted: number
   totalSessions: number
   lastActive: number
-  /** Call-saving telemetry (ghost autos): fired, cache-saved, aborted, stale-dropped, debounce-saved */
   ghostFired: number
   ghostCacheSaved: number
   ghostAborted: number
   ghostStaleDropped: number
   ghostDebounceSaved: number
-  /** Manual rerolls across ghost + selection grids */
   ghostRerolls: number
 }
 
@@ -80,13 +73,6 @@ export function recordSuggestionAccepted() {
   saveUsageStats(stats)
 }
 
-export function recordRevisionOffered(count = 1) {
-  const stats = loadUsageStats()
-  stats.revisionsOffered += count
-  stats.lastActive = Date.now()
-  saveUsageStats(stats)
-}
-
 export function recordRevisionAccepted() {
   const stats = loadUsageStats()
   stats.revisionsAccepted += 1
@@ -103,7 +89,6 @@ function bumpGhost(field: 'ghostFired' | 'ghostCacheSaved' | 'ghostAborted' | 'g
   } catch { /* noop */ }
 }
 
-/** Ghost autos measurement: fired, cache-saved, aborted, stale-dropped, debounce-saved */
 export const recordGhostFired = () => bumpGhost('ghostFired')
 export const recordGhostCacheSaved = () => bumpGhost('ghostCacheSaved')
 export const recordGhostAborted = () => bumpGhost('ghostAborted')

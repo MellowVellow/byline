@@ -3,10 +3,6 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-# Battle-tested .env parsing (quotes, comments, inline comments). Never
-# overrides real environment variables — matches the old setdefault semantics.
-# Settings stay as dynamic properties (not a frozen BaseSettings snapshot) so
-# tests and operators can change env vars at runtime.
 try:
     from dotenv import load_dotenv
     load_dotenv(ROOT / ".env", override=False)
@@ -18,12 +14,9 @@ except ImportError:  # pragma: no cover - dependency always installed in practic
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip())
 
-# Verified Meta-authored model identifiers across approved providers
 APPROVED_META_MODELS = {
-    # Hackathon primary model (Baseten-hosted)
     "meta-models/muse-spark-open-1026",
     "muse-spark-open-1026",
-    # OpenRouter Meta models
     "meta-llama/llama-3.3-70b-instruct",
     "meta-llama/llama-3.1-70b-instruct",
     "meta-llama/llama-3.1-8b-instruct",
@@ -31,11 +24,9 @@ APPROVED_META_MODELS = {
     "meta-llama/llama-3.2-1b-instruct",
     "meta-llama/llama-3-70b-instruct",
     "meta-llama/llama-3-8b-instruct",
-    # Meta Model API
     "muse-spark-1.3",
     "muse-glimmer-30b",
     "muse-voice-transcribe-1.0",
-    # Baseten-hosted Meta models
     "meta-llama/Llama-3.3-70B-Instruct",
     "meta-llama/Meta-Llama-3.1-70B-Instruct",
     "meta-llama/Meta-Llama-3.1-8B-Instruct",
@@ -78,7 +69,6 @@ class Settings:
     def baseten_base_url(self) -> str:
         return (os.getenv("BASETEN_BASE_URL") or "https://inference.baseten.co/v1").strip().rstrip("/")
 
-    # Hackathon primary: always use muse-spark-open-1026 on Baseten
     @property
     def baseten_model(self) -> str:
         return (os.getenv("BASETEN_MODEL") or "meta-models/muse-spark-open-1026").strip()
@@ -99,7 +89,6 @@ class Settings:
     def waitlist_local_fallback(self) -> bool:
         return os.getenv("WAITLIST_LOCAL_FALLBACK", "").strip().lower() in ("1", "true", "yes")
 
-    # --- Per-IP usage budget (token quota, displayed as a $ estimate) ---
     @property
     def ip_budget_enabled(self) -> bool:
         return os.getenv("IP_BUDGET_ENABLED", "1").strip().lower() not in ("0", "false", "no")
@@ -192,10 +181,8 @@ def validate_meta_model(model: str) -> str:
     cleaned = (model or "").strip()
     if not cleaned:
         return settings.fallback_model
-    # Normalize model identifier
     if cleaned in APPROVED_META_MODELS:
         return cleaned
-    # Check lowercase match
     for approved in APPROVED_META_MODELS:
         if cleaned.lower() == approved.lower():
             return approved

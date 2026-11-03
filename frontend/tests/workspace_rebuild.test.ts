@@ -1,35 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { CONNECT_PATTERNS } from '../src/domain/pattern'
 import { THEME_DEFINITIONS } from '../src/domain/writing-profile'
 import { exportService } from '../src/services/export-service'
 import { AnalysisService } from '../src/services/analysis-service'
 import type { Finding } from '../src/domain/finding'
 
 describe('Workspace Rebuild & Domain Features', () => {
-  it('connect pattern library contains all required rhetorical categories and examples', () => {
-    const requiredCategories = [
-      'Addition',
-      'Contrast',
-      'Cause and effect',
-      'Evidence',
-      'Concession',
-      'Comparison',
-      'Elaboration',
-      'Qualification',
-      'Synthesis',
-      'Sequence',
-      'Example',
-      'Problem and solution',
-    ]
-
-    for (const cat of requiredCategories) {
-      const match = CONNECT_PATTERNS.find(p => p.category === cat)
-      expect(match).toBeDefined()
-      expect(match?.template).toContain('[')
-      expect(match?.placeholders.length).toBeGreaterThan(0)
-      expect(match?.example.length).toBeGreaterThan(10)
-    }
-  })
 
   it('writing themes modify tone, diction, and register predictably', () => {
     expect(THEME_DEFINITIONS.neutral.systemPromptModifier).toContain('clear')

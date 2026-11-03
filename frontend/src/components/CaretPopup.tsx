@@ -2,8 +2,6 @@ import React from 'react'
 
 export type GhostLevel = 'cue' | 'question' | 'fragment' | 'sentence'
 export const GHOST_LEVELS: GhostLevel[] = ['cue', 'question', 'fragment', 'sentence']
-/** Display labels for ghost levels, shared by the popup tabs and the top-bar
- *  Completion Level picker so both read cue/question/fragment/sentence. */
 export const GHOST_LABELS: Record<GhostLevel, string> = {
   cue: 'cue',
   question: 'question',
@@ -19,13 +17,11 @@ export type SelGrid = Record<SelCol, string[]>
 export const EMPTY_GHOST: GhostGroups = { cue: [], question: [], fragment: [], sentence: [] }
 export const EMPTY_GRID: SelGrid = { Synonyms: [], Paraphrase: [], Tone: [] }
 
-/** Option at (level, index) with wraparound. */
 export function ghostOption(groups: GhostGroups, lv: GhostLevel, idx: number): string {
   const a = groups[lv] || []
   return a.length ? a[idx % a.length] : ''
 }
 
-/** 3 visible cells of a column with wraparound paging. */
 export function visibleCells(grid: SelGrid, col: number, page: number): string[] {
   const a = grid[SEL_COLS[col]] || []
   if (!a.length) return []
@@ -54,20 +50,13 @@ export interface CaretPopupProps {
   onConnect?: () => void
   containerRef?: (node: HTMLDivElement | null) => void
   onAccept: () => void
-  /** Next option (`). */
   onNext?: () => void
-  /** Previous option (alt+`). */
   onPrev?: () => void
-  /** Redo: fresh fetch (alt+0). */
   onReroll: () => void
   onDismiss: () => void
-  /** Render as static full-width sheet (mobile bottom area) instead of fixed popup. */
   sheet?: boolean
 }
 
-/** Minimal compact caret popup — ported from caret-popup-feel-test.html.
- * Dumb component: state + keys live in the parent (single key handler).
- */
 export default function CaretPopup({
   mode,
   position,
@@ -113,6 +102,7 @@ export default function CaretPopup({
         position: 'static',
         width: '100%',
         maxWidth: 'none',
+        boxSizing: 'border-box',
         background: 'var(--paper)',
         border: '1px solid var(--border)',
         borderRadius: 8,
@@ -221,7 +211,7 @@ export default function CaretPopup({
           <button
             type="button"
             onClick={onNext}
-            title="Next option"
+            title={mode === 'sel' ? 'Next page' : 'Next option'}
             style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
           >
             Next<kbd style={{ font: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>`</kbd>
@@ -231,7 +221,7 @@ export default function CaretPopup({
           <button
             type="button"
             onClick={onPrev}
-            title="Previous option"
+            title={mode === 'sel' ? 'Previous page' : 'Previous option'}
             style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
           >
             Prev<kbd style={{ font: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>alt+`</kbd>

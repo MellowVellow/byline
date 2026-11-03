@@ -26,16 +26,13 @@ export function subtractRange(r: { from: number; to: number }, taken: { from: nu
   return segs.filter(s => s.to > s.from)
 }
 
-// Underline palette: purple reader, red grammar.
-// Rendered as background paint (behind the text) so descenders (g, y)
-// never punch gaps: solid bar for reader, SVG squiggle for grammar.
 const KIND_COLORS: Record<string, string> = {
   reader: 'var(--ai)',
   reaction: 'var(--ai)',
   grammar: 'var(--lt)',
 }
 
-/** Resolve a CSS var to a hex color for embedding in SVG data URIs. */
+/** Resolve a CSS var to hex for SVG data URIs. */
 function cssVarHex(name: string, fallback: string): string {
   try {
     const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
@@ -74,8 +71,6 @@ function groupOverlapping(anchors: Array<{ id: string; kind: string; from: numbe
 function buildAnchors(doc: any): Decoration[] {
   if (modeStore.mode !== 'editing') return []
 
-  // Findings anchor sentence-scale quotes; a span beyond this is a stale or
-  // misresolved anchor (e.g. whole-document), never a legitimate underline.
   const MAX_ANCHOR_CHARS = 500
   const anchors: Array<{ id: string; kind: string; from: number; to: number }> = []
   for (const a of anchorStore.anchors) {
@@ -95,10 +90,6 @@ function buildAnchors(doc: any): Decoration[] {
     if (g.items.length === 1) {
       const a = g.items[0]
       const color = KIND_COLORS[a.kind] || 'var(--lt)'
-      // Single line only: solid bar (reader) or squiggle (grammar), painted
-      // as background so it sits behind the text with no descender gaps.
-      // Never text-decoration/border here: PM merges class + inline style
-      // onto one span, and those stacked into the old solid+dotted double.
       const style = a.kind === 'grammar'
         ? `background-image: ${squiggleBg(cssVarHex('--lt', '#D83343'))}; background-repeat: repeat-x; background-position: 0 100%; background-size: 12px 5px; padding-bottom: 6px; border-radius: 2px;`
         : `background-image: linear-gradient(90deg, ${color}, ${color}); background-size: 100% 2px; background-repeat: no-repeat; background-position: 0 100%; padding-bottom: 4px; border-radius: 2px;`
@@ -108,7 +99,6 @@ function buildAnchors(doc: any): Decoration[] {
         style,
       }))
     } else {
-      // Multiple overlapping anchors on same range -> merged gradient underline
       const stops = g.items.map((a, i) => {
         const c = KIND_COLORS[a.kind] || 'var(--lt)'
         const pct = Math.round((i / Math.max(1, g.items.length - 1)) * 100)
@@ -146,8 +136,6 @@ function buildFlash(doc: any): Decoration[] {
 const popKey = new PluginKey('byline-grammar-pop')
 export const popStore: { pops: Array<{ id: string; from: number; to: number; expireAt: number }> } = { pops: [] }
 
-// Red wavy underlines shown DURING the pre-fix hold so the writer sees
-// exactly which text is about to be auto-fixed. Cleared when fixes apply.
 const holdKey = new PluginKey('byline-grammar-hold')
 export const holdStore: { holds: Array<{ id: string; from: number; to: number }> } = { holds: [] }
 
@@ -186,11 +174,11 @@ function buildConnect(doc: any): Decoration[] {
   return decos
 }
 
-/** Dispatch that only maps existing decorations through the transaction (no stale-range rebuild). */
+/** Dispatch that only maps existing decorations through the transaction. */
 export function redraw(editor: any) {
   if (editor?.view) editor.view.dispatch(editor.state.tr.setMeta('byline:redraw', true))
 }
-/** Rebuild anchor decorations from fresh ranges (call only after fresh locate). */
+/** Rebuild anchor decorations from fresh ranges. */
 export function syncAnchors(editor: any) {
   if (editor?.view) editor.view.dispatch(editor.state.tr.setMeta(anchorKey, { rebuild: true }))
 }

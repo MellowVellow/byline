@@ -34,7 +34,6 @@ export const exportService = {
     try {
       return turndown.turndown(html || '').replace(/\n{3,}/g, '\n\n').trim()
     } catch {
-      // Fallback: strip tags if the converter chokes on hostile markup.
       return (html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
     }
   },

@@ -154,7 +154,6 @@ def settle(rid: int | None, usage: dict | None, model: str, provider: str, mock:
     if mock:
         tok_in = tok_out = reasoning = 0
     elif tok_in + tok_out == 0:
-        # Provider returned no usage: charge the reservation so calls are not free.
         row = _con().execute("SELECT reserved FROM usage WHERE id = ?", (rid,)).fetchone()
         tok_in = int(row[0] or 0) if row else 0
     with _LOCK:
@@ -227,7 +226,6 @@ def snapshot(ip: str) -> dict:
         "reset_at": (float(oldest) + _window()) if oldest else (now + _window()),
         "requests": int(requests),
         "by_provider": by_provider,
-        # Rough display estimate; enforcement is token-based.
         "est_usd": estimate_usd(tokens_in, tokens_out),
         "prices": {"in_per_m": settings.price_in_per_m, "out_per_m": settings.price_out_per_m},
     }

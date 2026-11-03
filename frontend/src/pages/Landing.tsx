@@ -79,7 +79,6 @@ export default function Landing() {
           <a href="#faq" style={{ color: 'var(--muted)', textDecoration: 'none' }}>FAQ</a>
         </nav>
         <a className="btn" href="/demo">Try it</a>
-        <a className="btn primary" href="#waitlist">Join waitlist</a>
         <ThemeToggle />
       </header>
 

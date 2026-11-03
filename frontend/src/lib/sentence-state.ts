@@ -1,7 +1,3 @@
-/** Sentence completion-state classifier — ported from Completion state test.html.
- * States: Complete | Open | Unsure | Empty | NA (code blocks: ghost off).
- * Modes: doc (markdown-aware) | prompt (plain).
- */
 export type SentenceState = 'Complete' | 'Open' | 'Unsure' | 'Empty' | 'NA'
 export type ClassifyMode = 'doc' | 'prompt'
 
@@ -62,16 +58,8 @@ export function classifyLine(raw: string, md: ClassifyMode = 'doc', prev = '', i
   return r('Unsure', 'No punctuation, ends on a content word. Wait for a pause, then offer both a continuation and a next sentence')
 }
 
-/** Punctuation-only baseline (for tests / comparison). */
-export function naiveState(line: string): 'Complete' | 'Open' {
-  return /[.!?]$/.test(line.trim()) ? 'Complete' : 'Open'
-}
-
 export type GhostBias = 'sentence' | 'fragment' | null
 
-/** Auto-suggest gating for a caret-line completion state:
- * NA/Empty suppress the trigger; Complete biases to next-sentence,
- * Open biases to continuation; Unsure uses the assist default. */
 export function ghostTriggerForState(state: SentenceState): { suppress: boolean; bias: GhostBias } {
   if (state === 'NA' || state === 'Empty') return { suppress: true, bias: null }
   if (state === 'Complete') return { suppress: false, bias: 'sentence' }
@@ -79,7 +67,6 @@ export function ghostTriggerForState(state: SentenceState): { suppress: boolean;
   return { suppress: false, bias: null }
 }
 
-/** Caret-zone signals for ghost triggers (ported from Ghost text feel test.html). */
 export type CaretZone = 'end' | 'between' | 'mid'
 export interface CaretSignals {
   zone: CaretZone

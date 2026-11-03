@@ -1,7 +1,4 @@
-"""Security helpers: rate limiting, SSRF guard, prompt-data fencing.
-NOTE: rate buckets are process-local — run uvicorn with --workers=1 in
-production or front with a shared rate-limiter; otherwise each worker
-enforces its own 120/min budget (fail-open on scale, never fail-closed)."""
+"""Security helpers: rate limiting, SSRF guard, prompt-data fencing."""
 from __future__ import annotations
 import ipaddress, socket, threading, time
 from urllib.parse import urlparse
@@ -34,11 +31,9 @@ def is_safe_public_url(url: str) -> bool:
         p = urlparse(url)
         if p.scheme not in ("http", "https") or not p.hostname:
             return False
-        # Reject embedded credentials: userinfo must never reach the fetcher.
         if p.username or p.password:
             return False
         host = p.hostname
-        # Never fetch loopback-ish names even if DNS would resolve them publicly.
         low = host.lower().rstrip(".")
         if low == "localhost" or low.endswith((".local", ".localhost", ".internal", ".lan")):
             return False

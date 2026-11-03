@@ -1,4 +1,4 @@
-import type { ThemeId, WritingProfile } from './document'
+import type { ThemeId } from './document'
 
 export interface ThemeDefinition {
   id: ThemeId
@@ -50,8 +50,3 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'en-CA', label: 'English (Canada)' },
   { code: 'en-AU', label: 'English (Australia)' },
 ]
-
-export const DEFAULT_WRITING_PROFILE: WritingProfile = {
-  language: 'en-US',
-  theme: 'neutral',
-}

@@ -1,4 +1,3 @@
-/** FE AI cache: memory + sessionStorage, 5min TTL, no infra. */
 
 const TTL_MS = 5 * 60 * 1000
 const PREFIX = 'byline.ai-cache.v1:'

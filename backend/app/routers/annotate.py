@@ -80,7 +80,6 @@ async def synonyms(body: SynonymIn):
         if body.sentence and body.word:
             words = [w for w in words if w.lower() != body.word.lower()]
         if not words:
-            # Backward-compatible flat list derived from the grid
             for w in grid["Synonyms"] + grid["Paraphrase"] + grid["Tone"]:
                 if w not in words: words.append(w)
                 if len(words) >= 8: break

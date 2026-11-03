@@ -46,3 +46,5 @@ __pycache__/
 *.pyc
 shot*.mjs
 frontend/shot*.mjs
+frontend/.vite/
+frontend/probe-tmp.mjs

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import type { Finding, Suggestion } from '../domain/finding'
+import { noteKey } from '../domain/finding'
 import type { Editor } from '@tiptap/react'
 import { blip } from '../lib/sfx'
 
@@ -37,11 +38,6 @@ export const PERSONA_STYLES: Record<string, { label: string; color: string; bord
   },
 }
 
-/**
- * Inline Review Popup below the cursor in Edit Mode.
- * Shows suggestions for fixes, or the comment from the specific color/persona.
- * If multiple colors on the same text, renders them side by side with Next-| navigation.
- */
 export default function InlineReviewPopup({
   findings,
   position,
@@ -56,7 +52,6 @@ export default function InlineReviewPopup({
   containerRef,
 }: InlineReviewPopupProps) {
   const [activeIdx, setActiveIdx] = useState(0)
-  // Chosen pre-fetched option per finding (1-9 / forward / backward).
   const [sugSel, setSugSel] = useState<Record<string, number>>({})
   const popupRef = useRef<HTMLDivElement>(null)
 
@@ -65,6 +60,7 @@ export default function InlineReviewPopup({
   const activeFinding = findings[currentIdx]
 
   const sugCount = activeFinding?.suggestions?.length ?? 0
+  const dupNote = !!activeFinding && findings.slice(0, currentIdx).some(o => noteKey(o) === noteKey(activeFinding))
   const sugIdx = activeFinding ? Math.min(sugSel[activeFinding.id] ?? 0, Math.max(0, sugCount - 1)) : 0
   const currentSug = sugCount > 0 ? activeFinding.suggestions[sugIdx] : undefined
   const canReprompt = !!activeFinding && activeFinding.persona === 'reader' && !!onReprompt
@@ -255,9 +251,15 @@ export default function InlineReviewPopup({
     >
       {currentSug ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <div style={{ padding: '1px 4px', color: 'var(--muted)', fontSize: 12, lineHeight: 1.45 }}>
-            {activeFinding.explanation}
-          </div>
+          {!dupNote ? (
+            <div style={{ padding: '1px 4px', color: 'var(--muted)', fontSize: 12, lineHeight: 1.45 }}>
+              {activeFinding.explanation}
+            </div>
+          ) : activeFinding.anchor?.quotedText ? (
+            <div style={{ padding: '1px 4px', color: 'var(--muted)', fontSize: 12, lineHeight: 1.45, fontStyle: 'italic', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              “{activeFinding.anchor.quotedText}”
+            </div>
+          ) : null}
           <div
             role="option"
             aria-selected={true}
@@ -284,7 +286,9 @@ export default function InlineReviewPopup({
         </div>
       ) : (
         <div style={{ padding: '1px 4px', color: 'var(--ink)', fontSize: 13 }}>
-          {activeFinding.explanation}
+          {!dupNote || !activeFinding.anchor?.quotedText
+            ? activeFinding.explanation
+            : `“${activeFinding.anchor.quotedText}”`}
         </div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 3, padding: '2px 4px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 12 }}>

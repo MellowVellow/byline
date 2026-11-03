@@ -7,7 +7,6 @@ STYLES = ("apa", "mla", "chicago")
 
 
 def _author_last(title: str) -> str:
-    # Fallback: org/site name from title when no author given
     t = (title or "").strip()
     return t[:60] if t else "n.d."
 
@@ -23,7 +22,6 @@ def format_inline(source_title: str = "", url: str = "", locator: str = "",
         return f'("{t}"{loc})'
     if style == "chicago":
         return f'({t}{loc}, {url})'.replace(", )", ")") if url else f"({t}{loc})"
-    # apa default
     return f"({t}{f', {y}' if y else ''}{loc})"
 
 
@@ -38,12 +36,9 @@ def format_bibliography(source_title: str = "", url: str = "", locator: str = ""
     y = year.strip() if year else "n.d."
     a = author.strip() or _author_last(t)
     if style == "mla":
-        # Author. "Title." URL, Accessed day.
         return f'{a}. "{t}." {u}, Accessed {acc}.'.strip()
     if style == "chicago":
-        # Author, "Title," URL (accessed date).
         return f'{a}, "{t}," {u} (accessed {acc}).'.strip()
-    # apa: Author. (Year). Title. URL
     return f"{a}. ({y}). {t}. {u}".strip()
 
 

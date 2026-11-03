@@ -12,14 +12,6 @@ export const POPUP_GAP = 12
 
 const DISPLAY_ORDER: PopupId[] = ['selection', 'ghost', 'review', 'connect']
 
-/**
- * Resolve downward-only offsets for floating popups.
- *
- * Boxes are considered in top-to-bottom screen order, with a stable kind
- * order used only to break exact ties. The highest popup keeps its anchor.
- * Every lower popup moves down far enough to clear all previously placed
- * boxes. Horizontal separation is enough to leave a popup untouched.
- */
 export function cascadePopupRects(
   rects: PopupBox[],
   viewportHeight: number,

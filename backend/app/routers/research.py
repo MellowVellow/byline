@@ -28,7 +28,6 @@ async def _readings_for_claim(c: dict) -> list:
     except Exception:
         return []
     if r.get("mock"):
-        # Offline mock must never surface as a citable source.
         return []
     answer = (r.get("text") or "").strip()
     verdict, summary = parse_verdict(answer)
@@ -91,7 +90,6 @@ async def research_upload(file: UploadFile = File(...), question: str = "Extract
     try:
         content = await file.read()
         if len(content) > settings.body_limit_mb * 1024 * 1024: return fail(error="file_too_large")
-        # Local parse first: docx/csv/xlsx/txt/md → text fallback when Meta Files rejects binary
         local_text = citations.extract_doc_text(file.filename or "", content)
         if local_text:
             try:

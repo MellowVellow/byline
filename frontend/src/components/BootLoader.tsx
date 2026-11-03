@@ -8,7 +8,6 @@ const MESSAGES = [
   'Almost ready…',
 ]
 
-/** Boot splash — serif `b` + looping ring animation (no progress number). */
 export default function BootLoader({ onDone }: { onDone: () => void }) {
   const [msg, setMsg] = useState(0)
   const [leaving, setLeaving] = useState(false)

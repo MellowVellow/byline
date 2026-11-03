@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
-import { Settings as SettingsIcon } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Highlight from '@tiptap/extension-highlight'
@@ -11,7 +10,7 @@ import Underline from '@tiptap/extension-underline'
 import TopNavigation from '../components/TopNavigation'
 import ReviewDock from '../components/ReviewDock'
 import BootLoader from '../components/BootLoader'
-import { useGhostTriggers, findConnectives, connectiveAlternatives } from '../hooks/useGhostTriggers'
+import { useGhostTriggers } from '../hooks/useGhostTriggers'
 import { classifyLine, ghostTriggerForState } from '../lib/sentence-state'
 import ContextInput from '../components/ContextInput'
 import { REVIEW_TEMPLATES } from '../lib/review-templates'
@@ -34,6 +33,7 @@ import { globalAnalysisService } from '../services/analysis-service'
 import { harperService } from '../services/harper-service'
 import { resolveAnchor, applySafeReplacement, consumeProgrammaticApplyFlag, TEXT_SEP } from '../editor/anchoring'
 import type { Finding, Suggestion } from '../domain/finding'
+import { buildReaderFindings } from '../domain/finding'
 import { THEME_DEFINITIONS, SUPPORTED_LANGUAGES } from '../domain/writing-profile'
 import { loadSettings, saveSettings, type AppSettings } from '../lib/settings'
 import { idbSetDoc, idbGetDoc } from '../lib/storage'
@@ -79,14 +79,12 @@ export default function EditorPage() {
   try {
       if (sessionStorage.getItem('byline.booted') === '1') return true
       if (sessionStorage.getItem('byline.noboot') === '1') return true
-      // Vitest/jsdom mounts expect the app container immediately
       if (typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test') return true
     } catch { /* ignore */ }
     return false
   })
   const [appSettings, setAppSettings] = useState<AppSettings>(loadSettings)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  // Non-blocking error toast (replaces alert()).
   const [notice, setNotice] = useState<string | null>(null)
   const noticeTimer = useRef<number | null>(null)
   const notify = (msg: string) => {
@@ -94,7 +92,6 @@ export default function EditorPage() {
     if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
     noticeTimer.current = window.setTimeout(() => setNotice(null), 4000)
   }
-  // Dedupe repeated Harper failure toasts (lint runs on every keystroke).
   const lastHarperErrorRef = useRef<string | null>(null)
   const notifyHarperError = (msg: string) => {
     if (lastHarperErrorRef.current === msg) return
@@ -108,46 +105,30 @@ export default function EditorPage() {
   const connectTimerRef = useRef<number | null>(null)
   const keepConnectRef = useRef<(() => void) | null>(null)
   const clearGhostOnNavRef = useRef<() => void>(() => {})
-  // Private context note (display-only scratch above the draft; never sent to AI)
   const [contextNote, setContextNote] = useState(() => {
     try { return localStorage.getItem('byline.doc.contextNote') || '' } catch { return '' }
   })
-  // Suggestion context (tone/audience constraints) sent with ghost + paraphrase requests
   const [suggestionNote, setSuggestionNote] = useState(() => {
     try { return localStorage.getItem('byline.doc.suggestionNote') || '' } catch { return '' }
   })
 
-  // Single left dock (draggable). Reader underlines are on when dock is open.
   const [leftOpen, setLeftOpen] = useState(true)
 
-  // Mobile & Tablet Responsiveness
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.innerWidth <= 768
   })
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const rerollCountRef = useRef(0)
-  // Last ghost suggestion (reopenable via Ctrl+. even after dismiss)
   const lastGhostRef = useRef<{ groups: GhostGroups; lv: GhostLevel; idx: number } | null>(null)
-  // Completion-state level bias for the next auto trigger (consumed once)
   const pendingGhostBias = useRef<GhostLevel | null>(null)
-  // Ghost request identity + abort controller (boundary-pause call saving)
   const ghostReqId = useRef(0)
   const ghostAbort = useRef<AbortController | null>(null)
-  // Auto ghost is armed only by actual typing. Clicking or arrow-moving the
-  // caret must not call the ghost prompt.
   const ghostAutoAllowedRef = useRef(false)
-  // Selection-grid request identity + abort controller (Esc cancels the call)
   const selReqId = useRef(0)
   const selAbort = useRef<AbortController | null>(null)
-  // Manual Ctrl+Space already fetched this selection; skip the pause timer.
   const selManualRef = useRef(false)
-  // Armed-delay state: trigger held 350ms to confirm a real pause before firing
   const ghostArmed = useRef<{ key: string; at: number } | null>(null)
-  // Idle-poll memo: cache the expensive textBetween snapshots (full text per
-  // revision, caret offset per caret move) — the time-based trigger logic
-  // below must still run on EVERY tick, since pause thresholds elapse while
-  // nothing moves.
   const lastPoll = useRef({ rev: -1, from: -1, full: '', textCaret: 0 })
   const GHOST_ARM_MS = 150
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
@@ -179,32 +160,27 @@ export default function EditorPage() {
     const elapsed = Date.now() - touchStartRef.current.time
     touchStartRef.current = null
 
-    // Predominantly horizontal swipe within 600ms
     if (Math.abs(deltaY) < 75 && elapsed < 600) {
       if (deltaX > 45 && !mobileDrawerOpen) {
-        // Swipe to right to open merged drawer
         blip('open')
         setMobileDrawerOpen(true)
       } else if (deltaX < -45 && mobileDrawerOpen) {
-        // Swipe to left to close merged drawer
         blip('toggle')
         setMobileDrawerOpen(false)
       }
     }
   }
 
-  // Highlighted Finding Card
   const [highlightedFindingId, setHighlightedFindingId] = useState<string | null>(null)
+  const [reviewPersona, setReviewPersona] = useState<'all' | 'reader' | 'grammar'>('all')
 
   const [docRevision, setDocRevision] = useState(1)
   const [counts, setCounts] = useState({ words: 0, chars: 0 })
 
-  // Reader findings state (the only review persona)
   const [findings, setFindings] = useState<Finding[]>([])
   const [analyzing, setAnalyzing] = useState(false)
   const [grammarAbort, setGrammarAbort] = useState<AbortController | null>(null)
 
-  // Selection & Paraphrase state (positioned below cursor)
   const [selectionContext, setSelectionContext] = useState<SelectionContext | null>(null)
   const [popupPos, setPopupPos] = useState<{ x: number; y: number; w?: number }>({ x: 200, y: 300 })
   const popupRefs = useRef<Record<PopupId, HTMLDivElement | null>>({
@@ -226,20 +202,15 @@ export default function EditorPage() {
     [],
   )
 
-  // Inline Review Popup state for clicked underlined text or selection in Edit mode
   const [inlineReviewState, setInlineReviewState] = useState<{
     findings: Finding[]
     position: { x: number; y: number; w?: number }
   } | null>(null)
 
-  // Draft Assistance state (Ghost text & Suggestion popup below cursor)
-  // Grouped ghost levels (one /api/complete call, app parses) + active level/index
   const [ghostGroups, setGhostGroups] = useState<GhostGroups>(EMPTY_GHOST)
   const [ghostLv, setGhostLv] = useState<GhostLevel>('fragment')
-  // Most recently user-selected ghost level; new requests start here.
   const lastGhostLevel = useRef<GhostLevel>('fragment')
   const [ghostIdx, setGhostIdx] = useState(0)
-  // Selection grid (one /api/synonyms call, app parses) + active cell/page
   const [selGrid, setSelGrid] = useState<SelGrid>(EMPTY_GRID)
   const [selCol, setSelCol] = useState(1)
   const [selRow, setSelRow] = useState(0)
@@ -251,15 +222,9 @@ export default function EditorPage() {
   const [metricsOpen, setMetricsOpen] = useState(false)
   const ghostTriggers = useGhostTriggers(appSettings.slowMs)
 
-  // Ref to the editor scroll container so popups can scroll it into view
   const editorScrollRef = useRef<HTMLDivElement>(null)
   const leftRailRef = useRef<HTMLElement>(null)
 
-  /**
-   * Position every writing popup beside the editor, vertically aligned with the
-   * cursor. Prefers the right side of the paper, falls back left, then clamps to
-   * the viewport. Returns a width so the popup can shrink instead of overflowing.
-   */
   const placePopupBesideEditor = useCallback(
     (view: any, pos: number, popupW = 440, popupH = 280, minW = popupW) => {
       if (!view) return { x: 16, y: 80, w: Math.min(popupW, window.innerWidth - 24) }
@@ -287,7 +252,6 @@ export default function EditorPage() {
     []
   )
 
-  // Initialize TipTap Editor with AnchorDecorations
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -312,14 +276,9 @@ export default function EditorPage() {
       },
     },
     onUpdate: ({ editor }) => {
-      // A review apply dispatches a doc change that is not typing: don't let
-      // the ghost poller treat the accept like fresh typing at the caret.
       ghostAutoAllowedRef.current = !consumeProgrammaticApplyFlag()
       if (connectSessionRef.current && !connectApplyingRef.current) keepConnectRef.current?.()
       setDocRevision(r => r + 1)
-      // A keystroke invalidates the shown ghost/popup: clear it so the next
-      // pause can trigger fresh text (previously the stale ghost kept the
-      // auto-trigger poller blocked forever).
       if (anchorStore.ghost) {
         anchorStore.ghost = ''
         syncGhost(editor)
@@ -329,15 +288,11 @@ export default function EditorPage() {
       const words = (editor.storage as any).characterCount?.words() || 0
       const chars = (editor.storage as any).characterCount?.characters() || 0
       setCounts({ words, chars })
-      // Debounced persist: serializing the full doc on every keystroke
-      // blocks the main thread; flush happens 1.5s after typing stops
-      // (plus a pagehide flush below so no window is lost).
       if (saveTimer.current) window.clearTimeout(saveTimer.current)
       saveTimer.current = window.setTimeout(() => {
         try {
           const html = editor.getHTML()
           localStorage.setItem('byline.doc.html', html)
-          // Async durable backup (IndexedDB quota >> localStorage).
           void idbSetDoc(html)
         } catch { /* quota full: keep in-memory doc */ }
       }, 1500)
@@ -346,11 +301,7 @@ export default function EditorPage() {
     },
     onSelectionUpdate: ({ editor, transaction }) => {
       if (connectApplyingRef.current) return
-      // A pure caret move (click/arrow) is not typing: keep auto ghost off
-      // until the next document-changing keystroke.
       if (!transaction.docChanged) ghostAutoAllowedRef.current = false
-      // Caret/selection moves are user navigation, not typing: drop any ghost
-      // text and popup instead of letting a pending call follow the new caret.
       clearGhostOnNavRef.current()
       const selCtx = contextService.getSelectionContext(editor)
       const at = editor.state.selection.from
@@ -362,14 +313,8 @@ export default function EditorPage() {
         if (!inside) keepConnectRef.current?.()
       }
 
-      // A new selection always dismisses a stale inline review. Reader review
-      // opens from clicking an underline (see handleEditorClick), never from
-      // drag-selecting across a finding.
       setInlineReviewState(null)
 
-      // Selection and Connect are shown together for 2+ sentences. Connect is
-      // an explicit expansion from the selection grid, never an automatic
-      // replacement for synonyms / paraphrase / tone.
       setSelectionContext(selCtx)
       if (selCtx && editor.view) {
         setPopupPos(placePopupBesideEditor(editor.view, selCtx.to, 400, 300, 220))
@@ -404,8 +349,6 @@ export default function EditorPage() {
     connectApplyingRef.current = true
     try {
       const tr = editor.state.tr.insertText(session.text, session.from, session.to)
-      // Keep the user's 2+ sentence drag selection: auto-connect must not
-      // collapse the caret or unselect text unless the user explicitly types.
       tr.setSelection(TextSelection.create(tr.doc, session.from, session.from + session.text.length))
       editor.view.dispatch(tr)
       connectStore.ranges = session.marks.map(m => ({ from: session.from + m.s, to: session.from + m.e }))
@@ -450,10 +393,6 @@ export default function EditorPage() {
     setConnect(null)
   }
 
-  const keepConnectFromPanel = () => {
-    keepConnect()
-    editor?.chain().focus().run()
-  }
   keepConnectRef.current = keepConnect
 
   const undoConnect = () => {
@@ -513,18 +452,17 @@ export default function EditorPage() {
     })
   }
 
-  // Synchronize ProseMirror decorations (Underlines in Editing Mode)
   const syncEditorDecorations = useCallback((ed: typeof editor) => {
     if (!ed || !ed.view) return
 
-    modeStore.mode = leftOpen ? 'editing' : 'drafting'
+    modeStore.mode = leftOpen || isMobile ? 'editing' : 'drafting'
 
-    // Locate active Reader findings (the only underline persona)
     const anchors: any[] = []
     const ranges = new Map<string, { from: number; to: number }>()
 
     for (const f of findings) {
       if (f.status === 'resolved' || f.status === 'dismissed') continue
+      if (reviewPersona !== 'all' && f.persona !== reviewPersona) continue
       const resolved = resolveAnchor(ed, f.anchor)
       if (resolved) {
         anchors.push({
@@ -540,9 +478,8 @@ export default function EditorPage() {
     anchorStore.anchors = anchors
     anchorStore.ranges = ranges
     syncAnchors(ed)
-  }, [findings, leftOpen])
+  }, [findings, leftOpen, isMobile, reviewPersona])
 
-  // Dispose the Harper worker and clear transient Connect marks on unmount
   useEffect(() => {
     return () => {
       connectStore.ranges = []
@@ -551,12 +488,11 @@ export default function EditorPage() {
     }
   }, [])
 
-  // Click on underlined text opens suggestions/comments popup below cursor (when left dock is open)
   useEffect(() => {
     if (!editor || !editor.view) return
     const dom = editor.view.dom
     const onClick = (e: MouseEvent) => {
-      if (!leftOpen) return
+      if (!leftOpen && !isMobile) return
       const target = (e.target as HTMLElement).closest('[data-anchor-id], [data-anchor-ids]')
       const anchorId = target?.getAttribute('data-anchor-id')
       const anchorIds = target?.getAttribute('data-anchor-ids')
@@ -576,38 +512,59 @@ export default function EditorPage() {
       }
     }
     dom.addEventListener('click', onClick)
-    return () => dom.removeEventListener('click', onClick)
-  }, [editor, leftOpen, findings, placePopupBesideEditor])
+    // Touch devices fire click on tap, but ProseMirror caret handling can
+    // swallow it — touchend is the reliable tap signal for underlines.
+    const onTouchEnd = (e: TouchEvent) => {
+      const t = e.changedTouches[0]
+      const el = document.elementFromPoint(t.clientX, t.clientY) as HTMLElement | null
+      const target = el?.closest?.('[data-anchor-id], [data-anchor-ids]')
+      if (!target) return
+      if (!leftOpen && !isMobile) return
+      const anchorId = target.getAttribute('data-anchor-id')
+      const anchorIds = target.getAttribute('data-anchor-ids')
+      if (anchorId || anchorIds) {
+        const ids = anchorId ? [anchorId] : (anchorIds?.split(',') || [])
+        const matched = findings.filter(f => ids.includes(f.id) && f.status !== 'resolved' && f.status !== 'dismissed')
+        if (matched.length > 0) {
+          setInlineReviewState({
+            findings: matched,
+            position: placePopupBesideEditor(editor.view, editor.state.selection.from, 320, 220, 220),
+          })
+          setSelectionContext(null)
+          setHighlightedFindingId(matched[0].id)
+          blip('select')
+        }
+      }
+    }
+    dom.addEventListener('touchend', onTouchEnd)
+    return () => {
+      dom.removeEventListener('click', onClick)
+      dom.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [editor, leftOpen, isMobile, findings, placePopupBesideEditor])
 
-  // Sync reader underline state (on when left dock open) to decorations
   useEffect(() => {
-    modeStore.mode = leftOpen ? 'editing' : 'drafting'
+    modeStore.mode = leftOpen || isMobile ? 'editing' : 'drafting'
     if (editor) {
       syncEditorDecorations(editor)
     }
-  }, [leftOpen, editor, syncEditorDecorations])
+  }, [leftOpen, isMobile, editor, syncEditorDecorations])
 
-  // Subscribe to Reader findings
   useEffect(() => {
     return globalAnalysisService.subscribe(newFindings => {
       setFindings(newFindings)
     })
   }, [])
 
-  // Re-sync editor decorations when findings change
   useEffect(() => {
     if (editor) {
       syncEditorDecorations(editor)
     }
   }, [findings, editor, syncEditorDecorations])
 
-  // --- DRAFT ASSISTANCE & GHOST TEXT FOR BOTH MODES ---
-  // Ghost level → backend assist granularity id (legacy flat-response formatting).
   const assistForLevel = (lv: GhostLevel): AssistGranularity =>
     lv === 'cue' ? 'Hint' : lv === 'question' ? 'Question' : lv === 'sentence' ? 'Sentence' : 'Phrase'
 
-  /** Sync the inline ghost widget to the active (level, index). All levels,
-   * including question, render as inline ghost text. */
   const showInlineGhost = (groups: GhostGroups, lv: GhostLevel, idx: number) => {
     if (!editor || !editor.view) return
     const g = ghostOption(groups, lv, idx)
@@ -620,20 +577,17 @@ export default function EditorPage() {
     syncGhost(editor)
   }
 
-  /** Parse one /api/complete response into grouped levels (new shape, flat fallback). */
   const parseGhostGroups = (res: any): GhostGroups => {
     if (res?.levels && typeof res.levels === 'object') {
       const fmt: Array<[GhostLevel, AssistGranularity]> = [['cue', 'Hint'], ['question', 'Question'], ['fragment', 'Phrase'], ['sentence', 'Sentence']]
       const out = { ...EMPTY_GHOST } as GhostGroups
       for (const [lv, ag] of fmt) {
         const list = Array.isArray(res.levels[lv]) ? res.levels[lv] : []
-        // Backend prefetches LEVELS_N per level (shown + instant reroll alts)
         out[lv] = list.map((s: string) => formatSuggestionText(s, ag)).filter(Boolean).slice(0, 6)
       }
       if (GHOST_LEVELS.some(l => out[l].length > 0)) return out
     }
     if (Array.isArray(res?.suggestions) && res.suggestions.length > 0) {
-      // Legacy flat shape: all options land under the current assist level
       const out = { ...EMPTY_GHOST } as GhostGroups
       const lv = lastGhostLevel.current
       const ag = assistForLevel(lv)
@@ -656,10 +610,7 @@ export default function EditorPage() {
         blip('select')
         return
       }
-      // No prefetched alternatives to cycle: fall through to a fresh request.
     }
-    // Request identity + abort: a newer keystroke/request cancels the in-flight
-    // one so boundary pauses (type right at the threshold) don't burn full calls
     const myId = ++ghostReqId.current
     ghostAbort.current?.abort()
     const ctl = new AbortController()
@@ -667,20 +618,16 @@ export default function EditorPage() {
     const reqVersion = docRevision
     recordGhostFired()
     setDraftLoading(true)
-    // A fresh ghost request clears any open selection grid
     setSelGrid(EMPTY_GRID)
     if (!opts?.isAuto) blip('select')
 
     const cursorCtx = contextService.getCursorContext(editor, 400)
 
-    // Position the popup beside the editor so loading shimmer is visible at caret height
     const cursorPos = editor.state.selection.from
     const selectionAtRequest = { from: editor.state.selection.from, to: editor.state.selection.to }
     setSuggestPopupPos(placePopupBesideEditor(editor.view, cursorPos, 440, 260, 220))
 
     try {
-      // Text-only prompt, one call: backend returns all four levels, app parses.
-      // Rerolls bypass cache via `avoid`; fresh/auto requests reuse 5min cache.
       const avoid = opts?.isReroll ? GHOST_LEVELS.flatMap(l => ghostGroups[l]).slice(0, 24) : undefined
       const cacheKey = opts?.isReroll
         ? null
@@ -696,13 +643,10 @@ export default function EditorPage() {
         avoid,
         version: docRevision,
       }, ctl.signal)
-      // Aborted en route (newer keystroke won) — apply nothing, count it
       if (ctl.signal.aborted || ghostReqId.current !== myId) {
         recordGhostAborted()
         return
       }
-      // Stale response (doc or caret moved on while fetching) — drop, count it.
-      // A caret move without typing must not let ghost text attach elsewhere.
       const sel = editor.state.selection
       if (reqVersion !== docRevisionRef.current ||
           sel.from !== selectionAtRequest.from || sel.to !== selectionAtRequest.to) {
@@ -712,9 +656,6 @@ export default function EditorPage() {
       if (cacheKey && !cached && res) cacheSet(cacheKey, res)
 
       const groups = parseGhostGroups(res)
-      // Auto triggers may carry a completion-state bias; manual triggers use the assist default.
-      // Rerolls stay on the currently selected level when it has fresh options.
-      // Fall back to the default when the biased level came back empty.
       const biased = pendingGhostBias.current
       pendingGhostBias.current = null
       let lv = lastGhostLevel.current
@@ -728,12 +669,10 @@ export default function EditorPage() {
       recordSuggestionOffered(GHOST_LEVELS.reduce((n, l) => n + groups[l].length, 0))
       showInlineGhost(groups, lv, 0)
 
-      // Reposition popup beside the editor at the verified request caret
       setSuggestPopupPos(placePopupBesideEditor(editor.view, cursorPos, 440, 260, 220))
 
       if (!opts?.isAuto) blip('done')
     } catch {
-      // Aborted by a caret move / newer request: never reopen the popup.
       if (ctl.signal.aborted || ghostReqId.current !== myId) {
         recordGhostAborted()
         return
@@ -756,7 +695,6 @@ export default function EditorPage() {
     }
   }
 
-  /** Cycle prefetched alternatives in either direction; fetch when only one exists. */
   const handleGhostReroll = (dir: 1 | -1) => {
     recordGhostReroll()
     const cur = ghostGroups[ghostLv] || []
@@ -772,7 +710,6 @@ export default function EditorPage() {
     void handleRequestGhost({ isReroll: true })
   }
 
-  /** Step cached ghost alternatives only (` / alt+``) — never fetches. */
   const stepGhostOption = (dir: 1 | -1) => {
     const cur = ghostGroups[ghostLv] || []
     if (cur.length <= 1) return
@@ -784,7 +721,6 @@ export default function EditorPage() {
     blip('select')
   }
 
-  /** Fresh ghost alternatives (redo). */
   const handleGhostRefetch = () => {
     recordGhostReroll()
     void handleRequestGhost({ isReroll: true })
@@ -798,7 +734,6 @@ export default function EditorPage() {
     blip('select')
   }
 
-  /** Reopen the last ghost suggestion at the caret (Ctrl+.), even after dismiss/refresh. */
   const handleShowLastSuggestion = () => {
     if (!editor || !editor.view) return
     if (!lastGhostRef.current) {
@@ -821,20 +756,11 @@ export default function EditorPage() {
     setSuggestPopupPos(placePopupBesideEditor(editor.view, pos, 440, 260, 220))
   }
 
-  // V4 dual-threshold ghost triggers: slow ~350ms pause-anywhere ghost
-  // (+150ms arm ≈ 500ms total), long 2500ms between-sentence connective
-  // + burst phrase. 100ms tick.
   useEffect(() => {
-    // Feed keystroke into burst/sentence tracking (feel-test input handler).
-    // NOTE: ProseMirror offsets include node overhead, so convert to a text-space
-    // caret via the length of the text before the cursor.
-    // A keystroke also aborts any in-flight auto ghost — the newer text wins.
-    // (Counted once, at drop time inside the request handler.)
     if (ghostAbort.current) {
       ghostAbort.current.abort()
       ghostAbort.current = null
     }
-    // A keystroke during the 350ms arm window cancels the pending fire (saved call)
     if (ghostArmed.current) {
       ghostArmed.current = null
       recordGhostDebounceSaved()
@@ -850,9 +776,6 @@ export default function EditorPage() {
     }
   }, [docRevision]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Latest-state refs so the 100ms poller stays mounted across keystrokes
-  // (previously docRevision/ghostGroups in deps recreated the interval on every
-  // keystroke, so the pause timer never elapsed and auto-suggest never fired)
   const ghostGroupsRef = useRef(ghostGroups)
   ghostGroupsRef.current = ghostGroups
   const docRevisionRef = useRef(docRevision)
@@ -863,7 +786,7 @@ export default function EditorPage() {
   handleRequestGhostRef.current = handleRequestGhost
 
   useEffect(() => {
-    if (!editor || isMobile) return
+    if (!editor) return
     const id = setInterval(() => {
       try {
         if (!editor || !editor.isFocused) return
@@ -871,9 +794,6 @@ export default function EditorPage() {
         if (draftLoadingRef.current) return
         const { empty, from } = editor.state.selection as { empty: boolean; from: number; to: number }
         if (!empty) return
-        // Snapshot cache: full text is O(doc) so refresh it only when the
-        // revision changed; the caret slice only on caret moves. Trigger
-        // evaluation keeps running every tick regardless.
         const lp = lastPoll.current
         const rev = docRevisionRef.current
         if (lp.rev !== rev) {
@@ -882,19 +802,14 @@ export default function EditorPage() {
           lp.from = -1
         }
         if (lp.from !== from) {
-          // Convert PM offset → text offset (see note above)
           lp.textCaret = Math.min(editor.state.doc.textBetween(0, from, '\n\n').length, lp.full.length)
           lp.from = from
         }
-        // Skip while a ghost popup or inline ghost is already visible
         const groups = ghostGroupsRef.current
         const ghostEmpty = GHOST_LEVELS.every(l => groups[l].length === 0)
         if (!ghostEmpty || anchorStore.ghost) return
         const full = lp.full
         const textCaret = lp.textCaret
-        // Completion-state gate: pause-anywhere means an Empty caret line (blank
-        // paragraph) still fires when the doc has content elsewhere — only code
-        // fences (NA) and a near-empty doc suppress. Complete/Open bias level.
         const lineStart = full.lastIndexOf('\n', Math.max(0, textCaret - 1)) + 1
         const caretLine = full.slice(lineStart, textCaret)
         const prevLineStart = full.lastIndexOf('\n', Math.max(0, lineStart - 2)) + 1
@@ -908,8 +823,6 @@ export default function EditorPage() {
         if (t.ghost && !gate.suppress && ghostAutoAllowedRef.current) {
           const before = editor.state.doc.textBetween(Math.max(0, from - 200), from)
           if (before.trim().length >= 2) {
-            // 150ms armed delay: confirm a real pause before firing. A keystroke
-            // inside the window disarms (counted as a debounce-saved call).
             const key = `${textCaret}|${before.slice(-24)}`
             const now = performance.now()
             const armed = ghostArmed.current
@@ -917,7 +830,6 @@ export default function EditorPage() {
               ghostArmed.current = { key, at: now }
             } else if (now - armed.at >= GHOST_ARM_MS) {
               ghostArmed.current = null
-              // Bias the preselected level: Complete → next sentence, Open → continuation
               pendingGhostBias.current = gate.bias
               void handleRequestGhostRef.current({ isAuto: true })
             }
@@ -929,9 +841,8 @@ export default function EditorPage() {
     }, 100)
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, isMobile])
+  }, [editor])
 
-  // Auto-run grammar on initial mount
   useEffect(() => {
     if (!editor) return
     const timer = setTimeout(() => {
@@ -940,14 +851,12 @@ export default function EditorPage() {
     return () => clearTimeout(timer)
   }, [editor])
 
-  // Auto-run Reader review on mount
   useEffect(() => {
     if (!editor) return
     void handleRunGrammar()
     void handleRunReader()
   }, [editor])
 
-  // Debounced grammar refresh when typing (Harper WASM, 200ms): underline refresh.
   useEffect(() => {
     if (!editor) return
     const timer = setTimeout(() => {
@@ -981,7 +890,6 @@ export default function EditorPage() {
     setDraftLoading(false)
   }
 
-  /** Caret/selection moved without typing: cancel and hide ghost text. */
   const clearGhostOnNavigate = () => {
     if (ghostAbort.current) {
       ghostAbort.current.abort()
@@ -1000,16 +908,12 @@ export default function EditorPage() {
 
   const handleDismissSuggestions = () => {
     blip('dismiss')
-    // Esc-dismissed ghost stays gone until the next keystroke: a pause with
-    // an unmoved caret must not reopen it on its own.
     ghostAutoAllowedRef.current = false
     abortGhostRequest()
     anchorStore.ghost = ''
     if (editor) syncGhost(editor)
     setGhostGroups(EMPTY_GHOST)
     setSuggestPopupPos(null)
-    // Require a fresh pause before the next auto-fire (no instant loop),
-    // but allow refire without typing — dismiss + pause again suggests again.
     ghostArmed.current = null
     try {
       ghostTriggers.ref.current.fired = {}
@@ -1017,10 +921,7 @@ export default function EditorPage() {
     } catch { /* ignore */ }
   }
 
-  // --- SELECTION GRID (Synonyms / Paraphrase / Tone, one call, app parses) ---
   const selTimerRef = useRef<number | null>(null)
-  // Debounced doc persistence (see onUpdate) + flush-on-hide so the last
-  // 1.5s window is never lost when the tab closes.
   const saveTimer = useRef<number | null>(null)
   useEffect(() => {
     const flush = () => {
@@ -1034,8 +935,6 @@ export default function EditorPage() {
       } catch { /* ignore */ }
     }
     window.addEventListener('pagehide', flush);
-    // Recovery: localStorage empty but an IndexedDB backup exists (e.g. quota
-    // eviction) — restore it instead of starting blank.
     if (editor) {
       let empty = true
       try { empty = !localStorage.getItem('byline.doc.html') } catch { empty = false }
@@ -1060,7 +959,6 @@ export default function EditorPage() {
       if (any) return out
     }
     if (Array.isArray(res?.synonyms) && res.synonyms.length > 0) {
-      // Legacy flat shape: round-robin across the three columns
       const flat = res.synonyms.filter((s: string) => typeof s === 'string' && s.trim()).map((s: string) => s.trim())
       const out = { ...EMPTY_GRID } as SelGrid
       flat.forEach((s: string, i: number) => { out[SEL_COLS[i % 3]].push(s) })
@@ -1073,8 +971,6 @@ export default function EditorPage() {
     const ctx = ctxArg ?? selectionContext
     if (!editor || !ctx) return
     const { selectedText, from } = ctx
-    // Any length: drag-select of any size triggers paraphrase/synonyms.
-    // Backend payload truncated to 500 chars; full text kept for replacement.
     if (selectedText.trim().length < 2) return
     if (selTimerRef.current) {
       window.clearTimeout(selTimerRef.current)
@@ -1097,7 +993,6 @@ export default function EditorPage() {
         sentence: before,
       }, ctl.signal)
       if (ctl.signal.aborted || selReqId.current !== myId) return
-      // Drop a response whose selection has since moved on.
       const live = editor.state.selection
       if (live.from !== ctx.from || live.to !== ctx.to) return
       if (!cachedSel && res) cacheSet(selKey, res)
@@ -1162,22 +1057,6 @@ export default function EditorPage() {
     setSelGrid(EMPTY_GRID)
   }
 
-  /** Step the selection-grid cell forward/backward across visible cells. */
-  const stepSelCell = (dir: 1 | -1) => {
-    const cells: Array<[number, number]> = []
-    SEL_COLS.forEach((_c, ci) => {
-      visibleCells(selGrid, ci, selPage).forEach((_, ri) => cells.push([ci, ri]))
-    })
-    if (cells.length === 0) return
-    const cur = cells.findIndex(([c, r]) => c === selCol && r === selRow)
-    const at = cur < 0 ? (dir > 0 ? 0 : cells.length - 1) : (cur + dir + cells.length) % cells.length
-    const [nc, nr] = cells[at]
-    setSelCol(nc)
-    setSelRow(nr)
-    blip('select')
-  }
-
-  /** Refetch the selection grid (redo). */
   const handleSelRefetch = () => {
     recordGhostReroll()
     void requestSelGrid()
@@ -1199,7 +1078,6 @@ export default function EditorPage() {
     startConnect(live)
   }
 
-  /** Page the selection grid forward/backward, wrapping at the ends. */
   const shiftSelPage = (dir: 1 | -1) => {
     recordGhostReroll()
     const pages = Math.max(1, ...SEL_COLS.map(c => Math.ceil((selGrid[c]?.length || 0) / 3)))
@@ -1208,9 +1086,6 @@ export default function EditorPage() {
     blip('select')
   }
 
-  // Selection pause: fetch the paraphrase grid only after the selection has
-  // settled for the configured pause. Manual Ctrl+Space flushes immediately.
-  // Double-click and drag selection both flow through selectionContext.
   useEffect(() => {
     if (selTimerRef.current) window.clearTimeout(selTimerRef.current)
     clearConnectTimer()
@@ -1220,7 +1095,6 @@ export default function EditorPage() {
       setSelError(null)
       return
     }
-    // A fresh selection clears any open ghost state (and cancels its call)
     abortGhostRequest()
     setGhostGroups(EMPTY_GHOST)
     anchorStore.ghost = ''
@@ -1228,15 +1102,10 @@ export default function EditorPage() {
     setSuggestPopupPos(null)
     setSelError(null)
 
-    // Every qualifying selection requests the synonym grid, including 2+
-    // sentence selections. The Connect button/keyboard shortcut expands the
-    // separate Connect panel.
-    // Manual invoke already started the request; do not schedule a second one.
     if (selManualRef.current) {
       selManualRef.current = false
       return
     }
-    // Immediate shimmer: popup renders in loading state during the pause
     setSelLoading(true)
     const pauseMs = Math.max(100, appSettings.slowMs)
     selTimerRef.current = window.setTimeout(() => { void requestSelGrid() }, pauseMs)
@@ -1248,12 +1117,10 @@ export default function EditorPage() {
     }
   }, [selectionContext]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handle inline review popup actions (Edit mode)
   const handleApplyInlineSuggestion = (finding: Finding, suggestion: Suggestion) => {
     if (!editor) return
     const res = applySafeReplacement(editor, finding.anchor, suggestion.text)
     if (res.success) {
-      // Reactivate grammar immediately so red underlines return without typing.
       void handleRunGrammar()
       recordRevisionAccepted()
       sfxAccept()
@@ -1278,13 +1145,13 @@ export default function EditorPage() {
     })
   }
 
-  /** Continue: jump caret to the next open comment/underline after the caret. */
   const handleContinueReview = () => {
     if (!editor) return
     const currentIds = new Set(inlineReviewState?.findings.map(f => f.id) ?? [])
     const positioned: Array<{ f: Finding; from: number }> = []
     for (const f of findings) {
       if (f.status === 'resolved' || f.status === 'dismissed') continue
+      if (reviewPersona !== 'all' && f.persona !== reviewPersona) continue
       if (currentIds.has(f.id)) continue
       try {
         const r = resolveAnchor(editor, f.anchor)
@@ -1311,7 +1178,6 @@ export default function EditorPage() {
 
   const [repromptingId, setRepromptingId] = useState<string | null>(null)
 
-  /** Reprompt reader for one finding: prepend fresh options, old ones move back. */
   const handleRepromptReader = async (finding: Finding) => {
     if (!editor || repromptingId || finding.persona !== 'reader') return
     setRepromptingId(finding.id)
@@ -1364,12 +1230,10 @@ export default function EditorPage() {
     }
   }
 
-  // Single keyboard router for the caret popup (feel-test keys + legacy 1-3 / Ctrl+[ ]).
-  // Ghost mode and selection-grid mode are mutually exclusive.
   const ghostOpen = suggestPopupPos != null && GHOST_LEVELS.some(l => ghostGroups[l].length > 0)
   const selOpen = selectionContext != null && SEL_COLS.some(c => selGrid[c].length > 0)
   const ghostActive = !!suggestPopupPos && (ghostOpen || draftLoading) && !selOpen && !inlineReviewState
-  const reviewActive = !!leftOpen && !!inlineReviewState && inlineReviewState.findings.length > 0
+  const reviewActive = !!(leftOpen || isMobile) && !!inlineReviewState && inlineReviewState.findings.length > 0
   const selectionActive =
     !!selectionContext && !inlineReviewState && (selOpen || selLoading || !!selError)
   const connectActive = !!connectSession
@@ -1388,12 +1252,6 @@ export default function EditorPage() {
     : null
   const connectRenderTop = connectVisible ? connectPos.y + popupPush.connect : null
 
-  // Keep popups glued below the live caret/selection while open: recompute on
-  // every doc change so each popup follows the caret as you type. Scrolling
-  // never repositions (the popup stays fixed on screen) and never scrolls the
-  // container — scroll-locking trapped the user at the popup area.
-  // NOTE: sets are equality-guarded (same rounded coords → same state) so this
-  // effect can never ping-pong into a render loop.
   const samePos = (a: { x: number; y: number } | null, b: { x: number; y: number }) =>
     a != null && Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1
   useEffect(() => {
@@ -1415,9 +1273,6 @@ export default function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, docRevision, selectionContext, selOpen, selLoading, ghostOpen, draftLoading, inlineReviewState, placePopupBesideEditor])
 
-  // Downward-only cascade for floating popups. Base anchors stay aligned with
-  // the caret/selection; measured overlaps push lower popups down without ever
-  // moving an upper popup upward.
   useLayoutEffect(() => {
     if (isMobile) return
     const boxes: PopupBox[] = []
@@ -1498,12 +1353,6 @@ export default function EditorPage() {
           if (!e.repeat) rerollConnect()
           return
         }
-        if (e.altKey && /^Digit[1-9]$/.test(e.code)) {
-          e.preventDefault()
-          if (!e.repeat) toggleConnectSeam(Number(e.code.slice(5)) - 1)
-          return
-        }
-        // Backquote family on the focused seam: ` next alt, alt+` prev, shift+` undo.
         if (e.code === 'Backquote' && !e.ctrlKey && !e.metaKey) {
           e.preventDefault()
           if (e.repeat) return
@@ -1514,7 +1363,6 @@ export default function EditorPage() {
           if (e.altKey && !e.shiftKey) { cycleConnectAlt(f, -1); return }
           if (!e.altKey && !e.shiftKey) { cycleConnectAlt(f, 1); return }
         }
-        // Shift+Tab moves seam focus; Alt+0 rerolls connectors.
         if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault()
           if (e.repeat) return
@@ -1532,7 +1380,6 @@ export default function EditorPage() {
         }
       }
 
-      // Tab accepts the active option (not while the review popup owns Tab)
       if (e.key === 'Tab' && !e.shiftKey && (ghostOpen || selOpen) && !inlineReviewState) {
         e.preventDefault()
         if (selOpen) {
@@ -1544,7 +1391,6 @@ export default function EditorPage() {
         return
       }
 
-      // Shift+Tab continue: ghost next level, sel next page.
       if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && (ghostOpen || selOpen) && !inlineReviewState) {
         e.preventDefault()
         if (e.repeat) return
@@ -1554,9 +1400,6 @@ export default function EditorPage() {
         return
       }
 
-      // Digits select only (never accept): ghost 1-4 switches level,
-      // sel 1-9 moves the active cell (Synonyms 1-3, Paraphrase 4-6, Tone 7-9).
-      // Skipped while the review popup owns digits.
       if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey && (ghostOpen || selOpen) && !inlineReviewState) {
         const n = Number(e.key)
         if (selOpen) {
@@ -1577,7 +1420,6 @@ export default function EditorPage() {
         return
       }
 
-      // Reroll: Ctrl+] next alternative, Ctrl+[ previous alternative.
       if ((e.ctrlKey || e.metaKey) && (e.key === '[' || e.key === ']') && (ghostOpen || selOpen)) {
         e.preventDefault()
         if (e.repeat) return
@@ -1587,7 +1429,6 @@ export default function EditorPage() {
         return
       }
 
-      // Shift+` dismisses the open suggestion (Esc still closes too).
       if (e.code === 'Backquote' && e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && (ghostOpen || selOpen) && !inlineReviewState) {
         e.preventDefault()
         if (!e.repeat) {
@@ -1597,7 +1438,6 @@ export default function EditorPage() {
         return
       }
 
-      // Backquote family: ` next option, alt+` previous option.
       if (e.code === 'Backquote' && !e.shiftKey && !e.ctrlKey && !e.metaKey && (ghostOpen || selOpen) && !inlineReviewState) {
         e.preventDefault()
         if (e.repeat) return
@@ -1606,12 +1446,11 @@ export default function EditorPage() {
           stepGhostOption(1)
           return
         }
-        if (e.altKey) { stepSelCell(-1); return }
-        stepSelCell(1)
+        if (e.altKey) { shiftSelPage(-1); return }
+        shiftSelPage(1)
         return
       }
 
-      // Alt+0 redo: fresh ghost alternatives / refetch selection grid.
       if (e.altKey && (e.code === 'Digit0' || e.key === '0') && !e.ctrlKey && !e.metaKey && !e.shiftKey && (ghostOpen || selOpen) && !inlineReviewState) {
         e.preventDefault()
         if (e.repeat) return
@@ -1620,14 +1459,12 @@ export default function EditorPage() {
         return
       }
 
-      // Ctrl+. reopens the last ghost suggestion at the caret
       if ((e.ctrlKey || e.metaKey) && e.key === '.') {
         e.preventDefault()
         handleShowLastSuggestion()
         return
       }
 
-      // Arrows: ghost switches level; sel moves across the grid
       if (ghostOpen && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault()
         const i = GHOST_LEVELS.indexOf(ghostLv)
@@ -1644,7 +1481,6 @@ export default function EditorPage() {
         return
       }
 
-      // Escape dismisses the popup AND cancels any in-flight request
       if (e.key === 'Escape' && (ghostOpen || selOpen || draftLoading || selLoading)) {
         e.preventDefault()
         handleDismissSuggestions()
@@ -1652,9 +1488,6 @@ export default function EditorPage() {
         return
       }
 
-      // Ctrl/Cmd + Space activates the synonym grid for any selection and
-      // ghost suggestion at a caret. Connect is expanded separately with its
-      // button or Ctrl/Cmd+Shift+/.
       if ((e.ctrlKey || e.metaKey) && e.code === 'Space') {
         e.preventDefault()
         const liveSel = editor ? contextService.getSelectionContext(editor) : null
@@ -1668,7 +1501,6 @@ export default function EditorPage() {
         return
       }
 
-      // Ctrl/Cmd + Shift + / expands Connect for the current 2+ sentence selection.
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'Slash') {
         e.preventDefault()
         const liveSel = editor ? contextService.getSelectionContext(editor) : null
@@ -1676,7 +1508,6 @@ export default function EditorPage() {
         return
       }
 
-      // Ctrl/Cmd + , for Settings
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault()
         setSettingsOpen(v => !v)
@@ -1694,7 +1525,6 @@ export default function EditorPage() {
     }
   }, [editor, ghostGroups, ghostLv, ghostIdx, selGrid, selCol, selRow, selPage, selectionContext, docRevision, draftLoading, selLoading, inlineReviewState, connectFocus]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // --- READER (the only review persona) ---
   const handleRunReader = async () => {
     if (!editor) return
     setAnalyzing(true)
@@ -1703,8 +1533,6 @@ export default function EditorPage() {
     const text = editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n\n')
 
     try {
-      // Text-only prompt: no document context, outline, or intent is ever sent.
-      // 5min cache keyed on text hash so re-entering Edit mode is instant.
       const readerKey = 'reader:' + hashKey([contextNote, appSettings.writingTheme, text.slice(0, 8000)])
       const cachedReader = cacheGet<any>(readerKey)
       const readRes = cachedReader ?? await api.reactions({
@@ -1715,40 +1543,14 @@ export default function EditorPage() {
       })
       if (!cachedReader && readRes?.ok) cacheSet(readerKey, readRes)
 
-      const readerFindings: Finding[] = []
+      const readerFindings: Finding[] = buildReaderFindings(
+        readRes?.ok && Array.isArray(readRes.reactions) ? readRes.reactions : [],
+        { documentRevision: docRevision, sourceRevision: docRevision },
+      )
 
-      if (readRes?.ok && Array.isArray(readRes.reactions) && readRes.reactions.length > 0) {
-        for (const rx of readRes.reactions) {
-          // Prompt contract: only fixable passages come back, each with up to
-          // 3 pre-fetched replacement options. Skip stragglers with no options.
-          const options = (Array.isArray(rx.options) ? rx.options : [])
-            .filter((o: unknown): o is string => typeof o === 'string' && o.trim().length > 0)
-            .slice(0, 3)
-          if (options.length === 0) continue
-          const fid = `read-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-          readerFindings.push({
-            id: fid,
-            documentId: 'active-doc',
-            persona: 'reader',
-            kind: 'reader_observation',
-            anchor: {
-              quotedText: rx.quote || rx.context || 'text',
-              documentRevision: docRevision,
-            },
-            explanation: rx.text || 'Reader rewrite.',
-            suggestions: options.map((t: string, i: number) => ({
-              id: `${fid}-sug-${i}`,
-              text: t,
-              rationale: rx.text || 'Reader rewrite',
-            })),
-            status: 'open',
-            sourceRevision: docRevision,
-            createdAt: Date.now(),
-          })
-        }
-      }
-
-      globalAnalysisService.addFindings(readerFindings)
+      // Replace, never append: reruns (often served from cache with identical
+      // reactions) must refresh the list, not stack another copy of each note.
+      globalAnalysisService.replacePersona('reader', readerFindings)
       blip('done')
     } catch {
     } finally {
@@ -1776,8 +1578,6 @@ export default function EditorPage() {
       if (!resolved) continue
       if (replacement === resolved.matchedText) continue
       try {
-        // Batched: accumulate into one transaction (descending offsets stay
-        // valid), single dispatch below instead of one tx per finding.
         tr = tr.replaceWith(
           resolved.from,
           resolved.to,
@@ -1792,7 +1592,6 @@ export default function EditorPage() {
           expireAt: Date.now() + 1600,
         })
       } catch {
-        // skip unsafe replacement
       }
     }
 
@@ -1806,22 +1605,17 @@ export default function EditorPage() {
     return applied
   }
 
-  // Grammar: underline-only review cards (no auto-fix). Red wavy underlines
-  // on findings; writer fixes each manually via the inline review popup.
   const handleRunGrammar = async () => {
     if (!editor || grammarAbort) return
     setAnalyzing(true)
-    // Clear any stale hold marks from a previous run
     holdStore.holds = []
     syncHolds(editor)
 
     const ctl = new AbortController()
     setGrammarAbort(ctl)
 
-    // Canonical separator matches buildEditorTextMap so Harper span offsets map exactly
     const text = editor.state.doc.textBetween(0, editor.state.doc.content.size, TEXT_SEP)
     try {
-      // Timeout safeguard: abort if grammar check takes too long
       const timeout = setTimeout(() => ctl.abort(), 15000)
 
       const { findings: harperFindings, error: harperError } = await harperService.lint(
@@ -1839,14 +1633,9 @@ export default function EditorPage() {
       }
       lastHarperErrorRef.current = null
 
-      // Caret guard — skip only the lint under the caret (still typing this word).
-      // Harper offsets are text-space: convert the PM caret the same way.
       const caretNow = editor.state.doc.textBetween(0, editor.state.selection.from, TEXT_SEP).length
       const grammarFindings: Finding[] = harperFindings.filter(f => {
         if (!f.anchor.quotedText.trim()) return false
-        // Skip only the lint under the caret (the word being typed/edited).
-        // The old check dropped every lint at/after the caret, so accepting
-        // one fix wiped all later underlines until the next keystroke.
         const s = f.anchor.startOffset
         const e = f.anchor.endOffset
         if (s != null && e != null && s <= caretNow && caretNow <= e) return false
@@ -1856,12 +1645,9 @@ export default function EditorPage() {
       globalAnalysisService.replacePersona('grammar', grammarFindings)
       blip('done')
     } catch {
-      // silent
     } finally {
       holdStore.holds = []
       if (editor) syncHolds(editor)
-      // Always release the gate — previously a timeout left grammarAbort set
-      // forever, so later keystrokes never re-linted ("bit by bit" then stop)
       setAnalyzing(false)
       setGrammarAbort(null)
     }
@@ -1890,8 +1676,9 @@ export default function EditorPage() {
 
   const mobileSheetOpen = isMobile && (
     (suggestPopupPos != null && (ghostOpen || draftLoading) && !selOpen && !inlineReviewState) ||
-    (selectionContext != null && !inlineReviewState && (selOpen || selLoading)) ||
-    (inlineReviewState != null && inlineReviewState.findings.length > 0)
+    (selectionContext != null && !inlineReviewState && (selOpen || selLoading || !!selError)) ||
+    (inlineReviewState != null && inlineReviewState.findings.length > 0) ||
+    !!connectSession
   )
 
   return (
@@ -1967,33 +1754,23 @@ export default function EditorPage() {
                 highlightedFindingId={highlightedFindingId}
                 onToggleCollapse={() => setLeftOpen(false)}
                 onApplied={() => { void handleRunGrammar() }}
+                personaFilter={reviewPersona}
+                onPersonaFilterChange={setReviewPersona}
               />
             ) : (
               <div className="rail-strip" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 0' }}>
                 <button
                   type="button"
                   onClick={() => { blip('open'); setLeftOpen(true) }}
-                  title="Expand Review Dock"
-                  style={{ width: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700 }}
+                  title="Expand dock — shows underlines"
+                  style={{
+                    width: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center',
+                    fontSize: 13, fontWeight: 700,
+                    textDecoration: 'underline', textDecorationColor: 'var(--ai)',
+                    textDecorationThickness: 2, textUnderlineOffset: 3,
+                  }}
                 >
                   ›
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { blip('open'); setLeftOpen(true) }}
-                  title="Review"
-                  style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--ai)' }}
-                >
-                  R
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { blip('open'); setSettingsOpen(true) }}
-                  title="Settings"
-                  aria-label="Open settings"
-                  style={{ width: 30, height: 30, padding: 0, display: 'grid', placeItems: 'center', color: 'var(--muted)' }}
-                >
-                  <SettingsIcon size={15} strokeWidth={1.8} />
                 </button>
               </div>
             )}
@@ -2132,8 +1909,8 @@ export default function EditorPage() {
                 selPage={selPage}
                 onSelCell={handleAcceptSelCell}
                 onAccept={() => handleAcceptSelCell(selCol, selRow)}
-                onNext={() => stepSelCell(1)}
-                onPrev={() => stepSelCell(-1)}
+                onNext={() => shiftSelPage(1)}
+                onPrev={() => shiftSelPage(-1)}
                 onReroll={handleSelRefetch}
                 onDismiss={handleDismissSel}
               />
@@ -2171,9 +1948,41 @@ export default function EditorPage() {
               editor={editor}
               highlightedFindingId={highlightedFindingId}
               onApplied={() => { void handleRunGrammar() }}
+              personaFilter={reviewPersona}
+              onPersonaFilterChange={setReviewPersona}
             />
           </aside>
         </div>
+      )}
+
+      {/* Mobile: one-tap ghost trigger (no keyboard shortcut on touch) */}
+      {isMobile && !mobileSheetOpen && !mobileDrawerOpen && (
+        <button
+          type="button"
+          className="mobile-only-btn mobile-suggest-fab"
+          onClick={() => void handleRequestGhost()}
+          disabled={draftLoading}
+          title="Get writing suggestions"
+          style={{
+            position: 'fixed',
+            right: 12,
+            bottom: 'calc(64px + env(safe-area-inset-bottom))',
+            zIndex: 90,
+            minHeight: 44,
+            minWidth: 44,
+            padding: '10px 14px',
+            borderRadius: 99,
+            background: 'var(--ink)',
+            color: 'var(--bg)',
+            border: '1px solid var(--ink)',
+            fontSize: 14,
+            fontWeight: 700,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+            opacity: draftLoading ? 0.6 : 1,
+          }}
+        >
+          {draftLoading ? '…' : '✨ Suggest'}
+        </button>
       )}
 
       {/* Mobile: bottom area hosts suggestions / paraphrase / comment UI */}
@@ -2185,6 +1994,7 @@ export default function EditorPage() {
           {suggestPopupPos && (ghostOpen || draftLoading) && !selOpen && !inlineReviewState && (
             <CaretPopup
               sheet
+              containerRef={setPopupRef('ghost')}
               mode="ghost"
               position={suggestPopupPos}
               maxWidth={suggestPopupPos.w}
@@ -2217,8 +2027,8 @@ export default function EditorPage() {
               selPage={selPage}
               onSelCell={handleAcceptSelCell}
               onAccept={() => handleAcceptSelCell(selCol, selRow)}
-              onNext={() => stepSelCell(1)}
-              onPrev={() => stepSelCell(-1)}
+              onNext={() => shiftSelPage(1)}
+              onPrev={() => shiftSelPage(-1)}
               onReroll={handleSelRefetch}
               onDismiss={handleDismissSel}
             />
@@ -2245,9 +2055,6 @@ export default function EditorPage() {
                 onToggleSeam={toggleConnectSeam}
                 onCycleAlt={cycleConnectAlt}
                 onCycleRelation={cycleConnectRelation}
-                onReroll={rerollConnect}
-                onKeep={keepConnectFromPanel}
-                onUndo={undoConnect}
                 focus={connectFocus}
               />
             </div>
@@ -2256,15 +2063,12 @@ export default function EditorPage() {
       )}
 
       {!isMobile && connectSession && connectRenderTop != null && (
-        <div ref={setPopupRef('connect')} className="connect-pop" style={{ position: 'fixed', left: connectPos.x, top: connectRenderTop, width: connectPos.w, zIndex: 170 }}>
+        <div ref={setPopupRef('connect')} className="connect-pop" style={{ position: 'fixed', left: Math.min(connectPos.x, Math.max(8, window.innerWidth - connectPos.w - 8)), top: connectRenderTop, width: Math.min(connectPos.w, window.innerWidth - 16), maxHeight: Math.max(160, window.innerHeight - (connectRenderTop ?? 80) - 16), overflow: 'auto', zIndex: 170 }}>
           <ConnectPanel
             session={connectSession}
             onToggleSeam={toggleConnectSeam}
             onCycleAlt={cycleConnectAlt}
             onCycleRelation={cycleConnectRelation}
-            onReroll={rerollConnect}
-            onKeep={keepConnectFromPanel}
-            onUndo={undoConnect}
             focus={connectFocus}
           />
         </div>

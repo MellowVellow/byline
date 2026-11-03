@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { classifyLine, naiveState, ghostTriggerForState } from '../src/lib/sentence-state'
+import { classifyLine, ghostTriggerForState } from '../src/lib/sentence-state'
 
 // 20-case suite from Completion state test.html (punctuation-only vs rules)
 const CASES: Array<[string, 'doc' | 'prompt', string]> = [
@@ -26,15 +26,10 @@ const CASES: Array<[string, 'doc' | 'prompt', string]> = [
 ]
 
 describe('sentence-state classifier (V4 feel-test port)', () => {
-  it('rules beat punctuation-only baseline on the 20-case suite', () => {
-    let naive = 0
-    let rules = 0
+  it('classifies the 20-case suite', () => {
     for (const [txt, md, exp] of CASES) {
-      if (naiveState(txt) === exp) naive++
-      if (classifyLine(txt, md, '', false).state === exp) rules++
+      expect(classifyLine(txt, md, '', false).state).toBe(exp)
     }
-    expect(rules).toBe(CASES.length)
-    expect(rules).toBeGreaterThanOrEqual(naive)
   })
 })
 

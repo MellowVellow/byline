@@ -11,8 +11,6 @@ from . import budget
 
 log = logging.getLogger("byline.llm")
 
-# One client per running event loop: a global client created outside a loop
-# breaks under multi-loop servers/tests, and a never-closed client leaks.
 _CLIENTS: dict[int, httpx.AsyncClient] = {}
 _CLIENTS_LOCK = threading.Lock()
 
@@ -58,7 +56,6 @@ def extract_json(content: str) -> dict[str, Any]:
     raise LLMError("unparseable JSON")
 
 async def _call(url: str, key: str, model: str, system: str, user: str, max_tokens: int, temp: float, is_meta_api: bool = False, custom_headers: dict | None = None) -> tuple[str, dict]:
-    # Validate that model belongs to Meta-authored allowlist
     valid_model = validate_meta_model(model)
     body: dict[str, Any] = {
         "model": valid_model,
@@ -73,8 +70,6 @@ async def _call(url: str, key: str, model: str, system: str, user: str, max_toke
         headers["X-Title"] = "Byline"
     if custom_headers:
         headers.update(custom_headers)
-    # Retry transient failures only (429/5xx, transport errors): chat calls
-    # are billed, so non-retryable errors fail fast instead of double-spending.
     last_exc: Exception | None = None
     for attempt in range(3):
         try:
@@ -105,7 +100,6 @@ def _mock_meta_response(system: str, user: str) -> tuple[str, dict, str]:
     low_sys = system.lower()
     low_usr = user.lower()
 
-    # Connect task
     if "connect" in low_sys or "connect" in low_usr or "connective bridge" in low_sys:
         mock_data = {
             "options": [
@@ -128,7 +122,6 @@ def _mock_meta_response(system: str, user: str) -> tuple[str, dict, str]:
         }
         return json.dumps(mock_data), {"total_tokens": 120}, "mock:meta-llama-3.3-70b-instruct"
 
-    # Annotate / Reflection task
     if "annotate" in low_sys or "issues" in low_sys:
         mock_data = {
             "issues": [
@@ -143,7 +136,6 @@ def _mock_meta_response(system: str, user: str) -> tuple[str, dict, str]:
         }
         return json.dumps(mock_data), {"total_tokens": 90}, "mock:meta-llama-3.3-70b-instruct"
 
-    # Reactions / Reader persona
     if "reaction" in low_sys or "reader" in low_sys:
         mock_data = {
             "reactions": [
@@ -157,19 +149,24 @@ def _mock_meta_response(system: str, user: str) -> tuple[str, dict, str]:
         }
         return json.dumps(mock_data), {"total_tokens": 110}, "mock:meta-llama-3.3-70b-instruct"
 
-    # Paraphrase / synonyms
     if "synonym" in low_sys or "paraphrase" in low_sys or "alternative" in low_sys:
+        mock_grid = {
+            "Synonyms": ["clearly better", "plainly finer", "notably stronger", "decidedly greater", "visibly sharper", "truly higher"],
+            "Paraphrase": ["a clear step up", "well ahead of the rest", "better in every way", "stronger on each point", "ahead by a wide margin", "improved across the board"],
+            "Tone": ["way better, honestly", "seriously top-notch", "a real game-changer", "flat-out excellent", "vividly out in front", "boldly raising the bar"],
+        }
         mock_data = {
-            "synonyms": ["markedly superior", "distinctly advantageous", "compellingly preferable"]
+            "Synonyms": mock_grid["Synonyms"],
+            "Paraphrase": mock_grid["Paraphrase"],
+            "Tone": mock_grid["Tone"],
+            "synonyms": (mock_grid["Synonyms"] + mock_grid["Paraphrase"] + mock_grid["Tone"])[:8],
         }
         return json.dumps(mock_data), {"total_tokens": 65}, "mock:meta-llama-3.3-70b-instruct"
 
-    # Complete / Draft assistance
     if "complete" in low_sys or "ghost" in low_sys or "suggest" in low_sys:
         content = "demonstrates verifiable improvements across all evaluation benchmarks.\nreveals unexpected nuances upon closer inspection.\nestablishes a firmer foundation for subsequent analysis."
         return content, {"total_tokens": 50}, "mock:meta-llama-3.3-70b-instruct"
 
-    # Setup questions
     if "setup interviewer" in low_sys or "setup_questions" in low_sys:
         mock_data = {
             "questions": [
@@ -179,11 +176,9 @@ def _mock_meta_response(system: str, user: str) -> tuple[str, dict, str]:
         }
         return json.dumps(mock_data), {"total_tokens": 85}, "mock:meta-llama-3.3-70b-instruct"
 
-    # Explore: query planner (offline-safe, no URLs)
     if "query planner" in low_sys or "search queries" in low_sys:
         return json.dumps({"queries": ["definition and key terms", "supporting evidence and studies", "counterarguments and limits"]}), {"total_tokens": 40}, "mock:meta-llama-3.3-70b-instruct"
 
-    # Explore: angle planner (offline-safe, no URLs — angles only)
     if "research planner" in low_sys or "exploration angles" in low_sys:
         mock_data = {
             "angles": [
@@ -194,7 +189,6 @@ def _mock_meta_response(system: str, user: str) -> tuple[str, dict, str]:
         }
         return json.dumps(mock_data), {"total_tokens": 80}, "mock:meta-llama-3.3-70b-instruct"
 
-    # Default fallback JSON if requested
     if "json" in low_sys:
         return '{"result": "ok"}', {"total_tokens": 20}, "mock:meta-llama-3.3-70b-instruct"
 
@@ -227,7 +221,6 @@ async def _baseten_attempt(system: str, user: str, max_tokens: int, temperature:
                 return c, u, model, "baseten"
             errors.append(f"baseten ({endpoint}): empty content")
         except httpx.HTTPStatusError as e:
-            # If 401/403 with Bearer, retry with Api-Key auth scheme
             if e.response.status_code in (401, 403):
                 try:
                     c, u = await _call(endpoint, settings.baseten_api_key, model, system, user,
@@ -368,9 +361,6 @@ async def responses_call(input_data, *, instructions: str = "", tools=None, incl
         if pref == "meta" or settings.env in ("prod", "production"):
             budget.release(rid)
             raise ProviderUnavailable("meta unavailable: META_API_KEY not configured")
-        # Offline mock research response — clearly tagged so callers never
-        # mistake it for a real citation. Uses mock.local (RFC-2606-style
-        # invalid host) instead of a plausible real-world URL.
         budget.settle(rid, {"total_tokens": 150}, "mock:muse-spark-open-1026", "mock", mock=True)
         return {
             "text": "Evidence qualifies the claim: while preliminary analyses indicate positive correlation, long-term confounding variables require structured moderation.",
@@ -380,7 +370,6 @@ async def responses_call(input_data, *, instructions: str = "", tools=None, incl
             "model": "mock:muse-spark-open-1026",
             "mock": True,
         }
-    # Use the configured meta_model for Responses API (web-search grounding requires Meta API key)
     resp_model = validate_meta_model(settings.meta_model)
     body: dict = {
         "model": resp_model,

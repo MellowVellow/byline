@@ -10,19 +10,9 @@ const DIALECT_MAP: Record<string, Dialect> = {
   'en-IN': Dialect.Indian,
 }
 
-/**
- * Per harper.js docs (writewithharper.com/docs/harperjs/linting):
- * - Interactive web apps must use WorkerLinter (WASM off the event loop);
- *   LocalLinter is only a fallback (it blocks while compiling the dictionary).
- * - Editor content is plain text, so every lint call passes
- *   `{ language: 'plaintext' }` — the default is markdown, whose parser can
- *   swallow quotes and shift spans in prose.
- */
 const LINT_OPTIONS: LintOptions = { language: 'plaintext' }
 
-/** Give WASM compile+init a bounded window; never hang the lint pipeline. */
 const SETUP_TIMEOUT_MS = 25000
-/** After a total init failure, fail fast instead of re-spawning workers per keystroke. */
 const RETRY_COOLDOWN_MS = 60000
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -43,15 +33,10 @@ export class HarperService {
   private failedAt = 0
   private lastError: string | null = null
 
-  /** Diagnostic snapshot for logging / UI. Never throws. */
   status(): { ready: boolean; error: string | null } {
     return { ready: this.initialized && !!this.linter, error: this.lastError }
   }
 
-  /**
-   * Check whether Harper supports the requested language.
-   * Harper's core engine supports English dialects (US, UK, CA, AU, IN).
-   */
   isLanguageSupported(languageCode: string): boolean {
     if (!languageCode) return true
     const normalized = languageCode.trim().toLowerCase()
@@ -218,8 +203,6 @@ export class HarperService {
             rationale: category,
           }))
 
-          // Grammar findings: silent auto-fix records in Draft, red-underline
-          // review cards in Edit (never auto-fixed there).
           findings.push({
             id: `harper-${Date.now()}-${counter}-${Math.random().toString(36).slice(2, 6)}`,
             documentId: 'active-doc',

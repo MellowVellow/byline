@@ -55,11 +55,6 @@ def complete_prompt(context, level, before, after, assist, facts=None, last_two=
     return system, user
 
 def complete_levels_prompt(context, before, after, level, avoid=None, n=6):
-    # One call returning all four ghost levels; the app parses the groups.
-    # cue = 2-4 word nudge; question = a short question that prompts the writer;
-    # fragment = words that continue the text; sentence = words that finish the sentence.
-    # n options per list: the first half shows immediately, the rest prefetches
-    # reroll alternates so reroll is instantaneous (no second network round-trip).
     system = ("You are Byline, a writing assistant that helps writers express their own thoughts. "
               "JSON only. Prefer natural, specific, useful options over generic or cliched ones. "
               "Preserve the writer's intended meaning. Do not repeat existing text unnecessarily.")

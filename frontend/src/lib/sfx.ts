@@ -1,10 +1,3 @@
-/**
- * UI sound design (Tone.js, lazy-loaded, muted by default, throttled).
- * - Activation / deactivation: synthesized MembraneSynth body plus a
- *   short melodic gesture — rising perfect fifth on, falling fifth off.
- * - Melodic cues (accept/done/error/mode) keep the pentatonic blip family.
- * - Supports custom pitch/tone transposition and synthesizer instruments.
- */
 let tone: any = null
 let synth: any = null
 let membrane: any = null
@@ -41,7 +34,6 @@ export function setSfxInstrument(inst: SfxInstrument) {
       synth.volume.value = inst === 'sine' ? -18 : -26
     } catch { /* noop */ }
   }
-  // Force re-init of filter cutoff on next ensure if synth was released
   if (!synth) ensurePromise = null
 }
 
@@ -91,8 +83,6 @@ async function ensure() {
     const space = new tone.FeedbackDelay(0.16, 0.22)
     space.wet.value = 0.07
     space.connect(master)
-    // Sine ("Tone") carries almost no harmonics: a 1400Hz lowpass is fine,
-    // but route sine through a higher cutoff + hotter gain so it stays audible.
     const inst = getSfxInstrument()
     const cutoff = inst === 'sine' ? 5200 : 1400
     const filter = new tone.Filter(cutoff, 'lowpass').connect(space)
@@ -127,7 +117,6 @@ function notes(list: string[], step = 0.05, dur = '32n') {
     .catch(() => { /* audio unavailable: silent */ })
 }
 
-/** Activation: membrane body + rising fifth (C4 -> G4). Deactivation mirrors it down. */
 function playActivate() {
   ensure()
     .then(() => {
@@ -160,13 +149,6 @@ function playDeactivate() {
     .catch(() => { /* silent */ })
 }
 
-export function sfxActivate() {
-  if (sfxEnabled()) playActivate()
-}
-export function sfxDeactivate() {
-  if (sfxEnabled()) playDeactivate()
-}
-
 const NOTES: Record<string, string[]> = {
   hover: ['E4'],
   select: ['C4'],
@@ -187,7 +169,6 @@ export function blip(kind: keyof typeof NOTES) {
   notes(NOTES[kind] || NOTES.select, 0.055)
 }
 
-/** Named melodic helpers. Scale-step blips on C pentatonic. */
 const SCALE = ['C3', 'D3', 'E3', 'G3', 'A3', 'C4', 'D4', 'E4', 'G4', 'A4', 'C5']
 export function sfxMuted(): boolean {
   return !sfxEnabled()
@@ -205,15 +186,6 @@ export function sfxToggle(): boolean {
   return !next
 }
 
-export function sfxStep(n = 0) {
-  notes([SCALE[Math.max(0, Math.min(SCALE.length - 1, n))]], 0.06)
-}
-export function sfxBack() {
-  notes(['E4', 'C4'], 0.06)
-}
-export function sfxPick() {
-  notes(['G3', 'C4'], 0.06)
-}
 export function sfxSuccess() {
   notes(['C4', 'E4', 'G4', 'C5'], 0.06)
 }
