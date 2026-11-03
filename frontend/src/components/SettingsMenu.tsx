@@ -607,7 +607,6 @@ export default function SettingsMenu({
                     ['narrow', 'Narrow (58ch)'],
                     ['normal', 'Normal (72ch)'],
                     ['wide', 'Wide (92ch)'],
-                    ['full', 'Full (100% Span)'],
                   ] as const).map(([v, l]) => (
                     <button
                       key={v}
@@ -621,7 +620,7 @@ export default function SettingsMenu({
                   ))}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-                  Full and Wide use the full center area.
+                  Wide uses the full center area.
                 </div>
               </div>
 

@@ -3,7 +3,6 @@ import type { Editor } from '@tiptap/react'
 import { exportService, type ExportFormat } from '../services/export-service'
 import { blip } from '../lib/sfx'
 import { Logo, ThemeToggle } from './Brand'
-import { TRANSITIONS } from '../lib/constants'
 
 export interface TopNavigationProps {
   onOpenSettings: () => void
@@ -13,8 +12,6 @@ export interface TopNavigationProps {
   mobileDrawerOpen?: boolean
   findingsCount?: number
 
-  // Connect
-  onOpenConnect: () => void
   // Suggest (still callable via keyboard, but button removed from topbar)
   onSuggest: () => void
   draftLoading: boolean
@@ -27,14 +24,11 @@ export default function TopNavigation({
   onToggleMobileDrawer,
   mobileDrawerOpen,
   findingsCount,
-  onOpenConnect,
   onSuggest,
   draftLoading,
 }: TopNavigationProps) {
   const [exportOpen, setExportOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [connectDropdownOpen, setConnectDropdownOpen] = useState(false)
-  const [connectSearch, setConnectSearch] = useState('')
 
   const handleExport = (format: ExportFormat) => {
     blip('select')
@@ -47,14 +41,12 @@ export default function TopNavigation({
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement
       if (!target.closest('.topbar-dropdown-container')) {
-        setConnectDropdownOpen(false)
         setExportOpen(false)
         setMobileMenuOpen(false)
       }
     }
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setConnectDropdownOpen(false)
         setExportOpen(false)
         setMobileMenuOpen(false)
       }
@@ -66,25 +58,6 @@ export default function TopNavigation({
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [])
-
-  // Filtered transitions for Connect quick-select
-  const filteredTransitions = Object.entries(TRANSITIONS).flatMap(([category, phrases]) =>
-    phrases
-      .filter(p => {
-        if (!connectSearch.trim()) return true
-        const q = connectSearch.toLowerCase()
-        return p.toLowerCase().includes(q) || category.toLowerCase().includes(q)
-      })
-      .map(p => ({ category, phrase: p }))
-  )
-
-  const handleInsertTransition = (phrase: string) => {
-    if (!editor) return
-    blip('select')
-    const clean = phrase.replace('[]', '').trim() + ' '
-    editor.chain().focus().insertContent(clean).run()
-    setConnectDropdownOpen(false)
-  }
 
   const btnBase: React.CSSProperties = {
     padding: '2px 8px',
@@ -153,90 +126,8 @@ export default function TopNavigation({
         </div>
       </div>
 
-      {/* ── RIGHT: Connect, Export, Theme ── */}
+      {/* ── RIGHT: Export, Theme ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-
-        {/* Connect quick-select dropdown */}
-        <div className="topbar-dropdown-container desktop-only-btn" style={{ position: 'relative', display: 'inline-flex' }}>
-          <button
-            type="button"
-            onClick={() => { setConnectDropdownOpen(v => !v); blip('toggle') }}
-            title="Connect: insert links (Ctrl+/)"
-            style={{
-              ...btnBase,
-              background: connectDropdownOpen ? 'var(--hover)' : 'transparent',
-            }}
-          >
-            <span style={{ fontSize: 10.5 }}>⇌</span>
-            <span style={{ fontSize: 9, opacity: 0.65 }}>▾</span>
-          </button>
-
-          {connectDropdownOpen && (
-            <div
-              className="fade"
-              style={{
-                position: 'absolute',
-                right: 0,
-                top: 'calc(100% + 6px)',
-                background: 'var(--paper)',
-                border: '1px solid var(--border)',
-                borderRadius: 6,
-                boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
-                zIndex: 220,
-                width: 300,
-                padding: '10px 12px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 8,
-              }}
-            >
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.08em' }}>
-                Links & Connectors
-              </div>
-              <input
-                type="text"
-                placeholder="Filter (contrast, cause)…"
-                value={connectSearch}
-                onChange={e => setConnectSearch(e.target.value)}
-                style={{ width: '100%', padding: '5px 8px', fontSize: 11.5, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--dock)', color: 'var(--ink)', boxSizing: 'border-box' }}
-                autoFocus
-              />
-              <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {filteredTransitions.slice(0, 14).map(({ category, phrase }, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => handleInsertTransition(phrase)}
-                    style={{
-                      width: '100%', padding: '6px 8px', textAlign: 'left',
-                      background: 'transparent', border: '1px solid transparent',
-                      borderRadius: 4, cursor: 'pointer', fontSize: 12.5,
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 'auto',
-                    }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--hover)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)' }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.borderColor = 'transparent' }}
-                  >
-                    <span className="quote-serif" style={{ color: 'var(--ink)', fontWeight: 600, fontSize: 12.5 }}>{phrase.replace('[]', '…')}</span>
-                    <span style={{ fontSize: 10, color: 'var(--muted)', flexShrink: 0 }}>{category.split('/')[0].trim()}</span>
-                  </button>
-                ))}
-                {filteredTransitions.length === 0 && (
-                  <div style={{ padding: '10px 8px', textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>No matches</div>
-                )}
-              </div>
-              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8 }}>
-                <button
-                  type="button"
-                  className="primary"
-                  onClick={() => { setConnectDropdownOpen(false); onOpenConnect() }}
-                  style={{ width: '100%', padding: '6px 12px', fontSize: 12, fontWeight: 600, borderRadius: 4 }}
-                >
-                  Open Connect Studio →
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Desktop right buttons */}
         <div className="desktop-only-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>

@@ -128,6 +128,9 @@ export const popStore: { pops: Array<{ id: string; from: number; to: number; exp
 const holdKey = new PluginKey('byline-grammar-hold')
 export const holdStore: { holds: Array<{ id: string; from: number; to: number }> } = { holds: [] }
 
+const connectKey = new PluginKey('byline-connect')
+export const connectStore: { ranges: Array<{ from: number; to: number }> } = { ranges: [] }
+
 function buildPops(doc: any): Decoration[] {
   const now = Date.now()
   popStore.pops = popStore.pops.filter(p => p.expireAt > now)
@@ -145,6 +148,16 @@ function buildHolds(doc: any): Decoration[] {
   for (const h of holdStore.holds) {
     if (h.to <= doc.content.size && h.from < h.to) {
       decos.push(Decoration.inline(h.from, h.to, { class: 'grammar-hold-mark' }))
+    }
+  }
+  return decos
+}
+
+function buildConnect(doc: any): Decoration[] {
+  const decos: Decoration[] = []
+  for (const r of connectStore.ranges) {
+    if (r.to <= doc.content.size && r.from < r.to) {
+      decos.push(Decoration.inline(r.from, r.to, { class: 'connect-mark' }))
     }
   }
   return decos
@@ -169,6 +182,9 @@ export function syncPops(editor: any) {
 }
 export function syncHolds(editor: any) {
   if (editor?.view) editor.view.dispatch(editor.state.tr.setMeta(holdKey, { rebuild: true }))
+}
+export function syncConnect(editor: any) {
+  if (editor?.view) editor.view.dispatch(editor.state.tr.setMeta(connectKey, { rebuild: true }))
 }
 
 export const AnchorDecorations = Extension.create({
@@ -229,6 +245,17 @@ export const AnchorDecorations = Extension.create({
           },
         },
         props: { decorations: (state) => holdKey.getState(state) },
+      }),
+      new Plugin({
+        key: connectKey,
+        state: {
+          init: (_cfg, state) => DecorationSet.create(state.doc, buildConnect(state.doc)),
+          apply: (tr, set) => {
+            const mapped = set.map(tr.mapping, tr.doc)
+            return tr.getMeta(connectKey)?.rebuild ? DecorationSet.create(tr.doc, buildConnect(tr.doc)) : mapped
+          },
+        },
+        props: { decorations: (state) => connectKey.getState(state) },
       }),
     ]
   },

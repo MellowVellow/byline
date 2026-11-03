@@ -241,7 +241,12 @@ export function loadSettings(): AppSettings {
       const parsed = SettingsSchema.safeParse(JSON.parse(raw))
       // Unknown keys dropped, wrong types fall back to defaults: stored
       // settings can never poison the runtime shape.
-      if (parsed.success) return { ...DEFAULT_SETTINGS, ...parsed.data }
+      if (parsed.success) {
+        const data = { ...parsed.data }
+        // Retired layout: Full (100% span) collapses to Wide.
+        if (data.paperWidth === 'full') data.paperWidth = 'wide'
+        return { ...DEFAULT_SETTINGS, ...data }
+      }
     }
   } catch { /* fall through */ }
   const legacy = localStorage.getItem('byline.theme')
@@ -328,7 +333,9 @@ export interface Shortcut { keys: string; action: string; context?: string }
 export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
   { group: 'Drafting', items: [
     { keys: 'Ctrl/⌘ Space', action: 'Request ghost text — or paraphrase grid when text is selected', context: 'Editor' },
-    { keys: 'Ctrl/⌘ /', action: 'Open links and connectors', context: 'Editor' },
+    { keys: 'Ctrl/⌘ ⇧ /', action: 'Connect a 2+ sentence selection', context: 'Editor' },
+    { keys: 'Esc / Tab', action: 'Undo / keep an applied Connect', context: 'Connect open' },
+    { keys: 'Alt + 1–9 / Alt + R', action: 'Toggle a Connect seam / reroll connectors', context: 'Connect open' },
     { keys: '1 – 4', action: 'Select completion level (cue / question / fragment / sentence)', context: 'Options open' },
     { keys: '1 – 9', action: 'Select grid cell', context: 'Grid open' },
     { keys: 'Tab', action: 'Accept selected option', context: 'Options open' },

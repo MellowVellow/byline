@@ -35,7 +35,8 @@ export function visibleCells(grid: SelGrid, col: number, page: number): string[]
 
 export interface CaretPopupProps {
   mode: 'ghost' | 'sel'
-  position: { x: number; y: number }
+  position: { x: number; y: number; w?: number }
+  maxWidth?: number
   loading?: boolean
   // ghost mode
   ghostGroups?: GhostGroups
@@ -61,6 +62,7 @@ export interface CaretPopupProps {
 export default function CaretPopup({
   mode,
   position,
+  maxWidth,
   loading,
   ghostGroups = EMPTY_GHOST,
   ghostLv = 'fragment',
@@ -94,8 +96,8 @@ export default function CaretPopup({
         top: position.y,
         left: position.x,
         zIndex: 150,
-        minWidth: 170,
-        maxWidth: 440,
+        minWidth: Math.min(170, maxWidth ?? 170),
+        maxWidth: maxWidth ?? 440,
         background: 'var(--paper)',
         border: '1px solid var(--border)',
         borderRadius: 8,
@@ -144,7 +146,7 @@ export default function CaretPopup({
           )}
         </>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(110px,1fr))', gap: '2px 12px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: '2px 12px' }}>
           {SEL_COLS.map((c, ci) => (
             <div key={c} style={{ minWidth: 0 }}>
               <h4 style={{ margin: '0 0 2px', fontWeight: 400, fontSize: 12, color: 'var(--muted)' }}>{c}</h4>
@@ -173,7 +175,7 @@ export default function CaretPopup({
           ))}
         </div>
       )}
-      <div style={{ display: 'flex', gap: 14, marginTop: 6, padding: '3px 6px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 13 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 6, padding: '3px 6px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 13 }}>
         <button
           type="button"
           onClick={onAccept}

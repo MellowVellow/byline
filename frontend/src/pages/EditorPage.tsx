@@ -16,7 +16,7 @@ import { classifyLine, ghostTriggerForState } from '../lib/sentence-state'
 import ContextInput from '../components/ContextInput'
 import { REVIEW_TEMPLATES } from '../lib/review-templates'
 import SuggestionContext from '../components/SuggestionContext'
-import ConnectModal from '../components/ConnectModal'
+import ConnectPanel from '../components/ConnectPanel'
 import CaretPopup, {
   type GhostLevel, type GhostGroups, type SelGrid,
   GHOST_LEVELS, SEL_COLS, EMPTY_GHOST, EMPTY_GRID,
@@ -27,7 +27,8 @@ import SettingsMenu from '../components/SettingsMenu'
 import MetricsPopup from '../components/MetricsPopup'
 import { recordSuggestionOffered, recordSuggestionAccepted, recordRevisionAccepted, recordGhostFired, recordGhostCacheSaved, recordGhostAborted, recordGhostStaleDropped, recordGhostDebounceSaved } from '../lib/metrics'
 
-import { AnchorDecorations, anchorStore, syncAnchors, syncGhost, syncFlash, flashStore, modeStore, syncPops, popStore, holdStore, syncHolds } from '../editor/decorations'
+import { AnchorDecorations, anchorStore, syncAnchors, syncGhost, syncFlash, flashStore, modeStore, syncPops, popStore, holdStore, syncHolds, connectStore, syncConnect } from '../editor/decorations'
+import { TextSelection } from '@tiptap/pm/state'
 import { contextService, type SelectionContext } from '../services/context-service'
 import { globalAnalysisService } from '../services/analysis-service'
 import { harperService } from '../services/harper-service'
@@ -37,6 +38,7 @@ import { THEME_DEFINITIONS, SUPPORTED_LANGUAGES } from '../domain/writing-profil
 import { loadSettings, saveSettings, type AppSettings } from '../lib/settings'
 import { idbSetDoc, idbGetDoc } from '../lib/storage'
 import { api } from '../lib/api'
+import { type ConnectSession, createConnectSession, hasConnectSelection, rerenderConnectSession } from '../lib/connect'
 import { hashKey, cacheGet, cacheSet, saveLastGhost, loadLastGhost } from '../lib/ai-cache'
 import { sfxAccept, sfxDismiss, blip } from '../lib/sfx'
 
@@ -91,7 +93,13 @@ export default function EditorPage() {
     if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
     noticeTimer.current = window.setTimeout(() => setNotice(null), 4000)
   }
-  const [connectOpen, setConnectOpen] = useState(false)
+  const [connectSession, setConnectSession] = useState<ConnectSession | null>(null)
+  const [connectPos, setConnectPos] = useState({ x: 16, y: 80, w: 320 })
+  const connectSessionRef = useRef<ConnectSession | null>(null)
+  const connectApplyingRef = useRef(false)
+  const connectTimerRef = useRef<number | null>(null)
+  const keepConnectRef = useRef<(() => void) | null>(null)
+  const clearGhostOnNavRef = useRef<() => void>(() => {})
   // Private context note (display-only scratch above the draft; never sent to AI)
   const [contextNote, setContextNote] = useState(() => {
     try { return localStorage.getItem('byline.doc.contextNote') || '' } catch { return '' }
@@ -118,6 +126,9 @@ export default function EditorPage() {
   // Ghost request identity + abort controller (boundary-pause call saving)
   const ghostReqId = useRef(0)
   const ghostAbort = useRef<AbortController | null>(null)
+  // Auto ghost is armed only by actual typing. Clicking or arrow-moving the
+  // caret must not call the ghost prompt.
+  const ghostAutoAllowedRef = useRef(false)
   // Selection-grid request identity + abort controller (Esc cancels the call)
   const selReqId = useRef(0)
   const selAbort = useRef<AbortController | null>(null)
@@ -187,12 +198,12 @@ export default function EditorPage() {
 
   // Selection & Paraphrase state (positioned below cursor)
   const [selectionContext, setSelectionContext] = useState<SelectionContext | null>(null)
-  const [popupPos, setPopupPos] = useState({ x: 200, y: 300 })
+  const [popupPos, setPopupPos] = useState<{ x: number; y: number; w?: number }>({ x: 200, y: 300 })
 
   // Inline Review Popup state for clicked underlined text or selection in Edit mode
   const [inlineReviewState, setInlineReviewState] = useState<{
     findings: Finding[]
-    position: { x: number; y: number }
+    position: { x: number; y: number; w?: number }
   } | null>(null)
 
   // Draft Assistance state (Ghost text & Suggestion popup below cursor)
@@ -208,7 +219,7 @@ export default function EditorPage() {
   const [selRow, setSelRow] = useState(0)
   const [selPage, setSelPage] = useState(0)
   const [selLoading, setSelLoading] = useState(false)
-  const [suggestPopupPos, setSuggestPopupPos] = useState<{ x: number; y: number } | null>(null)
+  const [suggestPopupPos, setSuggestPopupPos] = useState<{ x: number; y: number; w?: number } | null>(null)
   const [draftLoading, setDraftLoading] = useState(false)
   const [metricsOpen, setMetricsOpen] = useState(false)
   const ghostTriggers = useGhostTriggers(appSettings.slowMs)
@@ -218,21 +229,33 @@ export default function EditorPage() {
   const leftRailRef = useRef<HTMLElement>(null)
 
   /**
-   * Convert a raw viewport coordinate from TipTap / getBoundingClientRect into a
-   * safe { x, y } for position:fixed popups, accounting for:
-   *   - left dock width (measured from DOM, clamp x to not overlap it)
-   *   - viewport bottom (if popup would overflow, scroll editor container up)
+   * Position every writing popup beside the editor, vertically aligned with the
+   * cursor. Prefers the right side of the paper, falls back left, then clamps to
+   * the viewport. Returns a width so the popup can shrink instead of overflowing.
    */
-  const safePosFixed = useCallback(
-    (viewportLeft: number, viewportBottom: number, popupW = 440, popupH = 300) => {
-      // Measure the left rail's actual edge from the DOM for accurate clamping.
-      // Pure clamp — never scrolls the container.
-      const leftRailRight = leftRailRef.current
-        ? leftRailRef.current.getBoundingClientRect().right
-        : 16
-      const minLeft = leftRailRight + 16
-      const x = Math.max(minLeft, Math.min(viewportLeft, window.innerWidth - popupW - 16))
-      return { x, y: viewportBottom + 8 }
+  const placePopupBesideEditor = useCallback(
+    (view: any, pos: number, popupW = 440, popupH = 280, minW = popupW) => {
+      if (!view) return { x: 16, y: 80, w: Math.min(popupW, window.innerWidth - 24) }
+      const coords = view.coordsAtPos(pos)
+      const rect = view.dom.getBoundingClientRect()
+      const margin = 12
+      const gap = 12
+      const spaceRight = window.innerWidth - rect.right - gap - margin
+      const spaceLeft = rect.left - gap - margin
+      let width = popupW
+      let x: number
+      if (spaceRight >= minW) {
+        width = Math.min(popupW, spaceRight)
+        x = rect.right + gap
+      } else if (spaceLeft >= minW) {
+        width = Math.min(popupW, spaceLeft)
+        x = rect.left - gap - width
+      } else {
+        width = Math.min(popupW, window.innerWidth - margin * 2)
+        x = Math.max(margin, window.innerWidth - width - margin)
+      }
+      const y = Math.max(56, Math.min(coords.top - 4, window.innerHeight - popupH - 16))
+      return { x, y, w: width }
     },
     []
   )
@@ -262,6 +285,8 @@ export default function EditorPage() {
       },
     },
     onUpdate: ({ editor }) => {
+      ghostAutoAllowedRef.current = true
+      if (connectSessionRef.current && !connectApplyingRef.current) keepConnectRef.current?.()
       setDocRevision(r => r + 1)
       // A keystroke invalidates the shown ghost/popup: clear it so the next
       // pause can trigger fresh text (previously the stale ghost kept the
@@ -290,10 +315,35 @@ export default function EditorPage() {
       globalAnalysisService.validateAnchors(editor)
       syncEditorDecorations(editor)
     },
-    onSelectionUpdate: ({ editor }) => {
+    onSelectionUpdate: ({ editor, transaction }) => {
+      if (connectApplyingRef.current) return
+      // A pure caret move (click/arrow) is not typing: keep auto ghost off
+      // until the next document-changing keystroke.
+      if (!transaction.docChanged) ghostAutoAllowedRef.current = false
+      // Caret/selection moves are user navigation, not typing: drop any ghost
+      // text and popup instead of letting a pending call follow the new caret.
+      clearGhostOnNavRef.current()
       const selCtx = contextService.getSelectionContext(editor)
       const at = editor.state.selection.from
       const to = editor.state.selection.to
+
+      if (connectSessionRef.current) {
+        const session = connectSessionRef.current
+        const inside = at >= session.from && to <= session.to
+        if (!inside) keepConnectRef.current?.()
+      }
+
+      // Connect outranks synonyms / paraphrase / tone for 2+ sentence selections.
+      if (selCtx && hasConnectSelection(selCtx.selectedText)) {
+        setInlineReviewState(null)
+        setSelectionContext(selCtx)
+        setSelGrid(EMPTY_GRID)
+        setSelLoading(false)
+        if (editor.view) {
+          setPopupPos(placePopupBesideEditor(editor.view, selCtx.to, 400, 300, 220))
+        }
+        return
+      }
 
       // Reader underlines active when left dock is open: check if selection overlaps any finding
       if (leftOpen) {
@@ -308,10 +358,9 @@ export default function EditorPage() {
         })
 
         if (matchingFindings.length > 0 && editor.view) {
-          const coords = editor.view.coordsAtPos(to)
           setInlineReviewState({
             findings: matchingFindings,
-            position: safePosFixed(coords.left, coords.bottom, 320, 200),
+            position: placePopupBesideEditor(editor.view, to, 320, 220, 220),
           })
           setSelectionContext(null)
           setHighlightedFindingId(matchingFindings[0].id)
@@ -322,8 +371,7 @@ export default function EditorPage() {
       // If no findings matched, standard selectionContext (Paraphrase popup below cursor)
       setSelectionContext(selCtx)
       if (selCtx && editor.view) {
-        const coords = editor.view.coordsAtPos(selCtx.to)
-        setPopupPos(safePosFixed(coords.left, coords.bottom, 400, 260))
+        setPopupPos(placePopupBesideEditor(editor.view, selCtx.to, 400, 300, 220))
       }
     },
     onCreate: ({ editor }) => {
@@ -332,6 +380,127 @@ export default function EditorPage() {
       setCounts({ words, chars })
     },
   })
+
+  const setConnect = (session: ConnectSession | null) => {
+    connectSessionRef.current = session
+    setConnectSession(session)
+  }
+
+  const clearConnectTimer = () => {
+    if (connectTimerRef.current != null) {
+      window.clearTimeout(connectTimerRef.current)
+      connectTimerRef.current = null
+    }
+  }
+
+  const placeConnectPopup = (pos: number) => {
+    if (!editor?.view) return
+    setConnectPos(placePopupBesideEditor(editor.view, pos, 320, 360, 220))
+  }
+
+  const applyConnectText = (session: ConnectSession) => {
+    if (!editor || !editor.view) return
+    connectApplyingRef.current = true
+    try {
+      const tr = editor.state.tr.insertText(session.text, session.from, session.to)
+      // Keep the user's 2+ sentence drag selection: auto-connect must not
+      // collapse the caret or unselect text unless the user explicitly types.
+      tr.setSelection(TextSelection.create(tr.doc, session.from, session.from + session.text.length))
+      editor.view.dispatch(tr)
+      connectStore.ranges = session.marks.map(m => ({ from: session.from + m.s, to: session.from + m.e }))
+      syncConnect(editor)
+      setConnect({ ...session, to: session.from + session.text.length })
+      placeConnectPopup(session.from + session.text.length)
+    } finally {
+      connectApplyingRef.current = false
+    }
+  }
+
+  const updateConnect = (mutate: (session: ConnectSession) => void) => {
+    const session = connectSessionRef.current
+    if (!session) return
+    const next: ConnectSession = { ...session, seams: session.seams.map(s => ({ ...s })) }
+    mutate(next)
+    applyConnectText(rerenderConnectSession(next))
+  }
+
+  const startConnect = (ctx: SelectionContext) => {
+    const raw = ctx.selectedText
+    const orig = raw.trim()
+    if (!orig) return
+    const lead = Math.max(0, raw.indexOf(orig))
+    const session = createConnectSession(ctx.from + lead, orig, ctx.to)
+    if (!session) return
+    clearConnectTimer()
+    if (connectSessionRef.current) keepConnect()
+    applyConnectText(session)
+    blip('done')
+  }
+
+  const keepConnect = () => {
+    clearConnectTimer()
+    if (connectSessionRef.current && editor) {
+      connectStore.ranges = []
+      syncConnect(editor)
+    }
+    setConnect(null)
+  }
+
+  const keepConnectFromPanel = () => {
+    keepConnect()
+    editor?.chain().focus().run()
+  }
+  keepConnectRef.current = keepConnect
+
+  const undoConnect = () => {
+    const session = connectSessionRef.current
+    if (!editor || !editor.view || !session) return
+    clearConnectTimer()
+    connectApplyingRef.current = true
+    try {
+      const tr = editor.state.tr.insertText(session.orig, session.from, session.to)
+      tr.setSelection(TextSelection.create(tr.doc, session.from, session.from + session.orig.length))
+      editor.view.dispatch(tr)
+      connectStore.ranges = []
+      syncConnect(editor)
+    } finally {
+      connectApplyingRef.current = false
+    }
+    setConnect(null)
+    editor.chain().focus().run()
+  }
+
+  const toggleConnectSeam = (index: number) => {
+    blip('select')
+    updateConnect(session => {
+      if (session.seams[index]) session.seams[index].on = !session.seams[index].on
+    })
+  }
+
+  const cycleConnectRelation = (index: number) => {
+    blip('select')
+    updateConnect(session => {
+      const seam = session.seams[index]
+      if (!seam) return
+      seam.rel = (seam.rel + 1) % 4
+      seam.v = 0
+    })
+  }
+
+  const cycleConnectVariant = (index: number) => {
+    blip('select')
+    updateConnect(session => {
+      const seam = session.seams[index]
+      if (seam) seam.v += 1
+    })
+  }
+
+  const rerollConnect = () => {
+    blip('select')
+    updateConnect(session => {
+      session.seams.forEach(seam => { seam.v += 1 })
+    })
+  }
 
   // Synchronize ProseMirror decorations (Underlines in Editing Mode)
   const syncEditorDecorations = useCallback((ed: typeof editor) => {
@@ -362,9 +531,13 @@ export default function EditorPage() {
     syncAnchors(ed)
   }, [findings, leftOpen])
 
-  // Dispose the Harper worker when the editor page unmounts
+  // Dispose the Harper worker and clear transient Connect marks on unmount
   useEffect(() => {
-    return () => { void harperService.dispose() }
+    return () => {
+      connectStore.ranges = []
+      connectSessionRef.current = null
+      void harperService.dispose()
+    }
   }, [])
 
   // Click on underlined text opens suggestions/comments popup below cursor (when left dock is open)
@@ -381,10 +554,9 @@ export default function EditorPage() {
         const ids = anchorId ? [anchorId] : (anchorIds?.split(',') || [])
         const matched = findings.filter(f => ids.includes(f.id) && f.status !== 'resolved' && f.status !== 'dismissed')
         if (matched.length > 0) {
-          const rect = target!.getBoundingClientRect()
           setInlineReviewState({
             findings: matched,
-            position: safePosFixed(rect.left, rect.bottom, 320, 200),
+            position: placePopupBesideEditor(editor.view, editor.state.selection.from, 320, 220, 220),
           })
           setSelectionContext(null)
           setHighlightedFindingId(matched[0].id)
@@ -394,7 +566,7 @@ export default function EditorPage() {
     }
     dom.addEventListener('click', onClick)
     return () => dom.removeEventListener('click', onClick)
-  }, [editor, leftOpen, findings, safePosFixed])
+  }, [editor, leftOpen, findings, placePopupBesideEditor])
 
   // Sync reader underline state (on when left dock open) to decorations
   useEffect(() => {
@@ -490,10 +662,10 @@ export default function EditorPage() {
 
     const cursorCtx = contextService.getCursorContext(editor, 400)
 
-    // Position the popup immediately below cursor so loading shimmer is visible
+    // Position the popup beside the editor so loading shimmer is visible at caret height
     const cursorPos = editor.state.selection.from
-    const coordsEarly = editor.view.coordsAtPos(cursorPos)
-    setSuggestPopupPos(safePosFixed(coordsEarly.left, coordsEarly.bottom, 440, 220))
+    const selectionAtRequest = { from: editor.state.selection.from, to: editor.state.selection.to }
+    setSuggestPopupPos(placePopupBesideEditor(editor.view, cursorPos, 440, 260, 220))
 
     try {
       // Text-only prompt, one call: backend returns all four levels, app parses.
@@ -518,8 +690,11 @@ export default function EditorPage() {
         recordGhostAborted()
         return
       }
-      // Stale response (doc moved on while fetching) — drop, count it
-      if (reqVersion !== docRevisionRef.current) {
+      // Stale response (doc or caret moved on while fetching) — drop, count it.
+      // A caret move without typing must not let ghost text attach elsewhere.
+      const sel = editor.state.selection
+      if (reqVersion !== docRevisionRef.current ||
+          sel.from !== selectionAtRequest.from || sel.to !== selectionAtRequest.to) {
         recordGhostStaleDropped()
         return
       }
@@ -542,12 +717,16 @@ export default function EditorPage() {
       recordSuggestionOffered(GHOST_LEVELS.reduce((n, l) => n + groups[l].length, 0))
       showInlineGhost(groups, lv, 0)
 
-      // Reposition popup below current cursor
-      const coords = editor.view.coordsAtPos(editor.state.selection.from)
-      setSuggestPopupPos(safePosFixed(coords.left, coords.bottom, 440, 220))
+      // Reposition popup beside the editor at the verified request caret
+      setSuggestPopupPos(placePopupBesideEditor(editor.view, cursorPos, 440, 260, 220))
 
       if (!opts?.isAuto) blip('done')
     } catch {
+      // Aborted by a caret move / newer request: never reopen the popup.
+      if (ctl.signal.aborted || ghostReqId.current !== myId) {
+        recordGhostAborted()
+        return
+      }
       const groups = EMPTY_GHOST
       const biased = pendingGhostBias.current
       pendingGhostBias.current = null
@@ -559,8 +738,7 @@ export default function EditorPage() {
       setGhostIdx(0)
       showInlineGhost(groups, lv, 0)
 
-      const coords = editor.view.coordsAtPos(editor.state.selection.from)
-      setSuggestPopupPos(safePosFixed(coords.left, coords.bottom, 440, 220))
+      setSuggestPopupPos(placePopupBesideEditor(editor.view, editor.state.selection.from, 440, 260, 220))
     } finally {
       if (ghostAbort.current === ctl) ghostAbort.current = null
       if (ghostReqId.current === myId) setDraftLoading(false)
@@ -610,8 +788,7 @@ export default function EditorPage() {
     setSelGrid(EMPTY_GRID)
     showInlineGhost(groups, lv, idx)
     const pos = editor.state.selection.from
-    const coords = editor.view.coordsAtPos(pos)
-    setSuggestPopupPos(safePosFixed(coords.left, coords.bottom, 440, 220))
+    setSuggestPopupPos(placePopupBesideEditor(editor.view, pos, 440, 260, 220))
   }
 
   // V4 dual-threshold ghost triggers: slow ~350ms pause-anywhere ghost
@@ -698,7 +875,7 @@ export default function EditorPage() {
           ? { suppress: full.trim().length <= 8, bias: null as null }
           : ghostTriggerForState(cls.state)
         const t = ghostTriggers.evaluate(full, textCaret, textCaret)
-        if (t.ghost && !gate.suppress) {
+        if (t.ghost && !gate.suppress && ghostAutoAllowedRef.current) {
           const before = editor.state.doc.textBetween(Math.max(0, from - 200), from)
           if (before.trim().length >= 2) {
             // 150ms armed delay: confirm a real pause before firing. A keystroke
@@ -773,6 +950,23 @@ export default function EditorPage() {
     ghostReqId.current++
     setDraftLoading(false)
   }
+
+  /** Caret/selection moved without typing: cancel and hide ghost text. */
+  const clearGhostOnNavigate = () => {
+    if (ghostAbort.current) {
+      ghostAbort.current.abort()
+      ghostAbort.current = null
+      ghostReqId.current++
+    }
+    if (anchorStore.ghost) {
+      anchorStore.ghost = ''
+      if (editor) syncGhost(editor)
+    }
+    setDraftLoading(false)
+    setGhostGroups(EMPTY_GHOST)
+    setSuggestPopupPos(null)
+  }
+  clearGhostOnNavRef.current = clearGhostOnNavigate
 
   const handleDismissSuggestions = () => {
     abortGhostRequest()
@@ -942,6 +1136,7 @@ export default function EditorPage() {
   // Double-click and drag selection both flow through selectionContext.
   useEffect(() => {
     if (selTimerRef.current) window.clearTimeout(selTimerRef.current)
+    clearConnectTimer()
     if (!selectionContext || selectionContext.selectedText.trim().length < 2) {
       setSelGrid(EMPTY_GRID)
       setSelLoading(false)
@@ -953,6 +1148,28 @@ export default function EditorPage() {
     anchorStore.ghost = ''
     if (editor) syncGhost(editor)
     setSuggestPopupPos(null)
+
+    if (hasConnectSelection(selectionContext.selectedText)) {
+      setSelGrid(EMPTY_GRID)
+      setSelLoading(false)
+      const ctx = selectionContext
+      const launch = () => {
+        const live = editor ? contextService.getSelectionContext(editor) : null
+        if (!live || !hasConnectSelection(live.selectedText)) return
+        if (live.from !== ctx.from || live.to !== ctx.to) return
+        startConnect(live)
+      }
+      if (selManualRef.current) {
+        selManualRef.current = false
+        launch()
+        return
+      }
+      connectTimerRef.current = window.setTimeout(launch, Math.max(100, appSettings.slowMs))
+      return () => {
+        clearConnectTimer()
+      }
+    }
+
     // Manual invoke already started the request; do not schedule a second one.
     if (selManualRef.current) {
       selManualRef.current = false
@@ -1015,26 +1232,46 @@ export default function EditorPage() {
     if (!editor || !editor.view) return
     try {
       if (selectionContext && (selOpen || selLoading)) {
-        const coords = editor.view.coordsAtPos(editor.state.selection.to)
-        const next = safePosFixed(coords.left, coords.bottom, 400, 260)
+        const next = placePopupBesideEditor(editor.view, editor.state.selection.to, 400, 300, 220)
         setPopupPos(prev => (samePos(prev, next) ? prev : next))
       } else if (suggestPopupPos && (ghostOpen || draftLoading)) {
-        const coords = editor.view.coordsAtPos(editor.state.selection.from)
-        const next = safePosFixed(coords.left, coords.bottom, 440, 220)
+        const next = placePopupBesideEditor(editor.view, editor.state.selection.from, 440, 260, 220)
         setSuggestPopupPos(prev => (samePos(prev, next) ? prev : next))
       } else if (inlineReviewState && inlineReviewState.findings.length > 0) {
-        const coords = editor.view.coordsAtPos(editor.state.selection.from)
-        const next = safePosFixed(coords.left, coords.bottom, 320, 200)
+        const next = placePopupBesideEditor(editor.view, editor.state.selection.from, 320, 220, 220)
         setInlineReviewState(prev =>
           prev && samePos(prev.position, next) ? prev : prev ? { ...prev, position: next } : prev
         )
       }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, docRevision, selectionContext, selOpen, selLoading, ghostOpen, draftLoading, inlineReviewState, safePosFixed])
+  }, [editor, docRevision, selectionContext, selOpen, selLoading, ghostOpen, draftLoading, inlineReviewState, placePopupBesideEditor])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (connectSessionRef.current) {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          undoConnect()
+          return
+        }
+        if ((e.key === 'Tab' || e.key === 'Enter') && !e.shiftKey) {
+          e.preventDefault()
+          keepConnect()
+          return
+        }
+        if (e.altKey && e.code === 'KeyR') {
+          e.preventDefault()
+          if (!e.repeat) rerollConnect()
+          return
+        }
+        if (e.altKey && /^Digit[1-9]$/.test(e.code)) {
+          e.preventDefault()
+          if (!e.repeat) toggleConnectSeam(Number(e.code.slice(5)) - 1)
+          return
+        }
+      }
+
       // Tab accepts the active option
       if (e.key === 'Tab' && (ghostOpen || selOpen)) {
         e.preventDefault()
@@ -1123,13 +1360,14 @@ export default function EditorPage() {
         return
       }
 
-      // Ctrl/Cmd + Space activates: paraphrase grid when text is selected,
-      // ghost suggestion at the caret otherwise. Reads the live selection so
-      // Esc-dismiss + Ctrl+Space reopens the grid for the same range.
+      // Ctrl/Cmd + Space activates: Connect for 2+ sentence selections,
+      // paraphrase grid for shorter selections, ghost suggestion otherwise.
       if ((e.ctrlKey || e.metaKey) && e.code === 'Space') {
         e.preventDefault()
         const liveSel = editor ? contextService.getSelectionContext(editor) : null
-        if (liveSel) {
+        if (liveSel && hasConnectSelection(liveSel.selectedText)) {
+          startConnect(liveSel)
+        } else if (liveSel) {
           selManualRef.current = true
           setSelectionContext(liveSel)
           void requestSelGrid(liveSel)
@@ -1139,10 +1377,11 @@ export default function EditorPage() {
         return
       }
 
-      // Ctrl/Cmd + / to open Connect modal
-      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+      // Ctrl/Cmd + Shift + / connects the current 2+ sentence selection.
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'Slash') {
         e.preventDefault()
-        setConnectOpen(true)
+        const liveSel = editor ? contextService.getSelectionContext(editor) : null
+        if (liveSel && hasConnectSelection(liveSel.selectedText)) startConnect(liveSel)
         return
       }
 
@@ -1368,7 +1607,6 @@ export default function EditorPage() {
         findingsCount={findings.filter(f => f.status === 'open' || f.status === 'stale').length}
         onSuggest={() => void handleRequestGhost()}
         draftLoading={draftLoading}
-        onOpenConnect={() => setConnectOpen(true)}
       />
 
       {/* 2. Workspace Layout: single left dock + center paper */}
@@ -1527,6 +1765,7 @@ export default function EditorPage() {
               <CaretPopup
                 mode="ghost"
                 position={suggestPopupPos}
+                maxWidth={suggestPopupPos.w}
                 loading={draftLoading}
                 ghostGroups={ghostGroups}
                 ghostLv={ghostLv}
@@ -1556,6 +1795,7 @@ export default function EditorPage() {
               <CaretPopup
                 mode="sel"
                 position={popupPos}
+                maxWidth={popupPos.w}
                 loading={selLoading}
                 selGrid={selGrid}
                 selCol={selCol}
@@ -1570,14 +1810,22 @@ export default function EditorPage() {
             )}
           </div>
         </main>
+
       </div>
 
-      {/* Connect Modal */}
-      <ConnectModal
-        isOpen={connectOpen}
-        onClose={() => setConnectOpen(false)}
-        editor={editor}
-      />
+      {connectSession && (
+        <div className="connect-pop" style={{ position: 'fixed', left: connectPos.x, top: connectPos.y, width: connectPos.w, zIndex: 170 }}>
+          <ConnectPanel
+            session={connectSession}
+            onToggleSeam={toggleConnectSeam}
+            onCycleRelation={cycleConnectRelation}
+            onCycleVariant={cycleConnectVariant}
+            onReroll={rerollConnect}
+            onKeep={keepConnectFromPanel}
+            onUndo={undoConnect}
+          />
+        </div>
+      )}
 
       {/* Settings Modal */}
       {settingsOpen && (

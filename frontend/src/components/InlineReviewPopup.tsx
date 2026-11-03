@@ -5,7 +5,7 @@ import { blip } from '../lib/sfx'
 
 export interface InlineReviewPopupProps {
   findings: Finding[]
-  position: { x: number; y: number }
+  position: { x: number; y: number; w?: number }
   editor: Editor | null
   onApplySuggestion: (finding: Finding, suggestion: Suggestion) => void
   onDismissFinding: (findingId: string) => void
@@ -126,7 +126,7 @@ export default function InlineReviewPopup({
         position: 'fixed',
         top: position.y,
         left: position.x,
-        width: 'min(320px, calc(100vw - 32px))',
+        width: position.w ? `${position.w}px` : 'min(320px, calc(100vw - 32px))',
         background: 'var(--paper)',
         border: `1px solid ${activeMeta.color}`,
         borderRadius: 8,

@@ -10,7 +10,7 @@ Byline is a writer-controlled AI writing workspace that helps people express the
 ## 1. Core Architecture (The Three-Part Model)
 
 - **Intent (Left Dock):** Context (topic, purpose, audience, background, key ideas, constraints) and interactive hierarchical Outline nodes linking to editor blocks.
-- **Expression (Center Paper):** TipTap/ProseMirror paper editor with local Draft Assistance (Hint 1–4 words, Phrase, Sentence, Paragraph), Connect (12 rhetorical pattern categories + Meta AI inference), and Selection-based Paraphrase (3 distinct alternatives: Paraphrase, Shorten, Change Tone).
+- **Expression (Center Paper):** TipTap/ProseMirror paper editor with local Draft Assistance (Hint 1–4 words, Phrase, Sentence, Paragraph), Connect (select 2+ sentences to apply inline connectors, with seam options in a popup beside the editor), and Selection-based Paraphrase (3 distinct alternatives: Paraphrase, Shorten, Change Tone).
 - **Reflection (Right Dock):** Unified findings rail aggregating observations across all four personas:
   - **Red (Grammar):** Deterministic language correctness & direct corrections.
   - **Purple (Reader):** Observations on perceived ambiguity and reader interpretation (without unsolicited rewrites).
@@ -25,7 +25,7 @@ Byline strictly enforces Meta-authored models across all inference paths. Server
 
 | Provider | Supported Meta Models | Role in Byline |
 |---|---|---|
-| **OpenRouter** | `meta-llama/llama-3.3-70b-instruct`, `meta-llama/llama-3.1-70b-instruct`, `meta-llama/llama-3.1-8b-instruct` | Primary reasoning for Supervisor, Reader, Connect synthesis, Paraphrase |
+| **OpenRouter** | `meta-llama/llama-3.3-70b-instruct`, `meta-llama/llama-3.1-70b-instruct`, `meta-llama/llama-3.1-8b-instruct` | Primary reasoning for Supervisor, Reader, Paraphrase |
 | **Meta Model API** | `muse-spark-1.3`, `muse-glimmer-30b`, `muse-voice-transcribe-1.0` | Ghost draft completions, structured responses, audio transcriptions |
 | **Baseten** | `meta-llama/Llama-3.3-70B-Instruct`, `meta-llama/Meta-Llama-3.1-70B-Instruct` | Dedicated Meta inference endpoints |
 | **Internal Mock Engine** | Deterministic Meta simulation | Offline development, local testing, and offline evaluation with zero external dependencies |
@@ -76,5 +76,5 @@ npm run build --prefix frontend
 - `Tab`: Accept focused or primary suggestion.
 - `Alt` / visible button: Reroll alternative options for the current suggestion or finding.
 - `Ctrl/Cmd + Space`: Trigger draft assistance at cursor.
-- `Ctrl/Cmd + /`: Open Connect Engine (pattern library & AI inference).
+- `Ctrl/Cmd + Shift + /`: Connect a selection of 2+ sentences (also auto-activates on selection).
 - `Ctrl/Cmd + ,`: Open Settings & Writing Profile modal.
