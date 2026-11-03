@@ -15,18 +15,18 @@
   --ink-5: #181A1E;
 
   /* Byline annotation palette: red grammar, purple reader, yellow selection, blue explore, green fix */
-  --lt: #C0281F;      /* Red — Grammar & Language */
-  --ai: #6D3BE0;      /* Purple — Reader Interpretation */
+  --lt: #D83343;      /* Red — Grammar & Language */
+  --ai: #B094E9;      /* Purple — Reader Interpretation */
   --yellow: #8A5F00;  /* Amber — selection accents */
   --blue: #1765CC;    /* Blue — links & accents */
-  --explore: #1765CC; /* Blue — Explore underline */
+  --explore: #6FBDEC; /* Blue — Explore underline */
   --fix: #16A34A;     /* Green — auto-fix flash */
   --grey: #626A75;    /* Grey — Suggest & Ghost Completions */
 
   --old: #9CA3AF;
-  --link: #FEF08A;
-  --proof: #C0281F;
-  --caret: #6D3BE0;
+  --link: #FEE180;
+  --proof: #D83343;
+  --caret: #B094E9;
   --btn-bg: #6D3BE0;
   --btn-ink: #FFFFFF;
   --pencil: #1765CC;
@@ -111,13 +111,13 @@ html {
 }
 
 ::selection {
-  background: #FEF08A;
-  color: #0F1115 !important;
+  background: color-mix(in srgb, var(--link) 35%, transparent);
+  color: inherit;
 }
 
 :root[data-theme="dark"] ::selection {
-  background: #FDE047;
-  color: #0F1115 !important;
+  background: color-mix(in srgb, var(--link) 35%, transparent);
+  color: inherit;
 }
 
 body {

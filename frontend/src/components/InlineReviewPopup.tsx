@@ -10,6 +10,14 @@ export interface InlineReviewPopupProps {
   onApplySuggestion: (finding: Finding, suggestion: Suggestion) => void
   onDismissFinding: (findingId: string) => void
   onClose: () => void
+  /** Continue: next tab here, else the host jumps the caret to the next underline. */
+  onContinue?: () => void
+  /** Reprompt the reader for more options on one finding. */
+  onReprompt?: (finding: Finding) => void
+  /** Finding id currently being reprompted (disables its button). */
+  repromptingId?: string | null
+  sheet?: boolean
+  containerRef?: (node: HTMLDivElement | null) => void
 }
 
 // Review personas: purple Reader observations, red Harper grammar fixes.
@@ -41,50 +49,141 @@ export default function InlineReviewPopup({
   onApplySuggestion,
   onDismissFinding,
   onClose,
+  onContinue,
+  onReprompt,
+  repromptingId,
+  sheet,
+  containerRef,
 }: InlineReviewPopupProps) {
   const [activeIdx, setActiveIdx] = useState(0)
+  // Chosen pre-fetched option per finding (1-9 / forward / backward).
+  const [sugSel, setSugSel] = useState<Record<string, number>>({})
   const popupRef = useRef<HTMLDivElement>(null)
 
   // Bound index safely
   const currentIdx = Math.max(0, Math.min(activeIdx, findings.length - 1))
   const activeFinding = findings[currentIdx]
 
+  const sugCount = activeFinding?.suggestions?.length ?? 0
+  const sugIdx = activeFinding ? Math.min(sugSel[activeFinding.id] ?? 0, Math.max(0, sugCount - 1)) : 0
+  const currentSug = sugCount > 0 ? activeFinding.suggestions[sugIdx] : undefined
+  const canReprompt = !!activeFinding && activeFinding.persona === 'reader' && !!onReprompt
+  const reprompting = !!activeFinding && repromptingId === activeFinding.id
+
+  // A fresh suggestions array (reprompt prepend) lands on the new options first.
+  const sugIdentity = activeFinding?.suggestions
+  const prevSugRef = useRef<unknown>(null)
+  useEffect(() => {
+    if (prevSugRef.current !== sugIdentity) {
+      prevSugRef.current = sugIdentity
+      if (activeFinding) setSugSel(m => ({ ...m, [activeFinding.id]: 0 }))
+    }
+  })
+
+  const chooseOption = (i: number) => {
+    if (!activeFinding || i < 0 || i >= sugCount) return
+    blip('select')
+    setSugSel(m => ({ ...m, [activeFinding.id]: i }))
+  }
+
+  const stepOption = (dir: 1 | -1) => {
+    if (!activeFinding || sugCount <= 1) return
+    blip('select')
+    const id = activeFinding.id
+    setSugSel(m => {
+      const cur = Math.min(m[id] ?? 0, sugCount - 1)
+      return { ...m, [id]: (cur + dir + sugCount) % sugCount }
+    })
+  }
+
+  const continueReview = () => {
+    // More tabs on this underline: advance here. Otherwise the host jumps
+    // the caret to the next underline.
+    if (currentIdx < findings.length - 1) {
+      blip('select')
+      setActiveIdx(prev => prev + 1)
+      return
+    }
+    onContinue?.()
+  }
+
+  const repromptActive = () => {
+    if (!canReprompt || reprompting || !activeFinding) return
+    onReprompt(activeFinding)
+  }
+
+  const dismissActive = () => {
+    if (!activeFinding) return
+    onDismissFinding(activeFinding.id)
+    if (findings.length > 1) {
+      setActiveIdx(prev => Math.min(prev, findings.length - 2))
+    } else {
+      onClose()
+    }
+  }
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault()
         onClose()
         return
       }
 
-      // "|" advances to the next comment in the same sentence/area.
-      if (e.key === '|' && findings.length > 1) {
+      // Shift+Tab continues to the next comment (next tab, else caret jump).
+      if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault()
-        blip('select')
-        setActiveIdx(prev => (prev + 1) % findings.length)
+        continueReview()
         return
       }
 
-      // 1–9 accepts fix n (feel-test keys)
-      if (/^[1-9]$/.test(e.key) && activeFinding.suggestions && activeFinding.suggestions.length > 0) {
-        const i = Number(e.key) - 1
-        const sug = activeFinding.suggestions?.[i]
-        if (sug) {
+      // Tab applies the shown option in-text (same accept sound as click).
+      if (e.key === 'Tab' && currentSug && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        onApplySuggestion(activeFinding, currentSug)
+        return
+      }
+
+      // Backquote family (layout-robust via e.code):
+      // ` forward option, alt+` backward option, shift+` dismiss.
+      if (e.code === 'Backquote' && !e.ctrlKey && !e.metaKey) {
+        if (e.shiftKey && !e.altKey) {
           e.preventDefault()
-          onApplySuggestion(activeFinding, sug)
+          dismissActive()
+          return
         }
+        if (e.altKey && !e.shiftKey) {
+          e.preventDefault()
+          stepOption(-1)
+          return
+        }
+        if (!e.altKey && !e.shiftKey) {
+          e.preventDefault()
+          stepOption(1)
+          return
+        }
+      }
+
+      // Alt+0 reprompts the reader for more options on this finding.
+      if ((e.code === 'Digit0' || e.key === '0') && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        e.preventDefault()
+        repromptActive()
         return
       }
 
-      // Delete marks the finding dismissed (stays listed like a stale anchor).
-      // Esc only closes the popup; Backspace stays available for editing.
-      if (e.key === 'Delete') {
+      // "|" is a legacy alias for continue.
+      if (e.key === '|' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault()
-        onDismissFinding(activeFinding.id)
-        if (findings.length > 1) {
-          setActiveIdx(prev => Math.min(prev, findings.length - 2))
-        } else {
-          onClose()
+        continueReview()
+        return
+      }
+
+      // 1–9 chooses option n (select only, never auto-applies).
+      if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && sugCount > 0) {
+        const i = Number(e.key) - 1
+        if (i < sugCount) {
+          e.preventDefault()
+          chooseOption(i)
         }
         return
       }
@@ -102,7 +201,7 @@ export default function InlineReviewPopup({
       window.removeEventListener('keydown', handleKeyDown)
       document.removeEventListener('mousedown', handleMouseDown)
     }
-  }, [findings, activeFinding, onClose, onApplySuggestion, onDismissFinding])
+  }, [findings, activeFinding, currentSug, sugCount, onClose, onApplySuggestion, onDismissFinding, onContinue, onReprompt])
 
   if (!activeFinding) return null
 
@@ -113,16 +212,30 @@ export default function InlineReviewPopup({
     bg: 'var(--paper)',
   }
 
-  const hasSuggestions = activeFinding.suggestions && activeFinding.suggestions.length > 0
-
   return (
     <div
-      ref={popupRef}
+      ref={node => {
+        popupRef.current = node
+        containerRef?.(node)
+      }}
+      data-popup="review"
       role="listbox"
       aria-label="Fixes"
       className="caret-pop fade"
       onMouseDown={e => e.preventDefault()}
-      style={{
+      style={sheet ? {
+        position: 'static',
+        width: '100%',
+        background: 'var(--paper)',
+        border: `1px solid ${activeMeta.color}`,
+        borderRadius: 8,
+        padding: '4px 6px',
+        fontSize: 13,
+        lineHeight: 1.5,
+        fontFamily: '"Source Serif 4", Georgia, serif',
+        color: 'var(--ink)',
+        boxSizing: 'border-box',
+      } : {
         position: 'fixed',
         top: position.y,
         left: position.x,
@@ -130,7 +243,7 @@ export default function InlineReviewPopup({
         background: 'var(--paper)',
         border: `1px solid ${activeMeta.color}`,
         borderRadius: 8,
-        padding: '6px 8px',
+        padding: '4px 6px',
         fontSize: 13,
         lineHeight: 1.5,
         boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
@@ -140,39 +253,98 @@ export default function InlineReviewPopup({
         boxSizing: 'border-box',
       }}
     >
-      {hasSuggestions ? (
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {activeFinding.suggestions?.map((sug, i) => (
-            <div
-              key={sug.id || i}
-              role="option"
-              aria-selected={false}
-              onClick={() => onApplySuggestion(activeFinding, sug)}
-              style={{
-                padding: '0 6px',
-                borderRadius: 4,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                color: 'var(--muted)',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'color-mix(in srgb, var(--ai) 20%, transparent)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
-            >
-              {sug.text}
-            </div>
-          ))}
+      {currentSug ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={{ padding: '1px 4px', color: 'var(--muted)', fontSize: 12, lineHeight: 1.45 }}>
+            {activeFinding.explanation}
+          </div>
+          <div
+            role="option"
+            aria-selected={true}
+            onClick={() => onApplySuggestion(activeFinding, currentSug)}
+            title="Click or Tab to apply · 1-9 chooses · ` next · alt+` prev"
+            style={{
+              padding: '1px 4px',
+              borderRadius: 4,
+              cursor: 'pointer',
+              color: 'var(--ink)',
+              fontSize: 13,
+              overflowWrap: 'anywhere',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'color-mix(in srgb, var(--ai) 20%, transparent)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+          >
+            {currentSug.text}
+            {sugCount > 1 && (
+              <span style={{ color: 'var(--muted)', fontSize: 11, marginLeft: 6, whiteSpace: 'nowrap' }}>
+                {sugIdx + 1} of {sugCount}
+              </span>
+            )}
+          </div>
         </div>
       ) : (
-        <div style={{ padding: '2px 6px', color: 'var(--ink)', fontSize: 13 }}>
+        <div style={{ padding: '1px 4px', color: 'var(--ink)', fontSize: 13 }}>
           {activeFinding.explanation}
         </div>
       )}
-      <div style={{ display: 'flex', gap: 14, marginTop: 6, padding: '3px 6px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 13 }}>
-        {findings.length > 1 && <span>Next<kbd style={{ fontFamily: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>|</kbd></span>}
-        <span>Dismiss<kbd style={{ fontFamily: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>del</kbd></span>
-        <span>Close<kbd style={{ fontFamily: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>esc</kbd></span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 3, padding: '2px 4px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 12 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {sugCount > 1 && (
+            <button
+              type="button"
+              onClick={() => stepOption(1)}
+              title="Next option"
+              style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
+            >
+              Next<kbd style={{ fontFamily: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>`</kbd>
+            </button>
+          )}
+          {sugCount > 1 && (
+            <button
+              type="button"
+              onClick={() => stepOption(-1)}
+              title="Previous option"
+              style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
+            >
+              Prev<kbd style={{ fontFamily: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>alt+`</kbd>
+            </button>
+          )}
+          {canReprompt && (
+            <button
+              type="button"
+              onClick={repromptActive}
+              disabled={reprompting}
+              title="Ask the reader for more options"
+              style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: reprompting ? 'wait' : 'pointer', opacity: reprompting ? 0.6 : 1 }}
+            >
+              {reprompting ? 'Redo…' : 'Redo'}<kbd style={{ fontFamily: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>alt+0</kbd>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={dismissActive}
+            style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
+          >
+            Dismiss<kbd style={{ fontFamily: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>shift+`</kbd>
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={continueReview}
+            title="Next comment (jumps caret when nothing is left here)"
+            style={{ font: 'inherit', color: 'var(--ink)', fontWeight: 600, background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
+          >
+            Next review<kbd style={{ fontFamily: 'inherit', fontWeight: 400, fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>shift+tab</kbd>
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer', marginLeft: 'auto' }}
+          >
+            Close<kbd style={{ fontFamily: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>esc</kbd>
+          </button>
+        </div>
       </div>
     </div>
   )

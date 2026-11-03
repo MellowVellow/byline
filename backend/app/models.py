@@ -15,6 +15,7 @@ class TextIn(BaseModel):
     context: str = S(4000); level: str = Field(default="General", max_length=40); text: str = S(20000)
     before: str = S(4000); after: str = S(4000)
     persona: str = Field(default="Skeptical reader", max_length=60)
+    avoid: list[str] = Field(default_factory=list, max_length=24)
 
 class SynonymIn(BaseModel):
     context: str = S(4000); level: str = Field(default="General", max_length=40)

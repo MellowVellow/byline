@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { loadSettings, saveSettings, resolveTheme } from '../lib/settings'
+import { blip } from '../lib/sfx'
 
 export function getTheme(): 'light' | 'dark' {
   try {
@@ -136,6 +137,7 @@ export function ThemeToggle() {
     // Single source of truth: flip resolved theme through the settings store
     // so applySettings() clears stale preset vars (previously toggle wrote
     // dataset.theme directly and left inline --bg/--dock behind).
+    blip('toggle')
     const s = loadSettings()
     const resolved = resolveTheme(s.theme)
     const n = resolved === 'dark' ? 'light' : 'dark'

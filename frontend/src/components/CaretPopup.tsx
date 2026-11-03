@@ -49,11 +49,20 @@ export interface CaretPopupProps {
   selRow?: number
   selPage?: number
   onSelCell?: (col: number, row: number) => void
-  // shared
+  message?: string
+  showConnect?: boolean
+  onConnect?: () => void
+  containerRef?: (node: HTMLDivElement | null) => void
   onAccept: () => void
+  /** Next option (`). */
+  onNext?: () => void
+  /** Previous option (alt+`). */
+  onPrev?: () => void
+  /** Redo: fresh fetch (alt+0). */
   onReroll: () => void
-  onRerollPrev?: () => void
   onDismiss: () => void
+  /** Render as static full-width sheet (mobile bottom area) instead of fixed popup. */
+  sheet?: boolean
 }
 
 /** Minimal compact caret popup — ported from caret-popup-feel-test.html.
@@ -73,25 +82,46 @@ export default function CaretPopup({
   selRow = 0,
   selPage = 0,
   onSelCell,
+  message,
+  showConnect,
+  onConnect,
+  containerRef,
   onAccept,
+  onNext,
+  onPrev,
   onReroll,
-  onRerollPrev,
   onDismiss,
+  sheet,
 }: CaretPopupProps) {
   const hasGhost = GHOST_LEVELS.some(l => (ghostGroups[l] || []).length > 0)
   const hasSel = SEL_COLS.some(c => (selGrid[c] || []).length > 0)
-  if (!loading && ((mode === 'ghost' && !hasGhost) || (mode === 'sel' && !hasSel))) return null
+  const showEmpty = mode === 'sel' && !hasSel && !!message
+  if (!loading && ((mode === 'ghost' && !hasGhost) || (mode === 'sel' && !hasSel && !message))) return null
 
   const q = mode === 'ghost' && ghostLv === 'question'
   const qText = q ? ghostOption(ghostGroups, 'question', ghostIdx) : ''
 
   return (
     <div
+      ref={containerRef}
+      data-popup={mode === 'ghost' ? 'ghost' : 'selection'}
       role="listbox"
       aria-label="Suggestions"
       className="caret-pop fade"
       onMouseDown={e => e.preventDefault()}
-      style={{
+      style={sheet ? {
+        position: 'static',
+        width: '100%',
+        maxWidth: 'none',
+        background: 'var(--paper)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        padding: '4px 6px',
+        fontSize: 13,
+        lineHeight: 1.5,
+        fontFamily: '"Source Serif 4", Georgia, serif',
+        color: 'var(--ink)',
+      } : {
         position: 'fixed',
         top: position.y,
         left: position.x,
@@ -101,7 +131,7 @@ export default function CaretPopup({
         background: 'var(--paper)',
         border: '1px solid var(--border)',
         borderRadius: 8,
-        padding: '6px 8px',
+        padding: '4px 6px',
         fontSize: 13,
         lineHeight: 1.5,
         boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
@@ -145,6 +175,10 @@ export default function CaretPopup({
             <div style={{ color: 'var(--ink)', fontStyle: 'italic', padding: '2px 6px' }}>{qText}</div>
           )}
         </>
+      ) : showEmpty ? (
+        <div style={{ padding: '6px 6px', fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>
+          {message}
+        </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: '2px 12px' }}>
           {SEL_COLS.map((c, ci) => (
@@ -175,37 +209,58 @@ export default function CaretPopup({
           ))}
         </div>
       )}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 6, padding: '3px 6px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 13 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4, padding: '2px 4px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 12 }}>
         <button
           type="button"
           onClick={onAccept}
-          style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: q ? 'default' : 'pointer', opacity: q ? 0.4 : 1 }}
+          style={{ font: 'inherit', color: 'var(--ink)', fontWeight: 600, background: 'none', border: 0, padding: 0, cursor: q ? 'default' : 'pointer', opacity: q ? 0.4 : 1 }}
         >
-          Accept<kbd style={{ font: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>tab</kbd>
+          Accept<kbd style={{ font: 'inherit', fontWeight: 400, fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>tab</kbd>
         </button>
-        <button
-          type="button"
-          onClick={onRerollPrev ?? onReroll}
-          title="Previous alternative (Ctrl+[)"
-          style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
-        >
-          ←<kbd style={{ font: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>ctrl+[</kbd>
-        </button>
+        {onNext && (
+          <button
+            type="button"
+            onClick={onNext}
+            title="Next option"
+            style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
+          >
+            Next<kbd style={{ font: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>`</kbd>
+          </button>
+        )}
+        {onPrev && (
+          <button
+            type="button"
+            onClick={onPrev}
+            title="Previous option"
+            style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
+          >
+            Prev<kbd style={{ font: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>alt+`</kbd>
+          </button>
+        )}
         <button
           type="button"
           onClick={onReroll}
-          title="Next alternative (Ctrl+])"
+          title="Redo: fetch fresh options"
           style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
         >
-          Reroll<kbd style={{ font: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>ctrl+]</kbd>
+          Redo<kbd style={{ font: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>alt+0</kbd>
         </button>
+        {mode === 'sel' && showConnect && onConnect ? (
+          <button
+            type="button"
+            onClick={onConnect}
+            title="Expand Connect panel for this 2+ sentence selection (Ctrl/Cmd+Shift+/)"
+            style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
+          >
+            Connect<kbd style={{ font: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>ctrl+shift+/</kbd>
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={onDismiss}
-          title="Alt to dismiss"
           style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer', marginLeft: 'auto' }}
         >
-          Dismiss<kbd style={{ font: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>alt</kbd>
+          Dismiss<kbd style={{ font: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>shift+`</kbd>
         </button>
       </div>
     </div>

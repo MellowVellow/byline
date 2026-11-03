@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { loadCalls, clearCalls, loadUsageStats, type CallEvent, type UsageTelemetry } from '../lib/metrics'
-import { BENCH_MODELS, BENCH_MODES, BENCH_PROMPTS, BENCH_PARAMS } from '../lib/benchmarks'
 import { blip } from '../lib/sfx'
 import { api } from '../lib/api'
 
-type Tab = 'overview' | 'errors' | 'live' | 'benchmarks'
+type Tab = 'overview' | 'errors'
 
 export default function MetricsPopup({ onClose }: { summary?: string; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('overview')
@@ -38,20 +37,23 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
   const errorRate = totalCalls > 0 ? ((failedCalls / totalCalls) * 100).toFixed(1) : '0.0'
   const reliabilityRate = totalCalls > 0 ? (((totalCalls - failedCalls) / totalCalls) * 100).toFixed(1) : '100.0'
 
-  const ghostAcceptRate =
-    usage.suggestionsOffered > 0
-      ? Math.round((usage.suggestionsAccepted / usage.suggestionsOffered) * 100)
-      : 0
-
-  const revisionAcceptRate =
-    usage.revisionsOffered > 0
-      ? Math.round((usage.revisionsAccepted / usage.revisionsOffered) * 100)
-      : 0
+  const ghostFired = usage.ghostFired || 0
+  const ghostRerolls = usage.ghostRerolls || 0
+  const rerollRate = ghostFired > 0 ? Math.round((ghostRerolls / ghostFired) * 100) : 0
+  const totalAccepted = (usage.suggestionsAccepted || 0) + (usage.revisionsAccepted || 0)
+  const totalOffered = (usage.suggestionsOffered || 0) + (usage.revisionsOffered || 0)
+  const acceptShare = totalOffered > 0 ? Math.round((totalAccepted / totalOffered) * 100) : 0
 
   const totalTokensIn = calls.reduce((n, c) => n + (c.usage?.in || 0), 0)
   const totalTokensOut = calls.reduce((n, c) => n + (c.usage?.out || 0), 0)
   const totalTokensReasoning = calls.reduce((n, c) => n + (c.usage?.reasoning || 0), 0)
   const avgLatency = totalCalls > 0 ? Math.round(calls.reduce((n, c) => n + (c.ms || 0), 0) / totalCalls) : 0
+  const modelCounts = calls.reduce<Record<string, number>>((m, c) => {
+    const name = (c.model || 'unknown').trim()
+    if (name) m[name] = (m[name] || 0) + 1
+    return m
+  }, {})
+  const uniqueModels = Object.keys(modelCounts).length || 0
 
   const handleClear = () => {
     blip('dismiss')
@@ -60,10 +62,8 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
   }
 
   const TABS: { id: Tab; label: string }[] = [
-    { id: 'overview',   label: 'Acceptance & Usage' },
-    { id: 'errors',     label: `Model Errors (${errorRate}%)` },
-    { id: 'live',       label: `Live Calls (${calls.length})` },
-    { id: 'benchmarks', label: 'Meta AI Benchmarks' },
+    { id: 'overview', label: 'Usage & Acceptance' },
+    { id: 'errors', label: `Errors (${errorRate}%)` },
   ]
 
   return (
@@ -72,7 +72,7 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
         className="library-modal fade metrics-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="Demo Benchmark & Metrics"
+        aria-label="Usage & Acceptance Metrics"
         onMouseDown={e => e.stopPropagation()}
         style={{ width: 'min(980px, 96vw)', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}
       >
@@ -81,9 +81,9 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 16 }}>📊</span>
             <div>
-              <strong style={{ fontSize: 14 }}>DEMO — Benchmark & System Telemetry</strong>
+              <strong style={{ fontSize: 14 }}>Usage & Acceptance Metrics</strong>
               <div className="meta" style={{ marginTop: 2 }}>
-                Real-time suggestion acceptance rates, user usage metrics, and AI model error rates
+                Real-time telemetry: generations, rerolls, accepts, server usage, latency, calls, and model errors
               </div>
             </div>
           </div>
@@ -91,7 +91,7 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
           <button type="button" onClick={handleClear} style={{ fontSize: 12 }}>
             Reset telemetry
           </button>
-          <button type="button" onClick={onClose}>
+          <button type="button" onClick={() => { blip('select'); onClose() }}>
             Close <span className="kbd">Esc</span>
           </button>
         </div>
@@ -107,7 +107,7 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
             borderBottom: '1px solid var(--border)',
           }}
         >
-          {/* Ghost Acceptance */}
+          {/* Total Ghost Generations */}
           <div
             style={{
               background: 'var(--paper)',
@@ -117,24 +117,21 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
             }}
           >
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.04em' }}>
-              Ghost Acceptance Rate
+              Total Ghost Generations
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--ai)', margin: '4px 0 2px' }}>
-              {ghostAcceptRate}%
+              {ghostFired.toLocaleString()}
             </div>
             <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-              {usage.suggestionsAccepted} of {usage.suggestionsOffered} suggestions accepted
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-              {usage.ghostFired || 0} fired · {((usage.ghostCacheSaved || 0) + (usage.ghostAborted || 0) + (usage.ghostStaleDropped || 0) + (usage.ghostDebounceSaved || 0))} saved
+              {((usage.ghostCacheSaved || 0) + (usage.ghostAborted || 0) + (usage.ghostStaleDropped || 0) + (usage.ghostDebounceSaved || 0))} saved
               (cache {usage.ghostCacheSaved || 0} · abort {usage.ghostAborted || 0} · stale {usage.ghostStaleDropped || 0} · debounce {usage.ghostDebounceSaved || 0})
             </div>
             <div style={{ marginTop: 6, height: 4, background: 'var(--hover)', borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ width: `${ghostAcceptRate}%`, height: '100%', background: 'var(--ai)' }} />
+              <div style={{ width: '100%', height: '100%', background: 'var(--ai)' }} />
             </div>
           </div>
 
-          {/* Revision Acceptance */}
+          {/* Reroll Rate */}
           <div
             style={{
               background: 'var(--paper)',
@@ -144,16 +141,39 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
             }}
           >
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.04em' }}>
-              Inline Revision Rate
+              Reroll Rate
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--blue)', margin: '4px 0 2px' }}>
-              {revisionAcceptRate}%
+              {rerollRate}%
             </div>
             <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-              {usage.revisionsAccepted} of {usage.revisionsOffered} revisions applied
+              {ghostRerolls.toLocaleString()} rerolls across {ghostFired.toLocaleString()} generations
             </div>
             <div style={{ marginTop: 6, height: 4, background: 'var(--hover)', borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ width: `${revisionAcceptRate}%`, height: '100%', background: 'var(--blue)' }} />
+              <div style={{ width: `${Math.min(100, rerollRate)}%`, height: '100%', background: 'var(--blue)' }} />
+            </div>
+          </div>
+
+          {/* Total Accepted */}
+          <div
+            style={{
+              background: 'var(--paper)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-lg, 6px)',
+              padding: '10px 14px',
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.04em' }}>
+              Total Accepted
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--fix)', margin: '4px 0 2px' }}>
+              {totalAccepted.toLocaleString()}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+              {usage.suggestionsAccepted || 0} ghosts · {usage.revisionsAccepted || 0} revisions ({acceptShare}% of offered)
+            </div>
+            <div style={{ marginTop: 6, height: 4, background: 'var(--hover)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ width: `${acceptShare}%`, height: '100%', background: 'var(--fix)' }} />
             </div>
           </div>
 
@@ -193,10 +213,13 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
               Avg Latency & Tokens
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--ink)', margin: '4px 0 2px' }}>
-              {avgLatency}ms
+              {avgLatency}ms · {totalCalls} calls · {uniqueModels} model{uniqueModels === 1 ? '' : 's'}
             </div>
             <div style={{ fontSize: 11, color: 'var(--muted)' }}>
               {(totalTokensIn + totalTokensOut).toLocaleString()} tokens ({totalTokensReasoning} reasoning)
+              {Object.entries(modelCounts).map(([name, count]) => (
+                <span key={name} style={{ marginLeft: 8 }}>{name}: {count}</span>
+              ))}
             </div>
             <div style={{ marginTop: 6, height: 4, background: 'var(--hover)', borderRadius: 2, overflow: 'hidden' }}>
               <div style={{ width: '85%', height: '100%', background: 'var(--yellow)' }} />
@@ -273,44 +296,6 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
                   <div style={{ fontSize: 12, color: 'var(--muted)' }}>Server usage unavailable — backend not reachable.</div>
                 )}
               </div>
-              {/* Acceptance Comparison */}
-              <div>
-                <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', margin: '0 0 10px' }}>
-                  User Acceptance Telemetry (Drafting vs Review)
-                </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
-                  <div style={{ background: 'var(--dock)', padding: '12px 16px', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600 }}>Caret Ghost Completions</span>
-                      <strong style={{ fontSize: 12, color: 'var(--ai)' }}>{ghostAcceptRate}% Accepted</strong>
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
-                      User pressed Tab or clicked 1-3 to accept suggested sentence completions.
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, fontSize: 11 }}>
-                      <span style={{ color: 'var(--ai)' }}>✓ {usage.suggestionsAccepted} Accepted</span>
-                      <span style={{ color: 'var(--muted)' }}>·</span>
-                      <span style={{ color: 'var(--muted)' }}>✕ {usage.suggestionsOffered - usage.suggestionsAccepted} Dismissed / Ignored</span>
-                    </div>
-                  </div>
-
-                  <div style={{ background: 'var(--dock)', padding: '12px 16px', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600 }}>Inline Review Suggestions</span>
-                      <strong style={{ fontSize: 12, color: 'var(--blue)' }}>{revisionAcceptRate}% Applied</strong>
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
-                      User inspected underlined text in Edit mode and clicked "Accept" revision.
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, fontSize: 11 }}>
-                      <span style={{ color: 'var(--blue)' }}>✓ {usage.revisionsAccepted} Applied</span>
-                      <span style={{ color: 'var(--muted)' }}>·</span>
-                      <span style={{ color: 'var(--muted)' }}>✕ {usage.revisionsOffered - usage.revisionsAccepted} Dismissed</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               {/* Endpoint Usage Distribution */}
               <div>
                 <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', margin: '0 0 10px' }}>
@@ -329,26 +314,44 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
                       </tr>
                     </thead>
                     <tbody>
-                      {[
-                        { ep: '/api/complete', persona: 'Ghost Drafting', model: 'Llama 3.3 70B', lat: '284ms', count: 22, ok: '100%' },
-                        { ep: 'harper-local-wasm', persona: 'Grammar Auto-fix', model: 'Harper WASM', lat: '18ms', count: 14, ok: '100%' },
-                        { ep: '/api/reactions', persona: 'Reader Ambiguity', model: 'Llama 3.3 70B', lat: '540ms', count: 8, ok: '100%' },
-                        { ep: '/api/connect', persona: 'Connect Bridges', model: 'Llama 3.3 70B', lat: '312ms', count: 6, ok: '100%' },
-                        { ep: '/api/synonyms', persona: 'Paraphrase Options', model: 'Llama 3.3 70B', lat: '265ms', count: 9, ok: '100%' },
-                      ].map(r => (
-                        <tr key={r.ep}>
-                          <td><code>{r.ep}</code></td>
-                          <td><strong>{r.persona}</strong></td>
-                          <td>{r.model}</td>
-                          <td>{r.lat}</td>
-                          <td>{r.count}</td>
-                          <td>
-                            <span style={{ color: r.ok === '100%' ? '#15803D' : 'var(--lt)', fontWeight: 600 }}>
-                              {r.ok}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                      {(() => {
+                        const agg = calls.reduce<Record<string, { endpoint: string; model: string; count: number; latSum: number; ok: number }>>((m, c) => {
+                          const ep = c.endpoint || 'unknown'
+                          const key = ep
+                          if (!m[key]) {
+                            m[key] = { endpoint: ep, model: c.model || 'unknown', count: 0, latSum: 0, ok: 0 }
+                          }
+                          m[key].count += 1
+                          m[key].latSum += (c.ms || 0)
+                          if (c.ok) m[key].ok += 1
+                          return m
+                        }, {})
+                        return Object.values(agg).map(a => {
+                          const avgMs = a.count > 0 ? Math.round(a.latSum / a.count) : 0
+                          const okRate = a.count > 0 ? Math.round((a.ok / a.count) * 100) : 0
+                          const personaMap: Record<string, string> = {
+                            '/api/complete': 'Ghost Drafting',
+                            '/api/synonyms': 'Paraphrase Options',
+                            '/api/reactions': 'Reader Ambiguity',
+                            '/api/connect': 'Connect Bridges',
+                            'harper-local-wasm': 'Grammar Auto-fix',
+                          }
+                          return (
+                            <tr key={a.endpoint}>
+                              <td><code>{a.endpoint}</code></td>
+                              <td><strong>{personaMap[a.endpoint] || '—'}</strong></td>
+                              <td>{a.model}</td>
+                              <td>{avgMs}ms</td>
+                              <td>{a.count}</td>
+                              <td>
+                                <span style={{ color: okRate === 100 ? '#15803D' : 'var(--lt)', fontWeight: 600 }}>
+                                  {okRate}%
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      })()}
                     </tbody>
                   </table>
                 </div>
@@ -449,151 +452,7 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
             </div>
           )}
 
-          {/* ══════════════════════════════════════════════════
-              TAB 3: LIVE CALL LOG (THIS BROWSER)
-          ══════════════════════════════════════════════════ */}
-          {tab === 'live' && (
-            <div style={{ display: 'grid', gap: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  Showing {calls.length} recent model calls. Prompt bodies are never stored.
-                </span>
-                <button type="button" onClick={handleClear} style={{ fontSize: 11, padding: '3px 8px' }}>
-                  Clear Log
-                </button>
-              </div>
 
-              {calls.length === 0 ? (
-                <div style={{ padding: 30, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
-                  No live calls recorded yet. Open editor and generate suggestions or run review to see calls log here.
-                </div>
-              ) : (
-                <div className="metrics-table-wrap">
-                  <table className="metrics-table">
-                    <thead>
-                      <tr>
-                        <th>Time</th>
-                        <th>Endpoint</th>
-                        <th>Model</th>
-                        <th>Latency</th>
-                        <th>In / Out / Think</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {calls.map((c, i) => (
-                        <tr key={c.ts + '-' + i}>
-                          <td style={{ whiteSpace: 'nowrap' }}>{new Date(c.ts).toLocaleTimeString()}</td>
-                          <td><code>{c.endpoint}</code></td>
-                          <td style={{ fontSize: 11.5 }}>{c.model}</td>
-                          <td>{c.ms}ms</td>
-                          <td style={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {c.usage?.in || 0} / {c.usage?.out || 0} / {c.usage?.reasoning || 0}
-                          </td>
-                          <td>
-                            <span style={{ color: c.ok ? '#15803D' : 'var(--lt)', fontWeight: 700 }}>
-                              {c.ok ? '✔︎ OK' : '⚠︎ Error'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ══════════════════════════════════════════════════
-              TAB 4: META AI BENCHMARKS
-          ══════════════════════════════════════════════════ */}
-          {tab === 'benchmarks' && (
-            <div style={{ display: 'grid', gap: 20 }}>
-              <div>
-                <h3 className="metrics-h" style={{ margin: '0 0 4px' }}>
-                  Model Latency & Reasoning Benchmarks (stored snapshot)
-                </h3>
-                <div className="meta" style={{ marginBottom: 10 }}>
-                  Settings: {BENCH_PARAMS} · Historical snapshot, not live measurements — rerun bench scripts to refresh.
-                </div>
-                <div className="metrics-table-wrap">
-                  <table className="metrics-table">
-                    <thead>
-                      <tr>
-                        <th>Model</th>
-                        <th>Case</th>
-                        <th>Latency</th>
-                        <th>In Tokens</th>
-                        <th>Out Tokens</th>
-                        <th>Reasoning</th>
-                        <th>OK</th>
-                        <th>Prompt Tested</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {BENCH_MODELS.flatMap(m =>
-                        m.rows.map(r => (
-                          <tr key={m.model + r.case}>
-                            <td>
-                              <strong>{m.model}</strong>
-                              <div className="meta">{m.provider}</div>
-                            </td>
-                            <td>{r.case}</td>
-                            <td>{r.ms}ms</td>
-                            <td>{r.inp}</td>
-                            <td>{r.out}</td>
-                            <td>{r.reasoning}</td>
-                            <td><span style={{ color: '#15803D' }}>{r.ok}</span></td>
-                            <td className="meta" style={{ maxWidth: 320 }}>
-                              {BENCH_PROMPTS[r.case]}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="metrics-h" style={{ margin: '0 0 4px' }}>
-                  Mode Cycle Token Consumption (results/bench_modes.json)
-                </h3>
-                <div className="metrics-table-wrap">
-                  <table className="metrics-table">
-                    <thead>
-                      <tr>
-                        <th>Document Text</th>
-                        <th>Mode</th>
-                        <th>Calls</th>
-                        <th>In</th>
-                        <th>Out</th>
-                        <th>Reasoning</th>
-                        <th>Wall Clock</th>
-                        <th>API Cycle Description</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {BENCH_MODES.map((r, i) => (
-                        <tr key={i}>
-                          <td><strong>{r.text}</strong></td>
-                          <td><code>{r.mode}</code></td>
-                          <td>{r.calls}</td>
-                          <td>{r.inp}</td>
-                          <td>{r.out}</td>
-                          <td>{r.reasoning}</td>
-                          <td>{r.ms}ms</td>
-                          <td className="meta">
-                            Complete pass across analysis endpoints on seeded text corpus
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
 
         </div>
       </div>

@@ -75,6 +75,6 @@ npm run build --prefix frontend
 - `1`, `2`, `3`: Accept corresponding alternative when suggestion overlay or paraphrase popup is active.
 - `Tab`: Accept focused or primary suggestion.
 - `Alt` / visible button: Reroll alternative options for the current suggestion or finding.
-- `Ctrl/Cmd + Space`: Trigger draft assistance at cursor.
-- `Ctrl/Cmd + Shift + /`: Connect a selection of 2+ sentences (also auto-activates on selection).
+- `Ctrl/Cmd + Space`: Trigger draft assistance at cursor; with text selected opens synonym / paraphrase / tone popup (after `slowMs` pause).
+- `Ctrl/Cmd + Shift + /`: Expand Connect for a 2+ sentence selection from its synonym popup.
 - `Ctrl/Cmd + ,`: Open Settings & Writing Profile modal.

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { Settings as SettingsIcon } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -25,21 +25,22 @@ import CaretPopup, {
 import InlineReviewPopup from '../components/InlineReviewPopup'
 import SettingsMenu from '../components/SettingsMenu'
 import MetricsPopup from '../components/MetricsPopup'
-import { recordSuggestionOffered, recordSuggestionAccepted, recordRevisionAccepted, recordGhostFired, recordGhostCacheSaved, recordGhostAborted, recordGhostStaleDropped, recordGhostDebounceSaved } from '../lib/metrics'
+import { recordSuggestionOffered, recordSuggestionAccepted, recordRevisionAccepted, recordGhostFired, recordGhostCacheSaved, recordGhostAborted, recordGhostStaleDropped, recordGhostDebounceSaved, recordGhostReroll } from '../lib/metrics'
 
 import { AnchorDecorations, anchorStore, syncAnchors, syncGhost, syncFlash, flashStore, modeStore, syncPops, popStore, holdStore, syncHolds, connectStore, syncConnect } from '../editor/decorations'
 import { TextSelection } from '@tiptap/pm/state'
 import { contextService, type SelectionContext } from '../services/context-service'
 import { globalAnalysisService } from '../services/analysis-service'
 import { harperService } from '../services/harper-service'
-import { resolveAnchor, applySafeReplacement, TEXT_SEP } from '../editor/anchoring'
+import { resolveAnchor, applySafeReplacement, consumeProgrammaticApplyFlag, TEXT_SEP } from '../editor/anchoring'
 import type { Finding, Suggestion } from '../domain/finding'
 import { THEME_DEFINITIONS, SUPPORTED_LANGUAGES } from '../domain/writing-profile'
 import { loadSettings, saveSettings, type AppSettings } from '../lib/settings'
 import { idbSetDoc, idbGetDoc } from '../lib/storage'
 import { api } from '../lib/api'
-import { type ConnectSession, createConnectSession, hasConnectSelection, rerenderConnectSession } from '../lib/connect'
+import { CONNECT_RELATIONS, type ConnectSession, createConnectSession, firstAltOfRel, hasConnectSelection, rerenderConnectSession } from '../lib/connect'
 import { hashKey, cacheGet, cacheSet, saveLastGhost, loadLastGhost } from '../lib/ai-cache'
+import { cascadePopupRects, type PopupBox, type PopupId } from '../lib/popupLayout'
 import { sfxAccept, sfxDismiss, blip } from '../lib/sfx'
 
 export type AssistGranularity = 'Hint' | 'Phrase' | 'Sentence' | 'Question'
@@ -92,6 +93,13 @@ export default function EditorPage() {
     setNotice(msg)
     if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
     noticeTimer.current = window.setTimeout(() => setNotice(null), 4000)
+  }
+  // Dedupe repeated Harper failure toasts (lint runs on every keystroke).
+  const lastHarperErrorRef = useRef<string | null>(null)
+  const notifyHarperError = (msg: string) => {
+    if (lastHarperErrorRef.current === msg) return
+    lastHarperErrorRef.current = msg
+    notify(`Grammar check unavailable: ${msg}`)
   }
   const [connectSession, setConnectSession] = useState<ConnectSession | null>(null)
   const [connectPos, setConnectPos] = useState({ x: 16, y: 80, w: 320 })
@@ -199,6 +207,24 @@ export default function EditorPage() {
   // Selection & Paraphrase state (positioned below cursor)
   const [selectionContext, setSelectionContext] = useState<SelectionContext | null>(null)
   const [popupPos, setPopupPos] = useState<{ x: number; y: number; w?: number }>({ x: 200, y: 300 })
+  const popupRefs = useRef<Record<PopupId, HTMLDivElement | null>>({
+    ghost: null,
+    selection: null,
+    review: null,
+    connect: null,
+  })
+  const [popupPush, setPopupPush] = useState<Record<PopupId, number>>({
+    ghost: 0,
+    selection: 0,
+    review: 0,
+    connect: 0,
+  })
+  const setPopupRef = useCallback(
+    (id: PopupId) => (node: HTMLDivElement | null) => {
+      popupRefs.current[id] = node
+    },
+    [],
+  )
 
   // Inline Review Popup state for clicked underlined text or selection in Edit mode
   const [inlineReviewState, setInlineReviewState] = useState<{
@@ -219,6 +245,7 @@ export default function EditorPage() {
   const [selRow, setSelRow] = useState(0)
   const [selPage, setSelPage] = useState(0)
   const [selLoading, setSelLoading] = useState(false)
+  const [selError, setSelError] = useState<string | null>(null)
   const [suggestPopupPos, setSuggestPopupPos] = useState<{ x: number; y: number; w?: number } | null>(null)
   const [draftLoading, setDraftLoading] = useState(false)
   const [metricsOpen, setMetricsOpen] = useState(false)
@@ -285,7 +312,9 @@ export default function EditorPage() {
       },
     },
     onUpdate: ({ editor }) => {
-      ghostAutoAllowedRef.current = true
+      // A review apply dispatches a doc change that is not typing: don't let
+      // the ghost poller treat the accept like fresh typing at the caret.
+      ghostAutoAllowedRef.current = !consumeProgrammaticApplyFlag()
       if (connectSessionRef.current && !connectApplyingRef.current) keepConnectRef.current?.()
       setDocRevision(r => r + 1)
       // A keystroke invalidates the shown ghost/popup: clear it so the next
@@ -333,42 +362,14 @@ export default function EditorPage() {
         if (!inside) keepConnectRef.current?.()
       }
 
-      // Connect outranks synonyms / paraphrase / tone for 2+ sentence selections.
-      if (selCtx && hasConnectSelection(selCtx.selectedText)) {
-        setInlineReviewState(null)
-        setSelectionContext(selCtx)
-        setSelGrid(EMPTY_GRID)
-        setSelLoading(false)
-        if (editor.view) {
-          setPopupPos(placePopupBesideEditor(editor.view, selCtx.to, 400, 300, 220))
-        }
-        return
-      }
+      // A new selection always dismisses a stale inline review. Reader review
+      // opens from clicking an underline (see handleEditorClick), never from
+      // drag-selecting across a finding.
+      setInlineReviewState(null)
 
-      // Reader underlines active when left dock is open: check if selection overlaps any finding
-      if (leftOpen) {
-        const matchingFindings = findings.filter(f => {
-          if (f.status === 'resolved' || f.status === 'dismissed') return false
-          const rng = anchorStore.ranges.get(f.id)
-          if (!rng) return false
-          if (at === to) {
-            return at >= rng.from && at <= rng.to
-          }
-          return Math.max(at, rng.from) < Math.min(to, rng.to)
-        })
-
-        if (matchingFindings.length > 0 && editor.view) {
-          setInlineReviewState({
-            findings: matchingFindings,
-            position: placePopupBesideEditor(editor.view, to, 320, 220, 220),
-          })
-          setSelectionContext(null)
-          setHighlightedFindingId(matchingFindings[0].id)
-          return
-        }
-      }
-
-      // If no findings matched, standard selectionContext (Paraphrase popup below cursor)
+      // Selection and Connect are shown together for 2+ sentences. Connect is
+      // an explicit expansion from the selection grid, never an automatic
+      // replacement for synonyms / paraphrase / tone.
       setSelectionContext(selCtx)
       if (selCtx && editor.view) {
         setPopupPos(placePopupBesideEditor(editor.view, selCtx.to, 400, 300, 220))
@@ -424,10 +425,13 @@ export default function EditorPage() {
     applyConnectText(rerenderConnectSession(next))
   }
 
+  const [connectFocus, setConnectFocus] = useState(0)
+
   const startConnect = (ctx: SelectionContext) => {
     const raw = ctx.selectedText
     const orig = raw.trim()
     if (!orig) return
+    setConnectFocus(0)
     const lead = Math.max(0, raw.indexOf(orig))
     const session = createConnectSession(ctx.from + lead, orig, ctx.to)
     if (!session) return
@@ -477,28 +481,35 @@ export default function EditorPage() {
     })
   }
 
-  const cycleConnectRelation = (index: number) => {
+  const cycleConnectAlt = (seamIndex: number, dir: 1 | -1) => {
     blip('select')
     updateConnect(session => {
-      const seam = session.seams[index]
-      if (!seam) return
-      seam.rel = (seam.rel + 1) % 4
-      seam.v = 0
+      const seam = session.seams[seamIndex]
+      const alts = session.alts[seamIndex] || []
+      if (!seam || alts.length === 0) return
+      seam.v = (seam.v + dir + alts.length) % alts.length
     })
   }
 
-  const cycleConnectVariant = (index: number) => {
+  const cycleConnectRelation = (seamIndex: number) => {
     blip('select')
     updateConnect(session => {
-      const seam = session.seams[index]
-      if (seam) seam.v += 1
+      const seam = session.seams[seamIndex]
+      const alts = session.alts[seamIndex] || []
+      if (!seam || alts.length === 0) return
+      const curRel = alts[seam.v]?.rel ?? 0
+      const nextRel = (curRel + 1) % CONNECT_RELATIONS.length
+      seam.v = firstAltOfRel(alts, nextRel)
     })
   }
 
   const rerollConnect = () => {
     blip('select')
     updateConnect(session => {
-      session.seams.forEach(seam => { seam.v += 1 })
+      session.seams.forEach((seam, i) => {
+        const alts = session.alts[i] || []
+        if (alts.length > 0) seam.v = (seam.v + 1) % alts.length
+      })
     })
   }
 
@@ -747,6 +758,7 @@ export default function EditorPage() {
 
   /** Cycle prefetched alternatives in either direction; fetch when only one exists. */
   const handleGhostReroll = (dir: 1 | -1) => {
+    recordGhostReroll()
     const cur = ghostGroups[ghostLv] || []
     if (cur.length > 1) {
       const next = (ghostIdx + dir + cur.length) % cur.length
@@ -757,6 +769,24 @@ export default function EditorPage() {
       blip('select')
       return
     }
+    void handleRequestGhost({ isReroll: true })
+  }
+
+  /** Step cached ghost alternatives only (` / alt+``) — never fetches. */
+  const stepGhostOption = (dir: 1 | -1) => {
+    const cur = ghostGroups[ghostLv] || []
+    if (cur.length <= 1) return
+    const next = (ghostIdx + dir + cur.length) % cur.length
+    setGhostIdx(next)
+    lastGhostRef.current = { groups: ghostGroups, lv: ghostLv, idx: next }
+    saveLastGhost({ groups: ghostGroups, lv: ghostLv, idx: next })
+    showInlineGhost(ghostGroups, ghostLv, next)
+    blip('select')
+  }
+
+  /** Fresh ghost alternatives (redo). */
+  const handleGhostRefetch = () => {
+    recordGhostReroll()
     void handleRequestGhost({ isReroll: true })
   }
 
@@ -969,6 +999,10 @@ export default function EditorPage() {
   clearGhostOnNavRef.current = clearGhostOnNavigate
 
   const handleDismissSuggestions = () => {
+    blip('dismiss')
+    // Esc-dismissed ghost stays gone until the next keystroke: a pause with
+    // an unmoved caret must not reopen it on its own.
+    ghostAutoAllowedRef.current = false
     abortGhostRequest()
     anchorStore.ghost = ''
     if (editor) syncGhost(editor)
@@ -1051,6 +1085,7 @@ export default function EditorPage() {
     const ctl = new AbortController()
     selAbort.current = ctl
     setSelLoading(true)
+    setSelError(null)
     try {
       const before = editor.state.doc.textBetween(Math.max(0, from - 300), from, '\n')
       const selKey = 'sel:' + hashKey([suggestionNote, appSettings.writingTheme, selectedText.trim().toLowerCase(), before.slice(-300)])
@@ -1067,7 +1102,9 @@ export default function EditorPage() {
       if (live.from !== ctx.from || live.to !== ctx.to) return
       if (!cachedSel && res) cacheSet(selKey, res)
       const grid = parseSelGrid(res)
+      const any = SEL_COLS.some(c => (grid[c] ?? []).length > 0)
       setSelGrid(grid)
+      setSelError(any ? null : (res ? 'No alternatives found.' : 'Could not load alternatives.'))
       setSelCol(1)
       setSelRow(0)
       setSelPage(0)
@@ -1075,6 +1112,7 @@ export default function EditorPage() {
     } catch {
       if (ctl.signal.aborted || selReqId.current !== myId) return
       setSelGrid(EMPTY_GRID)
+      setSelError('Could not load alternatives.')
       setSelCol(1)
       setSelRow(0)
       setSelPage(0)
@@ -1118,13 +1156,52 @@ export default function EditorPage() {
   }
 
   const handleDismissSel = () => {
+    blip('dismiss')
     abortSelRequest()
     setSelectionContext(null)
     setSelGrid(EMPTY_GRID)
   }
 
+  /** Step the selection-grid cell forward/backward across visible cells. */
+  const stepSelCell = (dir: 1 | -1) => {
+    const cells: Array<[number, number]> = []
+    SEL_COLS.forEach((_c, ci) => {
+      visibleCells(selGrid, ci, selPage).forEach((_, ri) => cells.push([ci, ri]))
+    })
+    if (cells.length === 0) return
+    const cur = cells.findIndex(([c, r]) => c === selCol && r === selRow)
+    const at = cur < 0 ? (dir > 0 ? 0 : cells.length - 1) : (cur + dir + cells.length) % cells.length
+    const [nc, nr] = cells[at]
+    setSelCol(nc)
+    setSelRow(nr)
+    blip('select')
+  }
+
+  /** Refetch the selection grid (redo). */
+  const handleSelRefetch = () => {
+    recordGhostReroll()
+    void requestSelGrid()
+  }
+
+  const canExpandConnect =
+    !!selectionContext &&
+    !connectSession &&
+    hasConnectSelection(selectionContext.selectedText)
+
+  const handleExpandConnect = () => {
+    if (connectSessionRef.current) return
+    const live = editor ? contextService.getSelectionContext(editor) : selectionContext
+    if (!live || !hasConnectSelection(live.selectedText)) {
+      notify('Select two or more sentences to expand Connect.')
+      return
+    }
+    setSelectionContext(live)
+    startConnect(live)
+  }
+
   /** Page the selection grid forward/backward, wrapping at the ends. */
   const shiftSelPage = (dir: 1 | -1) => {
+    recordGhostReroll()
     const pages = Math.max(1, ...SEL_COLS.map(c => Math.ceil((selGrid[c]?.length || 0) / 3)))
     setSelPage(p => (p + dir + pages) % pages)
     setSelRow(0)
@@ -1140,6 +1217,7 @@ export default function EditorPage() {
     if (!selectionContext || selectionContext.selectedText.trim().length < 2) {
       setSelGrid(EMPTY_GRID)
       setSelLoading(false)
+      setSelError(null)
       return
     }
     // A fresh selection clears any open ghost state (and cancels its call)
@@ -1148,28 +1226,11 @@ export default function EditorPage() {
     anchorStore.ghost = ''
     if (editor) syncGhost(editor)
     setSuggestPopupPos(null)
+    setSelError(null)
 
-    if (hasConnectSelection(selectionContext.selectedText)) {
-      setSelGrid(EMPTY_GRID)
-      setSelLoading(false)
-      const ctx = selectionContext
-      const launch = () => {
-        const live = editor ? contextService.getSelectionContext(editor) : null
-        if (!live || !hasConnectSelection(live.selectedText)) return
-        if (live.from !== ctx.from || live.to !== ctx.to) return
-        startConnect(live)
-      }
-      if (selManualRef.current) {
-        selManualRef.current = false
-        launch()
-        return
-      }
-      connectTimerRef.current = window.setTimeout(launch, Math.max(100, appSettings.slowMs))
-      return () => {
-        clearConnectTimer()
-      }
-    }
-
+    // Every qualifying selection requests the synonym grid, including 2+
+    // sentence selections. The Connect button/keyboard shortcut expands the
+    // separate Connect panel.
     // Manual invoke already started the request; do not schedule a second one.
     if (selManualRef.current) {
       selManualRef.current = false
@@ -1192,6 +1253,8 @@ export default function EditorPage() {
     if (!editor) return
     const res = applySafeReplacement(editor, finding.anchor, suggestion.text)
     if (res.success) {
+      // Reactivate grammar immediately so red underlines return without typing.
+      void handleRunGrammar()
       recordRevisionAccepted()
       sfxAccept()
       globalAnalysisService.updateStatus(finding.id, 'resolved')
@@ -1215,10 +1278,115 @@ export default function EditorPage() {
     })
   }
 
+  /** Continue: jump caret to the next open comment/underline after the caret. */
+  const handleContinueReview = () => {
+    if (!editor) return
+    const currentIds = new Set(inlineReviewState?.findings.map(f => f.id) ?? [])
+    const positioned: Array<{ f: Finding; from: number }> = []
+    for (const f of findings) {
+      if (f.status === 'resolved' || f.status === 'dismissed') continue
+      if (currentIds.has(f.id)) continue
+      try {
+        const r = resolveAnchor(editor, f.anchor)
+        if (r) positioned.push({ f, from: r.from })
+      } catch { /* stale anchor: skip */ }
+    }
+    if (positioned.length === 0) {
+      notify('No more comments.')
+      return
+    }
+    positioned.sort((a, b) => a.from - b.from)
+    const caret = editor.state.selection.from
+    const next = positioned.find(p => p.from > caret) ?? positioned[0]
+    editor.chain().setTextSelection({ from: next.from, to: next.from }).scrollIntoView().run()
+    const atAnchor = positioned.filter(p => p.from === next.from).map(p => p.f)
+    setInlineReviewState({
+      findings: atAnchor,
+      position: placePopupBesideEditor(editor.view, next.from, 320, 220, 220),
+    })
+    setSelectionContext(null)
+    setHighlightedFindingId(atAnchor[0].id)
+    blip('select')
+  }
+
+  const [repromptingId, setRepromptingId] = useState<string | null>(null)
+
+  /** Reprompt reader for one finding: prepend fresh options, old ones move back. */
+  const handleRepromptReader = async (finding: Finding) => {
+    if (!editor || repromptingId || finding.persona !== 'reader') return
+    setRepromptingId(finding.id)
+    blip('select')
+    try {
+      const text = editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n\n')
+      const avoid = finding.suggestions.map(s => s.text)
+      const res = await api.reactions({
+        context: contextNote,
+        level: appSettings.writingTheme,
+        text,
+        persona: 'Critical Reader',
+        avoid,
+      })
+      const seen = new Set(avoid.map(t => t.trim().toLowerCase()))
+      const fresh: string[] = []
+      if (res?.ok && Array.isArray(res.reactions)) {
+        for (const rx of res.reactions) {
+          if ((rx.quote || '') !== finding.anchor.quotedText) continue
+          for (const o of (Array.isArray(rx.options) ? rx.options : [])) {
+            const t = typeof o === 'string' ? o.trim() : ''
+            if (t && !seen.has(t.toLowerCase())) {
+              seen.add(t.toLowerCase())
+              fresh.push(t)
+            }
+          }
+        }
+      }
+      if (fresh.length === 0) {
+        notify('No new options — the reader stands by its suggestions.')
+        return
+      }
+      const merged = [
+        ...fresh.map((t, i) => ({
+          id: `${finding.id}-re-${Date.now()}-${i}`,
+          text: t,
+          rationale: 'Reader rewrite (reprompt)',
+        })),
+        ...finding.suggestions,
+      ].slice(0, 6)
+      globalAnalysisService.updateSuggestions(finding.id, merged)
+      setInlineReviewState(prev =>
+        prev ? { ...prev, findings: prev.findings.map(f => (f.id === finding.id ? { ...f, suggestions: merged } : f)) } : prev
+      )
+      blip('done')
+    } catch {
+      notify('Reprompt failed. Try again.')
+    } finally {
+      setRepromptingId(null)
+    }
+  }
+
   // Single keyboard router for the caret popup (feel-test keys + legacy 1-3 / Ctrl+[ ]).
   // Ghost mode and selection-grid mode are mutually exclusive.
   const ghostOpen = suggestPopupPos != null && GHOST_LEVELS.some(l => ghostGroups[l].length > 0)
   const selOpen = selectionContext != null && SEL_COLS.some(c => selGrid[c].length > 0)
+  const ghostActive = !!suggestPopupPos && (ghostOpen || draftLoading) && !selOpen && !inlineReviewState
+  const reviewActive = !!leftOpen && !!inlineReviewState && inlineReviewState.findings.length > 0
+  const selectionActive =
+    !!selectionContext && !inlineReviewState && (selOpen || selLoading || !!selError)
+  const connectActive = !!connectSession
+  const ghostVisible = !isMobile && ghostActive
+  const reviewVisible = !isMobile && reviewActive
+  const selectionVisible = !isMobile && selectionActive
+  const connectVisible = !isMobile && connectActive
+  const ghostRenderPos = ghostVisible && suggestPopupPos
+    ? { ...suggestPopupPos, y: suggestPopupPos.y + popupPush.ghost }
+    : null
+  const selectionRenderPos = selectionVisible
+    ? { ...popupPos, y: popupPos.y + popupPush.selection }
+    : null
+  const reviewRenderPos = reviewVisible && inlineReviewState
+    ? { ...inlineReviewState.position, y: inlineReviewState.position.y + popupPush.review }
+    : null
+  const connectRenderTop = connectVisible ? connectPos.y + popupPush.connect : null
 
   // Keep popups glued below the live caret/selection while open: recompute on
   // every doc change so each popup follows the caret as you type. Scrolling
@@ -1247,6 +1415,71 @@ export default function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, docRevision, selectionContext, selOpen, selLoading, ghostOpen, draftLoading, inlineReviewState, placePopupBesideEditor])
 
+  // Downward-only cascade for floating popups. Base anchors stay aligned with
+  // the caret/selection; measured overlaps push lower popups down without ever
+  // moving an upper popup upward.
+  useLayoutEffect(() => {
+    if (isMobile) return
+    const boxes: PopupBox[] = []
+    const collect = (
+      id: PopupId,
+      node: HTMLDivElement | null,
+      base: { x: number; y: number; w?: number } | null,
+      visible: boolean,
+    ) => {
+      if (!visible || !node || !base) return
+      const rect = node.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) return
+      boxes.push({ id, x: rect.left, y: base.y, width: rect.width, height: rect.height })
+    }
+    collect('ghost', popupRefs.current.ghost, suggestPopupPos, ghostVisible)
+    collect('selection', popupRefs.current.selection, popupPos, selectionVisible)
+    collect('review', popupRefs.current.review, inlineReviewState?.position ?? null, reviewVisible)
+    collect('connect', popupRefs.current.connect, connectPos, connectVisible)
+
+    if (boxes.length < 2) {
+      setPopupPush(prev =>
+        prev.ghost === 0 && prev.selection === 0 && prev.review === 0 && prev.connect === 0
+          ? prev
+          : { ghost: 0, selection: 0, review: 0, connect: 0 },
+      )
+      return
+    }
+
+    const next = cascadePopupRects(boxes, window.innerHeight)
+    setPopupPush(prev =>
+      prev.ghost === next.ghost &&
+      prev.selection === next.selection &&
+      prev.review === next.review &&
+      prev.connect === next.connect
+        ? prev
+        : next,
+    )
+  }, [
+    isMobile,
+    ghostVisible,
+    selectionVisible,
+    reviewVisible,
+    connectVisible,
+    suggestPopupPos,
+    popupPos,
+    inlineReviewState,
+    connectPos,
+    ghostGroups,
+    ghostLv,
+    ghostIdx,
+    draftLoading,
+    selGrid,
+    selCol,
+    selRow,
+    selPage,
+    selLoading,
+    selError,
+    selectionContext,
+    connectSession,
+    docRevision,
+  ])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (connectSessionRef.current) {
@@ -1270,10 +1503,37 @@ export default function EditorPage() {
           if (!e.repeat) toggleConnectSeam(Number(e.code.slice(5)) - 1)
           return
         }
+        // Backquote family on the focused seam: ` next alt, alt+` prev, shift+` undo.
+        if (e.code === 'Backquote' && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault()
+          if (e.repeat) return
+          if (e.shiftKey && !e.altKey) { undoConnect(); return }
+          const n = connectSessionRef.current?.seams.length ?? 0
+          if (n <= 0) return
+          const f = ((connectFocus % n) + n) % n
+          if (e.altKey && !e.shiftKey) { cycleConnectAlt(f, -1); return }
+          if (!e.altKey && !e.shiftKey) { cycleConnectAlt(f, 1); return }
+        }
+        // Shift+Tab moves seam focus; Alt+0 rerolls connectors.
+        if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault()
+          if (e.repeat) return
+          const n = connectSessionRef.current?.seams.length ?? 0
+          if (n > 0) {
+            setConnectFocus(f => (f + 1) % n)
+            blip('select')
+          }
+          return
+        }
+        if (e.altKey && (e.code === 'Digit0' || e.key === '0') && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+          e.preventDefault()
+          if (!e.repeat) rerollConnect()
+          return
+        }
       }
 
-      // Tab accepts the active option
-      if (e.key === 'Tab' && (ghostOpen || selOpen)) {
+      // Tab accepts the active option (not while the review popup owns Tab)
+      if (e.key === 'Tab' && !e.shiftKey && (ghostOpen || selOpen) && !inlineReviewState) {
         e.preventDefault()
         if (selOpen) {
           const cells = visibleCells(selGrid, selCol, selPage)
@@ -1284,9 +1544,20 @@ export default function EditorPage() {
         return
       }
 
+      // Shift+Tab continue: ghost next level, sel next page.
+      if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && (ghostOpen || selOpen) && !inlineReviewState) {
+        e.preventDefault()
+        if (e.repeat) return
+        if (selOpen) { shiftSelPage(1); return }
+        const i = GHOST_LEVELS.indexOf(ghostLv)
+        handleGhostLevel(GHOST_LEVELS[(i + 1) % GHOST_LEVELS.length])
+        return
+      }
+
       // Digits select only (never accept): ghost 1-4 switches level,
       // sel 1-9 moves the active cell (Synonyms 1-3, Paraphrase 4-6, Tone 7-9).
-      if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey && (ghostOpen || selOpen)) {
+      // Skipped while the review popup owns digits.
+      if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey && (ghostOpen || selOpen) && !inlineReviewState) {
         const n = Number(e.key)
         if (selOpen) {
           const col = Math.floor((n - 1) / 3)
@@ -1316,16 +1587,37 @@ export default function EditorPage() {
         return
       }
 
-      // Alt dismisses the open suggestion (Esc still closes too).
-      if (e.key === 'Alt' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-        if (ghostOpen || selOpen || draftLoading || selLoading) {
-          e.preventDefault()
-          if (!e.repeat) {
-            handleDismissSuggestions()
-            handleDismissSel()
-          }
+      // Shift+` dismisses the open suggestion (Esc still closes too).
+      if (e.code === 'Backquote' && e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && (ghostOpen || selOpen) && !inlineReviewState) {
+        e.preventDefault()
+        if (!e.repeat) {
+          handleDismissSuggestions()
+          handleDismissSel()
+        }
+        return
+      }
+
+      // Backquote family: ` next option, alt+` previous option.
+      if (e.code === 'Backquote' && !e.shiftKey && !e.ctrlKey && !e.metaKey && (ghostOpen || selOpen) && !inlineReviewState) {
+        e.preventDefault()
+        if (e.repeat) return
+        if (ghostOpen) {
+          if (e.altKey) { stepGhostOption(-1); return }
+          stepGhostOption(1)
           return
         }
+        if (e.altKey) { stepSelCell(-1); return }
+        stepSelCell(1)
+        return
+      }
+
+      // Alt+0 redo: fresh ghost alternatives / refetch selection grid.
+      if (e.altKey && (e.code === 'Digit0' || e.key === '0') && !e.ctrlKey && !e.metaKey && !e.shiftKey && (ghostOpen || selOpen) && !inlineReviewState) {
+        e.preventDefault()
+        if (e.repeat) return
+        if (ghostOpen) handleGhostRefetch()
+        else handleSelRefetch()
+        return
       }
 
       // Ctrl+. reopens the last ghost suggestion at the caret
@@ -1360,14 +1652,13 @@ export default function EditorPage() {
         return
       }
 
-      // Ctrl/Cmd + Space activates: Connect for 2+ sentence selections,
-      // paraphrase grid for shorter selections, ghost suggestion otherwise.
+      // Ctrl/Cmd + Space activates the synonym grid for any selection and
+      // ghost suggestion at a caret. Connect is expanded separately with its
+      // button or Ctrl/Cmd+Shift+/.
       if ((e.ctrlKey || e.metaKey) && e.code === 'Space') {
         e.preventDefault()
         const liveSel = editor ? contextService.getSelectionContext(editor) : null
-        if (liveSel && hasConnectSelection(liveSel.selectedText)) {
-          startConnect(liveSel)
-        } else if (liveSel) {
+        if (liveSel) {
           selManualRef.current = true
           setSelectionContext(liveSel)
           void requestSelGrid(liveSel)
@@ -1377,7 +1668,7 @@ export default function EditorPage() {
         return
       }
 
-      // Ctrl/Cmd + Shift + / connects the current 2+ sentence selection.
+      // Ctrl/Cmd + Shift + / expands Connect for the current 2+ sentence selection.
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'Slash') {
         e.preventDefault()
         const liveSel = editor ? contextService.getSelectionContext(editor) : null
@@ -1401,7 +1692,7 @@ export default function EditorPage() {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [editor, ghostGroups, ghostLv, ghostIdx, selGrid, selCol, selRow, selPage, selectionContext, docRevision, draftLoading, selLoading]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [editor, ghostGroups, ghostLv, ghostIdx, selGrid, selCol, selRow, selPage, selectionContext, docRevision, draftLoading, selLoading, inlineReviewState, connectFocus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- READER (the only review persona) ---
   const handleRunReader = async () => {
@@ -1428,8 +1719,15 @@ export default function EditorPage() {
 
       if (readRes?.ok && Array.isArray(readRes.reactions) && readRes.reactions.length > 0) {
         for (const rx of readRes.reactions) {
+          // Prompt contract: only fixable passages come back, each with up to
+          // 3 pre-fetched replacement options. Skip stragglers with no options.
+          const options = (Array.isArray(rx.options) ? rx.options : [])
+            .filter((o: unknown): o is string => typeof o === 'string' && o.trim().length > 0)
+            .slice(0, 3)
+          if (options.length === 0) continue
+          const fid = `read-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
           readerFindings.push({
-            id: `read-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            id: fid,
             documentId: 'active-doc',
             persona: 'reader',
             kind: 'reader_observation',
@@ -1437,8 +1735,12 @@ export default function EditorPage() {
               quotedText: rx.quote || rx.context || 'text',
               documentRevision: docRevision,
             },
-            explanation: rx.text || 'Potential ambiguity or reader interpretation note.',
-            suggestions: [],
+            explanation: rx.text || 'Reader rewrite.',
+            suggestions: options.map((t: string, i: number) => ({
+              id: `${fid}-sug-${i}`,
+              text: t,
+              rationale: rx.text || 'Reader rewrite',
+            })),
             status: 'open',
             sourceRevision: docRevision,
             createdAt: Date.now(),
@@ -1522,7 +1824,7 @@ export default function EditorPage() {
       // Timeout safeguard: abort if grammar check takes too long
       const timeout = setTimeout(() => ctl.abort(), 15000)
 
-      const { findings: harperFindings } = await harperService.lint(
+      const { findings: harperFindings, error: harperError } = await harperService.lint(
         text,
         appSettings.language,
         docRevision
@@ -1530,14 +1832,24 @@ export default function EditorPage() {
 
       clearTimeout(timeout)
       if (ctl.signal.aborted) return
+      if (harperError) {
+        notifyHarperError(harperError)
+        globalAnalysisService.replacePersona('grammar', [])
+        return
+      }
+      lastHarperErrorRef.current = null
 
-      // Caret guard — skip lints at/behind the caret (still typing this word).
+      // Caret guard — skip only the lint under the caret (still typing this word).
       // Harper offsets are text-space: convert the PM caret the same way.
       const caretNow = editor.state.doc.textBetween(0, editor.state.selection.from, TEXT_SEP).length
       const grammarFindings: Finding[] = harperFindings.filter(f => {
         if (!f.anchor.quotedText.trim()) return false
-        // Offset-based lints (harper-service) can be guarded; quote-anchored fall back to include
-        if (f.anchor.endOffset != null && caretNow <= f.anchor.endOffset) return false
+        // Skip only the lint under the caret (the word being typed/edited).
+        // The old check dropped every lint at/after the caret, so accepting
+        // one fix wiped all later underlines until the next keystroke.
+        const s = f.anchor.startOffset
+        const e = f.anchor.endOffset
+        if (s != null && e != null && s <= caretNow && caretNow <= e) return false
         return true
       })
 
@@ -1576,9 +1888,15 @@ export default function EditorPage() {
     )
   }
 
+  const mobileSheetOpen = isMobile && (
+    (suggestPopupPos != null && (ghostOpen || draftLoading) && !selOpen && !inlineReviewState) ||
+    (selectionContext != null && !inlineReviewState && (selOpen || selLoading)) ||
+    (inlineReviewState != null && inlineReviewState.findings.length > 0)
+  )
+
   return (
     <div
-      className="byline-app-container"
+      className={`byline-app-container${mobileSheetOpen ? ' mobile-sheet-open' : ''}`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--bg)' }}
@@ -1599,7 +1917,7 @@ export default function EditorPage() {
       )}
       {/* 1. Top Navigation Bar */}
       <TopNavigation
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => { blip('open'); setSettingsOpen(true) }}
         onOpenMetrics={() => setMetricsOpen(true)}
         editor={editor}
         onToggleMobileDrawer={() => setMobileDrawerOpen(v => !v)}
@@ -1648,12 +1966,13 @@ export default function EditorPage() {
                 editor={editor}
                 highlightedFindingId={highlightedFindingId}
                 onToggleCollapse={() => setLeftOpen(false)}
+                onApplied={() => { void handleRunGrammar() }}
               />
             ) : (
               <div className="rail-strip" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 0' }}>
                 <button
                   type="button"
-                  onClick={() => setLeftOpen(true)}
+                  onClick={() => { blip('open'); setLeftOpen(true) }}
                   title="Expand Review Dock"
                   style={{ width: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700 }}
                 >
@@ -1661,7 +1980,7 @@ export default function EditorPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setLeftOpen(true)}
+                  onClick={() => { blip('open'); setLeftOpen(true) }}
                   title="Review"
                   style={{ width: 30, height: 30, padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--ai)' }}
                 >
@@ -1761,50 +2080,61 @@ export default function EditorPage() {
             </div>
 
             {/* Unified caret popup (feel-test): ghost levels at caret, selection grid on range */}
-            {suggestPopupPos && (ghostOpen || draftLoading) && !selOpen && !inlineReviewState && (
+            {ghostRenderPos && (
               <CaretPopup
+                containerRef={setPopupRef('ghost')}
                 mode="ghost"
-                position={suggestPopupPos}
-                maxWidth={suggestPopupPos.w}
+                position={ghostRenderPos}
+                maxWidth={ghostRenderPos.w}
                 loading={draftLoading}
                 ghostGroups={ghostGroups}
                 ghostLv={ghostLv}
                 ghostIdx={ghostIdx}
                 onGhostLevel={handleGhostLevel}
                 onAccept={() => handleSelectSuggestion(ghostIdx)}
-                onReroll={() => handleGhostReroll(1)}
-                onRerollPrev={() => handleGhostReroll(-1)}
+                onNext={() => stepGhostOption(1)}
+                onPrev={() => stepGhostOption(-1)}
+                onReroll={handleGhostRefetch}
                 onDismiss={handleDismissSuggestions}
               />
             )}
 
             {/* Inline Review Popup directly below cursor/underlined text when left dock is open */}
-            {leftOpen && inlineReviewState && inlineReviewState.findings.length > 0 && (
+            {reviewRenderPos && inlineReviewState && (
               <InlineReviewPopup
+                containerRef={setPopupRef('review')}
                 findings={inlineReviewState.findings}
-                position={inlineReviewState.position}
+                position={reviewRenderPos}
                 editor={editor}
                 onApplySuggestion={handleApplyInlineSuggestion}
                 onDismissFinding={handleDismissInlineFinding}
                 onClose={() => setInlineReviewState(null)}
+                onContinue={handleContinueReview}
+                onReprompt={handleRepromptReader}
+                repromptingId={repromptingId}
               />
             )}
 
             {/* Selection grid positioned below the range */}
-            {selectionContext && !inlineReviewState && (selOpen || selLoading) && (
+            {selectionRenderPos && (
               <CaretPopup
+                containerRef={setPopupRef('selection')}
                 mode="sel"
-                position={popupPos}
-                maxWidth={popupPos.w}
+                position={selectionRenderPos}
+                maxWidth={selectionRenderPos.w}
                 loading={selLoading}
+                message={selError || undefined}
+                showConnect={canExpandConnect}
+                onConnect={handleExpandConnect}
                 selGrid={selGrid}
                 selCol={selCol}
                 selRow={selRow}
                 selPage={selPage}
                 onSelCell={handleAcceptSelCell}
                 onAccept={() => handleAcceptSelCell(selCol, selRow)}
-                onReroll={() => shiftSelPage(1)}
-                onRerollPrev={() => shiftSelPage(-1)}
+                onNext={() => stepSelCell(1)}
+                onPrev={() => stepSelCell(-1)}
+                onReroll={handleSelRefetch}
                 onDismiss={handleDismissSel}
               />
             )}
@@ -1813,16 +2143,129 @@ export default function EditorPage() {
 
       </div>
 
-      {connectSession && (
-        <div className="connect-pop" style={{ position: 'fixed', left: connectPos.x, top: connectPos.y, width: connectPos.w, zIndex: 170 }}>
+      {/* Mobile: left dock becomes a slide-over drawer */}
+      {isMobile && mobileDrawerOpen && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 120,
+            background: 'rgba(20,20,25,.45)',
+          }}
+          onClick={() => setMobileDrawerOpen(false)}
+        >
+          <aside
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'absolute', top: 48, bottom: 0, left: 0,
+              width: 'min(320px, 88vw)',
+              background: 'var(--dock)',
+              borderRight: '1px solid var(--border)',
+              display: 'flex', flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            <ReviewDock
+              findings={findings}
+              onStatusChange={(id, st) => globalAnalysisService.updateStatus(id, st)}
+              onRunAnalysis={handleRunFullAnalysis}
+              analyzing={analyzing}
+              editor={editor}
+              highlightedFindingId={highlightedFindingId}
+              onApplied={() => { void handleRunGrammar() }}
+            />
+          </aside>
+        </div>
+      )}
+
+      {/* Mobile: bottom area hosts suggestions / paraphrase / comment UI */}
+      {isMobile && ((suggestPopupPos && (ghostOpen || draftLoading) && !selOpen && !inlineReviewState) ||
+        (selectionContext && !inlineReviewState && (selOpen || selLoading || !!selError)) ||
+        (inlineReviewState && inlineReviewState.findings.length > 0) ||
+        connectSession) && (
+        <div className="mobile-bottom-area">
+          {suggestPopupPos && (ghostOpen || draftLoading) && !selOpen && !inlineReviewState && (
+            <CaretPopup
+              sheet
+              mode="ghost"
+              position={suggestPopupPos}
+              maxWidth={suggestPopupPos.w}
+              loading={draftLoading}
+              ghostGroups={ghostGroups}
+              ghostLv={ghostLv}
+              ghostIdx={ghostIdx}
+              onGhostLevel={handleGhostLevel}
+              onAccept={() => handleSelectSuggestion(ghostIdx)}
+              onNext={() => stepGhostOption(1)}
+              onPrev={() => stepGhostOption(-1)}
+              onReroll={handleGhostRefetch}
+              onDismiss={handleDismissSuggestions}
+            />
+          )}
+          {selectionContext && !inlineReviewState && (selOpen || selLoading || !!selError) && (
+            <CaretPopup
+              sheet
+              containerRef={setPopupRef('selection')}
+              mode="sel"
+              position={popupPos}
+              maxWidth={popupPos.w}
+              loading={selLoading}
+              message={selError || undefined}
+              showConnect={canExpandConnect}
+              onConnect={handleExpandConnect}
+              selGrid={selGrid}
+              selCol={selCol}
+              selRow={selRow}
+              selPage={selPage}
+              onSelCell={handleAcceptSelCell}
+              onAccept={() => handleAcceptSelCell(selCol, selRow)}
+              onNext={() => stepSelCell(1)}
+              onPrev={() => stepSelCell(-1)}
+              onReroll={handleSelRefetch}
+              onDismiss={handleDismissSel}
+            />
+          )}
+          {inlineReviewState && inlineReviewState.findings.length > 0 && (
+            <InlineReviewPopup
+              sheet
+              containerRef={setPopupRef('review')}
+              findings={inlineReviewState.findings}
+              position={inlineReviewState.position}
+              editor={editor}
+              onApplySuggestion={handleApplyInlineSuggestion}
+              onDismissFinding={handleDismissInlineFinding}
+              onClose={() => setInlineReviewState(null)}
+              onContinue={handleContinueReview}
+              onReprompt={handleRepromptReader}
+              repromptingId={repromptingId}
+            />
+          )}
+          {connectSession && (
+            <div className="connect-pop" style={{ position: 'static', width: '100%' }}>
+              <ConnectPanel
+                session={connectSession}
+                onToggleSeam={toggleConnectSeam}
+                onCycleAlt={cycleConnectAlt}
+                onCycleRelation={cycleConnectRelation}
+                onReroll={rerollConnect}
+                onKeep={keepConnectFromPanel}
+                onUndo={undoConnect}
+                focus={connectFocus}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {!isMobile && connectSession && connectRenderTop != null && (
+        <div ref={setPopupRef('connect')} className="connect-pop" style={{ position: 'fixed', left: connectPos.x, top: connectRenderTop, width: connectPos.w, zIndex: 170 }}>
           <ConnectPanel
             session={connectSession}
             onToggleSeam={toggleConnectSeam}
+            onCycleAlt={cycleConnectAlt}
             onCycleRelation={cycleConnectRelation}
-            onCycleVariant={cycleConnectVariant}
             onReroll={rerollConnect}
             onKeep={keepConnectFromPanel}
             onUndo={undoConnect}
+            focus={connectFocus}
           />
         </div>
       )}

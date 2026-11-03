@@ -171,6 +171,17 @@ export function resolveAnchor(editor: Editor, anchor: TextAnchor): ResolvedRange
  * Strictly verifies anchor validity prior to mutation.
  * Preserves undo/redo history.
  */
+// A programmatic replacement dispatches a doc change that is not typing.
+// The flag lets the host tell ghost auto-fire apart from real keystrokes.
+let programmaticApplyPending = false
+export function markProgrammaticApply() { programmaticApplyPending = true }
+/** Consume the flag (true when the last update came from an apply, not typing). */
+export function consumeProgrammaticApplyFlag(): boolean {
+  const v = programmaticApplyPending
+  programmaticApplyPending = false
+  return v
+}
+
 export function applySafeReplacement(
   editor: Editor,
   anchor: TextAnchor,
@@ -202,9 +213,11 @@ export function applySafeReplacement(
       )
     )
 
+    markProgrammaticApply()
     editor.view.dispatch(tr)
     return { success: true }
   } catch (err: any) {
+    programmaticApplyPending = false
     return { success: false, error: err?.message || 'Transaction failed' }
   }
 }

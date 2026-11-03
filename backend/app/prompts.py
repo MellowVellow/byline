@@ -85,11 +85,17 @@ def annotate_prompt(context, level, text, before="", after="", candidates=""):
             "Give up to 3 alternatives, best first; replacement is alternatives[0]. For relevance issues alternatives can be empty.")
     return system, user
 
-def reactions_prompt(context, level, text, persona="Skeptical reader"):
+def reactions_prompt(context, level, text, persona="Skeptical reader", avoid=None):
     system = f"Reader persona: {persona}. JSON only. {QUOTE_RULE}"
-    user = (f"CONTEXT (author intent): {context or '(none)'}\n{_lvl(level)}\nTEXT:\n{fence('TEXT', text)}\n"
-            "TASK: Up to 4 reactions - questions, comments, compliments, critiques. Flag repetition, contradictions, unclear jumps. "
-            'JSON: {"reactions":[{"quote":"...","context":"...","kind":"question|comment|compliment|critique","text":"..."}]}')
+    avoid_list = [(a or "")[:160] for a in (avoid or [])[:24]]
+    avoid_list = [a for a in avoid_list if a.strip()]
+    avoid_block = (f"ALREADY SHOWN (all new options must differ from these — do not repeat or reword):\n{fence('AVOID', chr(10).join(avoid_list))}\n" if avoid_list else "")
+    user = (f"CONTEXT (author intent): {context or '(none)'}\n{_lvl(level)}\nTEXT:\n{fence('TEXT', text)}\n{avoid_block}"
+            "TASK: Flag ONLY passages where a concrete rewrite fix is possible (repetition, contradictions, unclear jumps). "
+            "Return an empty list when nothing is fixable: pure comments, compliments, or reactions with no fix are omitted, never returned. "
+            "For each flagged passage give up to 3 replacement options, best first, each swapping into the sentence grammatically "
+            "(same part of speech, keep a/an/the working). "
+            'JSON: {"reactions":[{"quote":"...","context":"...","kind":"critique|question","text":"...","options":["...","..."]}]}')
     return system, user
 
 def main_idea_prompt(context, level, text):

@@ -28,6 +28,8 @@ export interface UsageTelemetry {
   ghostAborted: number
   ghostStaleDropped: number
   ghostDebounceSaved: number
+  /** Manual rerolls across ghost + selection grids */
+  ghostRerolls: number
 }
 
 const EVENTS_KEY = 'byline.metrics.events.v1'
@@ -46,6 +48,7 @@ const DEFAULT_USAGE: UsageTelemetry = {
   ghostAborted: 0,
   ghostStaleDropped: 0,
   ghostDebounceSaved: 0,
+  ghostRerolls: 0,
 }
 
 export function loadUsageStats(): UsageTelemetry {
@@ -91,7 +94,7 @@ export function recordRevisionAccepted() {
   saveUsageStats(stats)
 }
 
-function bumpGhost(field: 'ghostFired' | 'ghostCacheSaved' | 'ghostAborted' | 'ghostStaleDropped' | 'ghostDebounceSaved') {
+function bumpGhost(field: 'ghostFired' | 'ghostCacheSaved' | 'ghostAborted' | 'ghostStaleDropped' | 'ghostDebounceSaved' | 'ghostRerolls') {
   try {
     const stats = loadUsageStats()
     stats[field] += 1
@@ -106,6 +109,7 @@ export const recordGhostCacheSaved = () => bumpGhost('ghostCacheSaved')
 export const recordGhostAborted = () => bumpGhost('ghostAborted')
 export const recordGhostStaleDropped = () => bumpGhost('ghostStaleDropped')
 export const recordGhostDebounceSaved = () => bumpGhost('ghostDebounceSaved')
+export const recordGhostReroll = () => bumpGhost('ghostRerolls')
 
 export function recordCall(meta: any, ok = true, errorReason?: string) {
   if (!meta?.endpoint) return

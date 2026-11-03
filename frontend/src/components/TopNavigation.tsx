@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import type { Editor } from '@tiptap/react'
+import { Settings as SettingsIcon } from 'lucide-react'
 import { exportService, type ExportFormat } from '../services/export-service'
 import { blip } from '../lib/sfx'
 import { Logo, ThemeToggle } from './Brand'
@@ -94,7 +95,7 @@ export default function TopNavigation({
           <button
             type="button"
             className="mobile-only-btn"
-            onClick={onToggleMobileDrawer}
+            onClick={() => { blip('toggle'); onToggleMobileDrawer?.() }}
             title="Toggle Drawer"
             style={{ padding: '3px 8px', fontSize: 16, minHeight: 28, borderRadius: 'var(--radius)', position: 'relative' }}
           >
@@ -178,13 +179,23 @@ export default function TopNavigation({
 
           {/* Dark / Light mode toggle — Byline brand icons */}
           <ThemeToggle />
+          <button
+            type="button"
+            onClick={() => { blip('open'); onOpenSettings() }}
+            title="Settings"
+            aria-label="Open settings"
+            className="settings-icon"
+            style={{ ...btnBase, padding: '2px 6px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <SettingsIcon size={15} strokeWidth={1.8} />
+          </button>
         </div>
 
         {/* Mobile ⋯ menu */}
         <div className="mobile-only-btn topbar-dropdown-container" style={{ position: 'relative', display: 'inline-flex' }}>
           <button
             type="button"
-            onClick={() => setMobileMenuOpen(v => !v)}
+            onClick={() => { blip('toggle'); setMobileMenuOpen(v => !v) }}
             style={{ padding: '2px 7px', fontSize: 13, minHeight: 28 }}
           >
             ⋯
@@ -200,8 +211,21 @@ export default function TopNavigation({
               }}
             >
               {onOpenMetrics && (
-                <button type="button" onClick={() => { setMobileMenuOpen(false); onOpenMetrics() }} style={{ width: '100%', padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}>Metrics</button>
+                <button type="button" onClick={() => { blip('open'); setMobileMenuOpen(false); onOpenMetrics() }} style={{ width: '100%', padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}>Metrics</button>
               )}
+              <div style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Export</div>
+              {(['docx', 'markdown', 'txt'] as ExportFormat[]).map((fmt, i) => (
+                <button
+                  key={fmt}
+                  type="button"
+                  onClick={() => { setMobileMenuOpen(false); handleExport(fmt) }}
+                  style={{ width: '100%', padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}
+                >
+                  {['Word (.docx)', 'Markdown (.md)', 'Plain Text (.txt)'][i]}
+                </button>
+              ))}
+              <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+              <button type="button" onClick={() => { blip('open'); setMobileMenuOpen(false); onOpenSettings() }} style={{ width: '100%', padding: '8px 12px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13 }}>Settings</button>
               <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
               <div style={{ padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>Theme</span>

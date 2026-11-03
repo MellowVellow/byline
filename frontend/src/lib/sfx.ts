@@ -30,7 +30,7 @@ export function getSfxInstrument(): SfxInstrument {
   if (saved === 'sine' || saved === 'square' || saved === 'sawtooth' || saved === 'triangle') {
     return saved
   }
-  return 'sine'
+  return 'triangle'
 }
 
 export function setSfxInstrument(inst: SfxInstrument) {
@@ -38,8 +38,11 @@ export function setSfxInstrument(inst: SfxInstrument) {
   if (synth) {
     try {
       synth.set({ oscillator: { type: inst } })
+      synth.volume.value = inst === 'sine' ? -18 : -26
     } catch { /* noop */ }
   }
+  // Force re-init of filter cutoff on next ensure if synth was released
+  if (!synth) ensurePromise = null
 }
 
 export function getSfxPitch(): number {
@@ -76,30 +79,43 @@ export function transposeNote(note: string, semitones: number): string {
   return `${NOTE_NAMES[newIdx]}${oct}`
 }
 
+let ensurePromise: Promise<any> | null = null
 async function ensure() {
   if (synth) return synth
-  tone = await import('tone')
-  await tone.start()
-  const comp = new tone.Compressor(-18, 3).toDestination()
-  const master = new tone.Gain(0.9).connect(comp)
-  const space = new tone.FeedbackDelay(0.16, 0.22)
-  space.wet.value = 0.07
-  space.connect(master)
-  const filter = new tone.Filter(1400, 'lowpass').connect(space)
-  const inst = getSfxInstrument()
-  synth = new tone.PolySynth(tone.Synth, {
-    oscillator: { type: inst },
-    envelope: { attack: 0.005, decay: 0.22, sustain: 0, release: 0.35 },
-  }).connect(filter)
-  synth.volume.value = -26
-  membrane = new tone.MembraneSynth({
-    pitchDecay: 0.009,
-    octaves: 5,
-    oscillator: { type: 'sine' },
-    envelope: { attack: 0.001, decay: 0.16, sustain: 0.01, release: 0.3 },
-  }).connect(filter)
-  membrane.volume.value = -18
-  return synth
+  if (ensurePromise) return ensurePromise
+  ensurePromise = (async () => {
+    tone = await import('tone')
+    await tone.start()
+    const comp = new tone.Compressor(-18, 3).toDestination()
+    const master = new tone.Gain(0.9).connect(comp)
+    const space = new tone.FeedbackDelay(0.16, 0.22)
+    space.wet.value = 0.07
+    space.connect(master)
+    // Sine ("Tone") carries almost no harmonics: a 1400Hz lowpass is fine,
+    // but route sine through a higher cutoff + hotter gain so it stays audible.
+    const inst = getSfxInstrument()
+    const cutoff = inst === 'sine' ? 5200 : 1400
+    const filter = new tone.Filter(cutoff, 'lowpass').connect(space)
+    synth = new tone.PolySynth(tone.Synth, {
+      oscillator: { type: inst },
+      envelope: { attack: 0.005, decay: 0.22, sustain: 0, release: 0.35 },
+    }).connect(filter)
+    synth.volume.value = inst === 'sine' ? -18 : -26
+    membrane = new tone.MembraneSynth({
+      pitchDecay: 0.009,
+      octaves: 5,
+      oscillator: { type: 'sine' },
+      envelope: { attack: 0.001, decay: 0.16, sustain: 0.01, release: 0.3 },
+    }).connect(filter)
+    membrane.volume.value = -18
+    return synth
+  })()
+  try {
+    return await ensurePromise
+  } catch (e) {
+    ensurePromise = null
+    throw e
+  }
 }
 
 function notes(list: string[], step = 0.05, dur = '32n') {

@@ -33,11 +33,11 @@ async def annotate(body: TextIn):
 @router.post("/api/reactions")
 async def reactions(body: TextIn):
     try:
-        ck = cache.key("reactions", body.level, body.text[:8000], body.persona)
+        ck = cache.key("reactions", body.level, body.text[:8000], body.persona, (body.avoid or [])[:24])
         hit = cache.get(ck)
         if hit is not None:
             return ok(reactions=hit, model="cache", usage={}, cached=True)
-        s, u = prompts.reactions_prompt(body.context, body.level, body.text, body.persona)
+        s, u = prompts.reactions_prompt(body.context, body.level, body.text, body.persona, body.avoid)
         data, usage, model = await llm.json_call(s, u, max_tokens=1100, temperature=0.6)
         out = filter_anchored(data.get("reactions", []), body.text)
         cache.set(ck, out)

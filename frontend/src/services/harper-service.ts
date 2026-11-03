@@ -1,4 +1,4 @@
-import { WorkerLinter, LocalLinter, Dialect, type Linter } from 'harper.js'
+import { WorkerLinter, LocalLinter, Dialect, type Linter, type LintOptions } from 'harper.js'
 import { binary } from 'harper.js/binary'
 import type { Finding } from '../domain/finding'
 
@@ -10,11 +10,43 @@ const DIALECT_MAP: Record<string, Dialect> = {
   'en-IN': Dialect.Indian,
 }
 
+/**
+ * Per harper.js docs (writewithharper.com/docs/harperjs/linting):
+ * - Interactive web apps must use WorkerLinter (WASM off the event loop);
+ *   LocalLinter is only a fallback (it blocks while compiling the dictionary).
+ * - Editor content is plain text, so every lint call passes
+ *   `{ language: 'plaintext' }` — the default is markdown, whose parser can
+ *   swallow quotes and shift spans in prose.
+ */
+const LINT_OPTIONS: LintOptions = { language: 'plaintext' }
+
+/** Give WASM compile+init a bounded window; never hang the lint pipeline. */
+const SETUP_TIMEOUT_MS = 25000
+/** After a total init failure, fail fast instead of re-spawning workers per keystroke. */
+const RETRY_COOLDOWN_MS = 60000
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+  })
+  return Promise.race([p, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer)
+  })
+}
+
 export class HarperService {
   private linter: Linter | null = null
   private currentDialect: Dialect = Dialect.American
   private initialized = false
   private initPromise: Promise<void> | null = null
+  private failedAt = 0
+  private lastError: string | null = null
+
+  /** Diagnostic snapshot for logging / UI. Never throws. */
+  status(): { ready: boolean; error: string | null } {
+    return { ready: this.initialized && !!this.linter, error: this.lastError }
+  }
 
   /**
    * Check whether Harper supports the requested language.
@@ -36,55 +68,74 @@ export class HarperService {
   async initialize(languageCode = 'en-US'): Promise<void> {
     if (this.initialized && this.linter) return
     if (this.initPromise) return this.initPromise
+    if (this.failedAt > 0 && Date.now() - this.failedAt < RETRY_COOLDOWN_MS) {
+      throw new Error(this.lastError || 'Harper unavailable (cooling down after init failure)')
+    }
 
     this.initPromise = (async () => {
       this.currentDialect = this.getDialect(languageCode)
+      this.lastError = null
 
-      try {
-        // Use WorkerLinter in browser contexts if Worker is supported
-        if (typeof Worker !== 'undefined') {
-          this.linter = new WorkerLinter({
-            binary,
-            dialect: this.currentDialect,
-          })
-        } else {
-          this.linter = new LocalLinter({
-            binary,
-            dialect: this.currentDialect,
-          })
-        }
-        await this.linter.setup()
+      const attempts: Array<{ name: string; make: () => Linter }> =
+        typeof Worker !== 'undefined'
+          ? [
+              { name: 'WorkerLinter', make: () => new WorkerLinter({ binary, dialect: this.currentDialect }) },
+              { name: 'LocalLinter', make: () => new LocalLinter({ binary, dialect: this.currentDialect }) },
+            ]
+          : [{ name: 'LocalLinter', make: () => new LocalLinter({ binary, dialect: this.currentDialect }) }]
 
-        // Load custom user dictionary from localStorage
-        await this.loadPersistedDictionary()
-        this.initialized = true
-      } catch (err) {
-        // Fallback to LocalLinter if Worker instantiation fails
+      let lastErr: unknown = null
+      for (const a of attempts) {
+        let candidate: Linter | null = null
         try {
-          this.linter = new LocalLinter({
-            binary,
-            dialect: this.currentDialect,
-          })
-          await this.linter.setup()
+          candidate = a.make()
+          await withTimeout(candidate.setup(), SETUP_TIMEOUT_MS, `Harper ${a.name} setup`)
+          this.linter = candidate
+          // Load custom user dictionary from localStorage
           await this.loadPersistedDictionary()
           this.initialized = true
-        } catch (innerErr) {
-          console.warn('[HarperService] Failed to initialize Harper linter:', innerErr)
-          throw innerErr
+          this.failedAt = 0
+          console.info(`[HarperService] ready via ${a.name} (dialect ${this.currentDialect})`)
+          return
+        } catch (err) {
+          lastErr = err
+          console.warn(`[HarperService] ${a.name} failed, trying fallback:`, err)
+          if (candidate) {
+            try {
+              await withTimeout(candidate.dispose(), 5000, `Harper ${a.name} dispose`)
+            } catch { /* best-effort cleanup */ }
+          }
+          this.linter = null
         }
-      } finally {
-        this.initPromise = null
       }
+
+      this.failedAt = Date.now()
+      const msg = lastErr instanceof Error ? lastErr.message : String(lastErr)
+      this.lastError = `Harper failed to start: ${msg}`
+      console.warn('[HarperService] Failed to initialize Harper linter:', lastErr)
+      throw new Error(this.lastError)
     })()
 
-    return this.initPromise
+    try {
+      return await this.initPromise
+    } finally {
+      this.initPromise = null
+    }
   }
 
   async setLanguage(languageCode: string): Promise<void> {
     const dialect = this.getDialect(languageCode)
     if (this.linter && this.currentDialect !== dialect) {
-      this.currentDialect = dialect
-      await this.linter.setDialect(dialect)
+      try {
+        this.currentDialect = dialect
+        await this.linter.setDialect(dialect)
+      } catch (err) {
+        // Worker may have died; force a fresh init on next lint.
+        console.warn('[HarperService] setDialect failed, will re-init:', err)
+        this.initialized = false
+        this.linter = null
+        throw err
+      }
     }
   }
 
@@ -114,9 +165,17 @@ export class HarperService {
     }
 
     if (!this.initialized || !this.linter) {
-      await this.initialize(languageCode)
+      try {
+        await this.initialize(languageCode)
+      } catch (err: any) {
+        return { findings: [], error: err?.message || 'Harper failed to start' }
+      }
     } else {
-      await this.setLanguage(languageCode)
+      try {
+        await this.setLanguage(languageCode)
+      } catch (err: any) {
+        return { findings: [], error: err?.message || 'Harper failed to switch dialect' }
+      }
     }
 
     if (!this.linter) {
@@ -124,7 +183,9 @@ export class HarperService {
     }
 
     try {
-      const organized = await this.linter.organizedLints(text)
+      // Plaintext: editor content is not markdown (docs default would parse
+      // quotes/headings as markup and can swallow spans in prose).
+      const organized = await this.linter.organizedLints(text, LINT_OPTIONS)
       const findings: Finding[] = []
       let counter = 0
 

@@ -126,4 +126,37 @@ describe('CaretPopup sel mode', () => {
     expect(onSelCell).toHaveBeenCalledWith(0, 1)
     cleanup()
   })
+
+  it('stays mounted with an error message when the grid is empty', () => {
+    const { container, cleanup } = renderPopup({
+      mode: 'sel',
+      position: { x: 10, y: 10 },
+      loading: false,
+      message: 'Could not load alternatives.',
+      onAccept: noop, onReroll: noop, onDismiss: noop,
+    })
+
+    expect(container.textContent).toContain('Could not load alternatives.')
+    cleanup()
+  })
+
+  it('offers Connect expansion for a qualifying selection', () => {
+    const onConnect = vi.fn()
+    const { container, cleanup } = renderPopup({
+      mode: 'sel',
+      position: { x: 10, y: 10 },
+      selGrid: GRID,
+      showConnect: true,
+      onConnect,
+      onAccept: noop, onReroll: noop, onDismiss: noop,
+    })
+
+    const connectButton = Array.from(container.querySelectorAll('button')).find(button =>
+      button.textContent?.includes('Connect'),
+    )
+    expect(connectButton).toBeDefined()
+    act(() => { connectButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(onConnect).toHaveBeenCalledTimes(1)
+    cleanup()
+  })
 })

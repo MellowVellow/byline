@@ -1,4 +1,5 @@
 import React from 'react'
+import { blip } from '../lib/sfx'
 import { THEME_DEFINITIONS } from '../domain/writing-profile'
 import type { ThemeId } from '../domain/document'
 
@@ -32,7 +33,7 @@ export default function SuggestionContext({ value, onChange }: SuggestionContext
             <button
               key={id}
               type="button"
-              onClick={() => onChange(template)}
+              onClick={() => { blip('select'); onChange(template) }}
               title={template}
               style={{
                 fontSize: 10.5,

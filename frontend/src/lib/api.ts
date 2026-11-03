@@ -1,5 +1,6 @@
 import { loadSettings } from './settings'
 import { z } from 'zod'
+import { recordCall } from './metrics'
 
 /** Backend envelope: every JSON response carries ok:boolean. Anything else
  *  (proxy error page, truncated body) is treated as a transport failure. */
@@ -20,20 +21,52 @@ function authHeaders(): Record<string, string> {
 }
 const providerHeaders = authHeaders
 async function post(path: string, body: unknown, signal?: AbortSignal): Promise<any | null> {
+  const start = performance.now()
   try {
     const r = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...providerHeaders() }, body: JSON.stringify(body), signal })
-    if (!r.ok) return null
+    const ms = Math.round(performance.now() - start)
+    if (!r.ok) {
+      try { recordCall({ endpoint: path, ok: false, ms, model: 'unknown', usage: { in: 0, out: 0 } }) } catch {}
+      return null
+    }
     const v = Envelope.safeParse(await r.json().catch(() => null))
-    return v.success && v.data.ok ? v.data : null
-  } catch { return null }
+    if (v.success && v.data.ok) {
+      try {
+        const meta = (v.data as any)?.meta || {}
+        recordCall({ endpoint: path, ok: true, ms, model: meta.model || meta.provider || 'unknown', usage: meta.usage || { in: meta.prompt_tokens || 0, out: meta.completion_tokens || 0, reasoning: meta.reasoning_tokens || 0 } })
+      } catch {}
+      return v.data
+    }
+    try { recordCall({ endpoint: path, ok: false, ms, model: 'unknown', usage: { in: 0, out: 0 } }) } catch {}
+    return null
+  } catch (e: any) {
+    const ms = Math.round(performance.now() - start)
+    if (e?.name !== 'AbortError') {
+      try { recordCall({ endpoint: path, ok: false, ms, model: 'unknown', usage: { in: 0, out: 0 } }) } catch {}
+    }
+    return null
+  }
 }
 async function postRaw(path: string, body: unknown, signal?: AbortSignal): Promise<any> {
+  const start = performance.now()
   try {
     const r = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...providerHeaders() }, body: JSON.stringify(body), signal })
+    const ms = Math.round(performance.now() - start)
     const v = Envelope.safeParse(await r.json().catch(() => null))
-    if (v.success) return v.data
+    if (v.success && v.data && v.data.ok !== false) {
+      try {
+        const meta = (v.data as any)?.meta || {}
+        recordCall({ endpoint: path, ok: true, ms, model: meta.model || meta.provider || 'unknown', usage: meta.usage || { in: meta.prompt_tokens || 0, out: meta.completion_tokens || 0, reasoning: meta.reasoning_tokens || 0 } })
+      } catch {}
+      return v.data
+    }
+    try { recordCall({ endpoint: path, ok: false, ms, model: 'unknown', usage: { in: 0, out: 0 } }) } catch {}
     return { ok: false, error: `HTTP ${r.status} (no JSON from backend)` }
   } catch (e: any) {
+    const ms = Math.round(performance.now() - start)
+    if (e?.name !== 'AbortError') {
+      try { recordCall({ endpoint: path, ok: false, ms, model: 'unknown', usage: { in: 0, out: 0 } }) } catch {}
+    }
     if (e?.name === 'AbortError') return { ok: false, aborted: true }
     return { ok: false, error: `Cannot reach backend at ${BASE || 'same origin'} — is :8000 running?` }
   }

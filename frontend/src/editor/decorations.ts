@@ -27,10 +27,28 @@ export function subtractRange(r: { from: number; to: number }, taken: { from: nu
 }
 
 // Underline palette: purple reader, red grammar.
+// Rendered as background paint (behind the text) so descenders (g, y)
+// never punch gaps: solid bar for reader, SVG squiggle for grammar.
 const KIND_COLORS: Record<string, string> = {
   reader: 'var(--ai)',
   reaction: 'var(--ai)',
   grammar: 'var(--lt)',
+}
+
+/** Resolve a CSS var to a hex color for embedding in SVG data URIs. */
+function cssVarHex(name: string, fallback: string): string {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+    if (/^#[0-9a-f]{6}$/i.test(v)) return v
+    const m = v.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/)
+    if (m) return '#' + [m[1], m[2], m[3]].map(n => Number(n).toString(16).padStart(2, '0')).join('')
+  } catch { /* fall through */ }
+  return fallback
+}
+
+function squiggleBg(colorHex: string): string {
+  const c = encodeURIComponent(colorHex)
+  return `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='5' viewBox='0 0 12 5'%3E%3Cpath d='M0 3.5 Q 3 0.5 6 2.5 T 12 2.5' fill='none' stroke='${c}' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E")`
 }
 
 function groupOverlapping(anchors: Array<{ id: string; kind: string; from: number; to: number }>): Array<{ items: typeof anchors; from: number; to: number }> {
@@ -77,12 +95,17 @@ function buildAnchors(doc: any): Decoration[] {
     if (g.items.length === 1) {
       const a = g.items[0]
       const color = KIND_COLORS[a.kind] || 'var(--lt)'
-      // Grammar underlines are wavy red (Harper feel); reader underlines stay solid.
-      const wavy = a.kind === 'grammar' ? ' text-decoration-style: wavy;' : ''
+      // Single line only: solid bar (reader) or squiggle (grammar), painted
+      // as background so it sits behind the text with no descender gaps.
+      // Never text-decoration/border here: PM merges class + inline style
+      // onto one span, and those stacked into the old solid+dotted double.
+      const style = a.kind === 'grammar'
+        ? `background-image: ${squiggleBg(cssVarHex('--lt', '#D83343'))}; background-repeat: repeat-x; background-position: 0 100%; background-size: 12px 5px; padding-bottom: 6px; border-radius: 2px;`
+        : `background-image: linear-gradient(90deg, ${color}, ${color}); background-size: 100% 2px; background-repeat: no-repeat; background-position: 0 100%; padding-bottom: 4px; border-radius: 2px;`
       decos.push(Decoration.inline(g.from, g.to, {
         class: `anch anch-${a.kind}${anchorStore.linkedId === a.id ? ' anch-linked' : ''}`,
         'data-anchor-id': a.id,
-        style: `text-decoration-line: underline;${wavy} text-decoration-color: ${color}; text-decoration-thickness: 2px; text-underline-offset: 3px; border-radius: 2px;`,
+        style,
       }))
     } else {
       // Multiple overlapping anchors on same range -> merged gradient underline

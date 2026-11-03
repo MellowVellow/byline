@@ -72,8 +72,14 @@ export default function Landing() {
     <div>
       <header className="topbar">
         <Logo /><div className="spacer" />
-        <a className="btn" href="/demo">Public demo</a>
-        <a className="btn primary" href="/app">Open app</a>
+        <nav className="desktop-only-btn" aria-label="Homepage sections" style={{ display: 'inline-flex', alignItems: 'center', gap: 16, marginRight: 8, fontSize: 13 }}>
+          <a href="#how" style={{ color: 'var(--muted)', textDecoration: 'none' }}>How it works</a>
+          <a href="#why" style={{ color: 'var(--muted)', textDecoration: 'none' }}>Why Byline</a>
+          <a href="#testimonials" style={{ color: 'var(--muted)', textDecoration: 'none' }}>Writers</a>
+          <a href="#faq" style={{ color: 'var(--muted)', textDecoration: 'none' }}>FAQ</a>
+        </nav>
+        <a className="btn" href="/demo">Try it</a>
+        <a className="btn primary" href="#waitlist">Join waitlist</a>
         <ThemeToggle />
       </header>
 
@@ -110,8 +116,8 @@ export default function Landing() {
               <div className="proof-cols">
                 <div>
                   <p>
-                    <span style={{ textDecoration: 'underline wavy var(--lt) 1.5px', textUnderlineOffset: 4 }}>Studies show writers who revise less produces better work.</span>{' '}
-                    <span style={{ textDecoration: 'underline dotted var(--ai) 1.5px', textUnderlineOffset: 4 }}>This is clearly obvious to anyone who has tried.</span>{' '}
+                    <span style={{ textDecoration: 'underline wavy var(--lt) 1.5px', textUnderlineOffset: 4, textDecorationSkipInk: 'none' }}>Studies show writers who revise less produces better work.</span>{' '}
+                    <span style={{ borderBottom: '2px solid var(--ai)', paddingBottom: 1 }}>This is clearly obvious to anyone who has tried.</span>{' '}
                     <span style={{ color: 'var(--grey)', fontStyle: 'italic' }}>One approach is to treat each draft as a conversation|</span>
                   </p>
                 </div>
@@ -143,7 +149,7 @@ export default function Landing() {
         </section>
 
         {/* ── HOW IT WORKS ── */}
-        <section className="lp-section lp-how" aria-labelledby="how-heading">
+        <section id="how" className="lp-section lp-how" aria-labelledby="how-heading">
           <h2 id="how-heading" className="lp-section-title">How it works</h2>
           <p className="lp-section-sub">Four steps from blank page to finished draft. You approve each change.</p>
           <div className="lp-steps">
@@ -158,7 +164,7 @@ export default function Landing() {
         </section>
 
         {/* ── WHY BYLINE ── */}
-        <section className="lp-section lp-why" aria-labelledby="why-heading">
+        <section id="why" className="lp-section lp-why" aria-labelledby="why-heading">
           <h2 id="why-heading" className="lp-section-title">Why Byline</h2>
           <p className="lp-section-sub">Most writing tools replace the writer. Byline keeps the writer in control.</p>
           <div className="lp-why-grid">
@@ -173,7 +179,7 @@ export default function Landing() {
         </section>
 
         {/* ── TESTIMONIALS ── */}
-        <section className="lp-section lp-testimonials" aria-labelledby="testimonials-heading">
+        <section id="testimonials" className="lp-section lp-testimonials" aria-labelledby="testimonials-heading">
           <h2 id="testimonials-heading" className="lp-section-title">What writers say</h2>
           <div className="lp-testi-grid">
             {TESTIMONIALS.map((t, i) => (
@@ -186,7 +192,7 @@ export default function Landing() {
         </section>
 
         {/* ── FAQ ── */}
-        <section className="lp-section lp-faq" aria-labelledby="faq-heading">
+        <section id="faq" className="lp-section lp-faq" aria-labelledby="faq-heading">
           <h2 id="faq-heading" className="lp-section-title">FAQ</h2>
           <div className="lp-faq-list">
             {FAQS.map((f, i) => (
@@ -206,7 +212,7 @@ export default function Landing() {
         </section>
 
         {/* ── FINAL CTA ── */}
-        <section className="lp-section lp-cta" aria-label="Get started">
+        <section id="waitlist" className="lp-section lp-cta" aria-label="Get started">
           <h2>Start writing with Byline</h2>
           <p>No account. No upload. Runs in your browser.</p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>

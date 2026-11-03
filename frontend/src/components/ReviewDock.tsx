@@ -12,6 +12,8 @@ export interface ReviewDockProps {
   editor: Editor | null
   highlightedFindingId?: string | null
   onToggleCollapse?: () => void
+  /** Fired after a dock apply succeeds, so the host can refresh grammar. */
+  onApplied?: () => void
 }
 
 /** Reader accent (purple observations). */
@@ -37,6 +39,12 @@ export function accentFor(finding: { persona: string }) {
   return finding.persona === 'grammar' ? GRAMMAR_ACCENT : READER_ACCENT
 }
 
+/** Dock quote preview: cut beyond 20 words (full text stays in title + editor). */
+export function truncateQuote(q: string, maxWords = 20): string {
+  const words = q.trim().split(/\s+/)
+  return words.length > maxWords ? words.slice(0, maxWords).join(' ') + '...' : q
+}
+
 const STATUS_LABELS: Record<string, string> = {
   all: 'All statuses',
   open: 'Open',
@@ -59,6 +67,7 @@ export default function ReviewDock({
   editor,
   highlightedFindingId,
   onToggleCollapse,
+  onApplied,
 }: ReviewDockProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedStatus, setSelectedStatus] = useState<FindingStatus | 'all'>('open')
@@ -109,6 +118,7 @@ export default function ReviewDock({
     if (res.success) {
       sfxAccept()
       onStatusChange(finding.id, 'resolved')
+      onApplied?.()
     } else {
       alert(res.error || 'Failed to apply replacement.')
     }
@@ -137,8 +147,6 @@ export default function ReviewDock({
   })
 
   const openCount = findings.filter(f => f.status === 'open' || f.status === 'stale').length
-  const openReader = findings.filter(f => f.persona !== 'grammar' && (f.status === 'open' || f.status === 'stale')).length
-  const openGrammar = findings.filter(f => f.persona === 'grammar' && (f.status === 'open' || f.status === 'stale')).length
   const meta = READER_ACCENT
 
   return (
@@ -148,13 +156,13 @@ export default function ReviewDock({
           <span className="swatch" style={{ background: 'var(--ai)' }} />
           <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--ink)', whiteSpace: 'nowrap' }}>Review</h3>
           <span className="meta" style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 6, whiteSpace: 'nowrap' }}>
-            {openCount} open{openGrammar > 0 ? ` (${openReader} reader · ${openGrammar} grammar)` : ''}
+            {openCount} open
           </span>
         </div>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <button
             type="button"
-            onClick={() => void onRunAnalysis()}
+            onClick={() => { blip('open'); void onRunAnalysis() }}
             disabled={analyzing}
             title="Run Reader review"
             style={{ padding: '3px 10px', fontSize: 11.5, fontWeight: 700, minHeight: 'auto' }}
@@ -168,7 +176,7 @@ export default function ReviewDock({
           {onToggleCollapse && (
             <button
               type="button"
-              onClick={onToggleCollapse}
+              onClick={() => { blip('toggle'); onToggleCollapse() }}
               title="Collapse Reader Dock"
               style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '2px 6px', minHeight: 'auto', fontSize: 13, fontWeight: 700 }}
             >
@@ -197,7 +205,7 @@ export default function ReviewDock({
           <button
             type="button"
             title="Filter by status"
-            onClick={() => { setFilterMenuOpen(v => !v); setSortMenuOpen(false) }}
+            onClick={() => { blip('open'); setFilterMenuOpen(v => !v); setSortMenuOpen(false) }}
             style={{
               display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', fontSize: 12,
               border: selectedStatus !== 'all' ? '1px solid var(--blue)' : '1px solid var(--border)',
@@ -224,7 +232,7 @@ export default function ReviewDock({
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => { setSelectedStatus(s.id); setFilterMenuOpen(false) }}
+                    onClick={() => { blip('select'); setSelectedStatus(s.id); setFilterMenuOpen(false) }}
                     style={{
                       width: '100%', padding: '7px 12px', textAlign: 'left', background: selectedStatus === s.id ? 'var(--hover)' : 'none', border: 'none',
                       cursor: 'pointer', fontSize: 12,
@@ -246,7 +254,7 @@ export default function ReviewDock({
           <button
             type="button"
             title="Sort comments"
-            onClick={() => { setSortMenuOpen(v => !v); setFilterMenuOpen(false) }}
+            onClick={() => { blip('open'); setSortMenuOpen(v => !v); setFilterMenuOpen(false) }}
             style={{
               display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', fontSize: 12,
               border: sortBy !== 'document' ? '1px solid var(--blue)' : '1px solid var(--border)',
@@ -273,7 +281,7 @@ export default function ReviewDock({
                   <button
                     key={v}
                     type="button"
-                    onClick={() => { setSortBy(v); setSortMenuOpen(false) }}
+                    onClick={() => { blip('select'); setSortBy(v); setSortMenuOpen(false) }}
                     style={{
                       width: '100%', padding: '7px 12px', textAlign: 'left', background: sortBy === v ? 'var(--hover)' : 'none', border: 'none',
                       cursor: 'pointer', fontSize: 12,
@@ -294,7 +302,7 @@ export default function ReviewDock({
         {(selectedStatus !== 'open' || sortBy !== 'document') && (
           <button
             type="button"
-            onClick={() => { setSelectedStatus('open'); setSortBy('document') }}
+            onClick={() => { blip('dismiss'); setSelectedStatus('open'); setSortBy('document') }}
             title="Clear filters and sort"
             style={{ padding: '4px 8px', fontSize: 11, color: 'var(--muted)', border: 'none', background: 'none', cursor: 'pointer', minHeight: 'auto' }}
           >
@@ -383,13 +391,14 @@ export default function ReviewDock({
 
                 {f.anchor?.quotedText && (
                   <div
+                    title={f.anchor.quotedText}
                     style={{
                       fontFamily: '"Source Serif 4", serif', fontStyle: 'italic', fontSize: 13,
                       color: 'var(--ink-5)', background: 'var(--paper-2)', padding: '4px 8px',
                       borderRadius: 4, borderLeft: `2px solid ${meta.color}`,
                     }}
                   >
-                    “{f.anchor.quotedText}”
+                    “{truncateQuote(f.anchor.quotedText)}”
                   </div>
                 )}
 

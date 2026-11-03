@@ -1,5 +1,6 @@
 import React from 'react'
 import type { ReviewTemplate } from '../lib/review-templates'
+import { blip } from '../lib/sfx'
 
 export interface ContextInputProps {
   value: string
@@ -20,7 +21,7 @@ export default function ContextInput({ value, onChange, templates = [] }: Contex
               <button
                 key={t.id}
                 type="button"
-                onClick={() => onChange(t.text)}
+                onClick={() => { blip('select'); onChange(t.text) }}
                 title={t.text}
                 style={{
                   fontSize: 10.5,

@@ -32,3 +32,10 @@ def test_user_text_fenced_everywhere():
     for _, u in [prompts.reactions_prompt("c", "General", "hi"), prompts.main_idea_prompt("c", "General", "hi"),
                  prompts.outline_prompt("hi"), prompts.claims_prompt("hi"), prompts.lint_prompt("c", "hi", "[]")]:
         assert "<<<TEXT" in u
+
+
+def test_reactions_avoid_block():
+    _, u = prompts.reactions_prompt("c", "General", "hi", avoid=["old option"])
+    assert "ALREADY SHOWN" in u and "old option" in u
+    _, u2 = prompts.reactions_prompt("c", "General", "hi")
+    assert "ALREADY SHOWN" not in u2

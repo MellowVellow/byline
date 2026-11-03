@@ -21,6 +21,7 @@ export interface AppSettings {
   /** Writing space + caret accents per preset. */
   paper: string
   paperLine: string
+  verticalRule: string
   caret: string
   btnBg: string
   btnInk: string
@@ -60,6 +61,7 @@ const SettingsSchema = z.object({
   fontSize: z.number().min(10).max(40),
   lineHeight: z.number().min(1).max(3),
   paperWidth: z.enum(['narrow', 'normal', 'wide', 'full']),
+  density: z.enum(['comfortable', 'compact']),
   temperature: z.number().min(0).max(2),
   maxTokens: z.number().int().min(1).max(8000),
   topP: z.number().min(0).max(1),
@@ -67,9 +69,26 @@ const SettingsSchema = z.object({
   reduceMotion: z.boolean(),
   spellcheck: z.boolean(),
   showWordCount: z.boolean(),
+  showMetrics: z.boolean(),
   writingTheme: z.enum(['neutral', 'academic', 'gen-z', 'buzzword']),
   language: z.string().max(20),
   slowMs: z.number().min(100).max(3000),
+  metaModel: z.string().max(200),
+  ai: z.string().max(30),
+  grammar: z.string().max(30),
+  fix: z.string().max(30),
+  suggest: z.string().max(30),
+  selection: z.string().max(30),
+  uiBg: z.string().max(30),
+  uiPanel: z.string().max(30),
+  uiBgLight: z.string().max(30),
+  uiPanelLight: z.string().max(30),
+  paper: z.string().max(30),
+  paperLine: z.string().max(30),
+  verticalRule: z.string().max(30),
+  caret: z.string().max(30),
+  btnBg: z.string().max(30),
+  btnInk: z.string().max(30),
 }).partial()
 
 export interface ColorPreset {
@@ -86,6 +105,7 @@ export interface ColorPreset {
   uiPanelLight: string // Light-mode UI panel (rails) override
   paper: string     // Writing space (paper) background
   paperLine: string // Writing space vertical margin line (--proof)
+  verticalRule: string // Writing space vertical rule
   caret: string     // Caret / cursor accent
   btnBg: string     // Primary button background
   btnInk: string    // Primary button text
@@ -96,18 +116,19 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
   byline: {
     label: 'Byline',
     description: 'Default marks: red, purple, amber, blue',
-    ai: '#6D3BE0',
-    grammar: '#C0281F',
+    ai: '#B094E9',
+    grammar: '#D83343',
     fix: '#16A34A',
     suggest: '#626A75',
-    selection: '#F5E3B0',
+    selection: '#FEE180',
     uiBg: '#0F1115',
     uiPanel: '#16181D',
     uiBgLight: '#F8F9FA',
     uiPanelLight: '#EFF1F4',
     paper: '#FFFFFF',
-    paperLine: '#C0281F',
-    caret: '#6D3BE0',
+    paperLine: '#D83343',
+    verticalRule: '#E2E4E8',
+    caret: '#B094E9',
     btnBg: '#6D3BE0',
     btnInk: '#FFFFFF',
   },
@@ -125,6 +146,7 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     uiPanelLight: '#ECE9E2',
     paper: '#FFFDF8',
     paperLine: '#B91C1C',
+    verticalRule: '#ECE9E2',
     caret: '#4338CA',
     btnBg: '#4338CA',
     btnInk: '#FFFFFF',
@@ -143,6 +165,7 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     uiPanelLight: '#E6EFF3',
     paper: '#FFFFFF',
     paperLine: '#E11D48',
+    verticalRule: '#E6EFF3',
     caret: '#0891B2',
     btnBg: '#0891B2',
     btnInk: '#FFFFFF',
@@ -161,6 +184,7 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     uiPanelLight: '#E5EFE6',
     paper: '#FFFFFF',
     paperLine: '#DC2626',
+    verticalRule: '#E5EFE6',
     caret: '#059669',
     btnBg: '#059669',
     btnInk: '#FFFFFF',
@@ -179,6 +203,7 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     uiPanelLight: '#F1E8DE',
     paper: '#FFFEFA',
     paperLine: '#EA580C',
+    verticalRule: '#F1E8DE',
     caret: '#C026D3',
     btnBg: '#C026D3',
     btnInk: '#FFFFFF',
@@ -197,6 +222,7 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     uiPanelLight: '#F0F0F0',
     paper: '#FFFFFF',
     paperLine: '#52525B',
+    verticalRule: '#F0F0F0',
     caret: '#3F3F46',
     btnBg: '#3F3F46',
     btnInk: '#FFFFFF',
@@ -299,6 +325,7 @@ export function applySettings(s: AppSettings) {
     // Writing space, margin line, caret, buttons follow preset in light mode
     if (s.paper) root.style.setProperty('--paper', s.paper)
     if (s.paperLine) root.style.setProperty('--proof', s.paperLine)
+    if (s.verticalRule) root.style.setProperty('--vertical-rule', s.verticalRule)
     if (s.caret) {
       root.style.setProperty('--caret', s.caret)
       root.style.setProperty('caret-color', s.caret)
@@ -332,8 +359,8 @@ export function saveSettings(s: AppSettings) {
 export interface Shortcut { keys: string; action: string; context?: string }
 export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
   { group: 'Drafting', items: [
-    { keys: 'Ctrl/⌘ Space', action: 'Request ghost text — or paraphrase grid when text is selected', context: 'Editor' },
-    { keys: 'Ctrl/⌘ ⇧ /', action: 'Connect a 2+ sentence selection', context: 'Editor' },
+    { keys: 'Ctrl/⌘ Space', action: 'Request ghost text — or synonym/paraphrase grid when text is selected', context: 'Editor' },
+    { keys: 'Ctrl/⌘ ⇧ /', action: 'Expand Connect for a 2+ sentence selection', context: 'Selection grid open' },
     { keys: 'Esc / Tab', action: 'Undo / keep an applied Connect', context: 'Connect open' },
     { keys: 'Alt + 1–9 / Alt + R', action: 'Toggle a Connect seam / reroll connectors', context: 'Connect open' },
     { keys: '1 – 4', action: 'Select completion level (cue / question / fragment / sentence)', context: 'Options open' },

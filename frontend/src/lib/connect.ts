@@ -11,10 +11,14 @@ const LINKED = /^(however|but|yet|so|also|still|instead|moreover|plus)\b/i
 const CASUAL = /n['’]t|’s\b|crazy|just|lots|really|gonna/i
 const FIGURE = /\b(trillions?|billions?|millions?|\d[\d,.]*\s?(%|percent))/i
 
+export interface ConnectAlt {
+  rel: number
+  text: string
+}
+
 export interface ConnectSeam {
   on: boolean
   v: number
-  rel: number
 }
 
 export interface ConnectMark {
@@ -32,6 +36,7 @@ export interface ConnectSession {
   casual: boolean
   dels: string[]
   marks: ConnectMark[]
+  alts: ConnectAlt[][]
 }
 
 export function splitSentences(text: string): string[] {
@@ -52,20 +57,72 @@ export function isLinked(sentence: string): boolean {
   return LINKED.test(sentence)
 }
 
-export function connectRelationLabel(seam: ConnectSeam): string {
-  return CONNECT_RELATIONS[seam.rel] || CONNECT_RELATIONS[0]
-}
-
-export function connectVariantLabel(seam: ConnectSeam, casual: boolean): string {
-  const reg = casual ? 0 : 1
-  const set = CONNECT_CONNECTORS[seam.rel]?.[reg] || CONNECT_CONNECTORS[0][reg]
-  return set[seam.v % set.length]
-}
-
 export function guessConnectRelation(previous: string, next: string): number {
   if (/\b(not|no|little|never)\b|n['’]t/i.test(previous) || /\b(but|however|although|yet|though)\b/i.test(next)) return 0
   if (/^(for example|such as)/i.test(next)) return 3
   return /\b(build|because|cause|so)\b/i.test(next) ? 1 : 2
+}
+
+export function connectRelationLabel(seam: ConnectSeam, alts: ConnectAlt[]): string {
+  return CONNECT_RELATIONS[alts[seam.v]?.rel] || CONNECT_RELATIONS[0]
+}
+
+export function connectVariantLabel(seam: ConnectSeam, alts: ConnectAlt[]): string {
+  return alts[seam.v]?.text || ''
+}
+
+export function firstAltOfRel(alts: ConnectAlt[], rel: number): number {
+  const i = alts.findIndex(a => a.rel === rel)
+  return i >= 0 ? i : 0
+}
+
+export function guessConnectConnector(previous: string, next: string, casual: boolean): { rel: number; connector: string } {
+  const rel = guessConnectRelation(previous, next)
+  const reg = casual ? 0 : 1
+  const set = CONNECT_CONNECTORS[rel]?.[reg] || []
+  return { rel, connector: set[0] || '' }
+}
+
+export function extractConnector(sentence: string): { connector: string; rest: string } | null {
+  const all: string[] = []
+  for (const rel of CONNECT_CONNECTORS) {
+    for (const set of rel) {
+      for (const c of set) all.push(c)
+    }
+  }
+  const pattern = all
+    .map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'))
+    .join('|')
+  const re = new RegExp('^(' + pattern + ')\\s*', 'i')
+  const m = sentence.match(re)
+  if (!m) return null
+  const connector = m[0].trimEnd()
+  return { connector, rest: sentence.slice(m[0].length) }
+}
+
+export function buildSeamAlts(sentence: string, prev: string, casual: boolean): ConnectAlt[] {
+  const alts: ConnectAlt[] = []
+  const seen = new Set<string>()
+  const reg = casual ? 0 : 1
+
+  // Include existing connector if the sentence already starts with one
+  const existing = extractConnector(sentence)
+  if (existing) {
+    const rel = guessConnectRelation(prev, sentence)
+    alts.push({ rel, text: existing.connector })
+    seen.add(existing.connector.toLowerCase())
+  }
+
+  for (let r = 0; r < 4; r++) {
+    const set = CONNECT_CONNECTORS[r][reg]
+    for (const c of set) {
+      if (seen.has(c.toLowerCase())) continue
+      alts.push({ rel: r, text: c })
+      seen.add(c.toLowerCase())
+    }
+  }
+
+  return alts
 }
 
 export function isCasualRegister(text: string): boolean {
@@ -84,24 +141,37 @@ function nextWord(sentence: string): string {
   return sentence.split(/\s+/)[0] || ''
 }
 
-function segmentsFor(sents: string[], seams: ConnectSeam[], casual: boolean, i: number): Array<[string, string]> {
+function segmentsFor(sents: string[], seams: ConnectSeam[], alts: ConnectAlt[][], i: number): Array<[string, string]> {
   const next = sents[i + 1]
   const seam = seams[i]
-  if (!seam?.on || LINKED.test(next)) return [['k', next]]
 
-  const connector = connectVariantLabel(seam, casual)
+  if (!seam.on) return [['k', next]]
+
+  const alt = alts[i][seam.v] || { rel: seam.v % 4, text: '' }
   const lead = next.match(/^(it['’]s just that|the thing is|basically)\s+/i)
-  if (lead) return [['d', lead[0].trim()], ['i', connector], ['k', ' ' + next.slice(lead[0].length)]]
+
+  if (lead) {
+    return [['d', lead[0].trim()], ['i', alt.text], ['k', ' ' + next.slice(lead[0].length)]]
+  }
+
+  const existing = extractConnector(next)
+  if (existing) {
+    return [['d', existing.connector], ['i', alt.text], ['k', ' ' + existing.rest]]
+  }
 
   const first = nextWord(next)
-  if (/^(I|[A-Z]{2,})\b/.test(first)) return [['i', connector + ' '], ['k', next]]
-  return [['d', first], ['i', connector + ' ' + lowerFirst(first)], ['k', next.slice(first.length)]]
+  if (/^(I|[A-Z]{2,})\b/.test(first)) {
+    return [['i', alt.text + ' '], ['k', next]]
+  }
+
+  return [['d', first], ['i', alt.text + ' ' + lowerFirst(first)], ['k', next.slice(first.length)]]
 }
 
 export function transformConnect(
   orig: string,
   seams: ConnectSeam[],
   casual: boolean,
+  alts: ConnectAlt[][],
 ): { text: string; marks: ConnectMark[]; dels: string[] } {
   const sents = splitSentences(orig)
   if (sents.length < 2) return { text: orig, marks: [], dels: [] }
@@ -113,7 +183,7 @@ export function transformConnect(
   seams.forEach((_seam, i) => {
     plain += ' '
     let removed = ''
-    for (const [kind, value] of segmentsFor(sents, seams, casual, i)) {
+    for (const [kind, value] of segmentsFor(sents, seams, alts, i)) {
       if (kind === 'd') {
         removed += value
       } else {
@@ -127,17 +197,25 @@ export function transformConnect(
   return { text: plain, marks, dels }
 }
 
+
 export function createConnectSession(from: number, raw: string, to?: number): ConnectSession | null {
   const orig = raw.trim()
   const sents = splitSentences(orig)
   if (sents.length < 2) return null
-  const seams = sents.slice(1).map((next, i) => ({
-    on: true,
-    v: 0,
-    rel: guessConnectRelation(sents[i], next),
-  }))
+
   const casual = isCasualRegister(orig)
-  const transformed = transformConnect(orig, seams, casual)
+  const seams: ConnectSeam[] = []
+  const altsPerSeam: ConnectAlt[][] = []
+
+  for (let i = 0; i < sents.length - 1; i++) {
+    const alts = buildSeamAlts(sents[i + 1], sents[i], casual)
+    const guessed = guessConnectConnector(sents[i], sents[i + 1], casual)
+    const v = alts.findIndex(a => a.rel === guessed.rel && a.text === guessed.connector)
+    seams.push({ on: true, v: v >= 0 ? v : 0 })
+    altsPerSeam.push(alts)
+  }
+
+  const transformed = transformConnect(orig, seams, casual, altsPerSeam)
   return {
     from,
     to: to ?? from + orig.length,
@@ -148,11 +226,12 @@ export function createConnectSession(from: number, raw: string, to?: number): Co
     casual,
     dels: transformed.dels,
     marks: transformed.marks,
+    alts: altsPerSeam,
   }
 }
 
 export function rerenderConnectSession(session: ConnectSession): ConnectSession {
-  const transformed = transformConnect(session.orig, session.seams, session.casual)
+  const transformed = transformConnect(session.orig, session.seams, session.casual, session.alts)
   return {
     ...session,
     text: transformed.text,
