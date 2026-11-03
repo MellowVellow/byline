@@ -3,7 +3,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.security import is_safe_public_url, rate_ok, fence
 from app.routers.research import parse_verdict
-from app.services.setup_service import fallback_questions, MAPS_TO
 from app.models import CompleteIn, TextIn
 
 def test_ssrf_blocks_private():
@@ -32,8 +31,3 @@ def test_parse_verdict():
     assert parse_verdict("Evidence supports the claim. Dogs need walks.")[0] == "supports"
     assert parse_verdict("Evidence contradicts this. No effect found.")[0] == "contradicts"
     assert parse_verdict("It depends on breed. Lifespans vary.")[0] == "qualifies"
-
-def test_fallback_questions_map_to_settings():
-    qs = fallback_questions("Argue cats vs dogs", "school essay")
-    assert len(qs) >= 5
-    assert all(q["maps_to"] in MAPS_TO and q["options"] for q in qs)

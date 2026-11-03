@@ -11,7 +11,7 @@ describe('EditorPage Mount for /app', () => {
     const root = createRoot(div)
 
     await act(async () => {
-      root.render(<EditorPage demo={false} />)
+      root.render(<EditorPage />)
     })
 
     expect(div.innerHTML).toContain('byline-app-container')
@@ -29,7 +29,7 @@ describe('EditorPage Mount for /app', () => {
     const root = createRoot(div)
 
     await act(async () => {
-      root.render(<EditorPage demo={false} />)
+      root.render(<EditorPage />)
     })
 
     expect(div.innerHTML).toContain('byline-app-container')

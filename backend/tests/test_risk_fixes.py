@@ -118,20 +118,3 @@ def test_cache_evicts_without_growth():
     for i in range(600):
         cache.set(f"k{i}", {"v": i}, ttl=300)
     assert len(cache._store) <= 501
-
-
-def test_explore_empty_and_live_shapes():
-    r = client.post("/api/explore", json={"query": "", "context": ""})
-    assert r.json()["ok"] is False
-
-    from unittest.mock import AsyncMock as _AM
-    with patch("app.routers.research.llm.responses_call", new_callable=_AM) as mock_resp, \
-         patch("app.routers.research.llm.json_call", new_callable=_AM) as mock_json:
-        mock_resp.return_value = {"text": '{"facts":[]}', "search_results": [], "annotations": [],
-                                  "usage": {}, "model": "mock:m", "mock": True}
-        mock_json.return_value = ({"angles": [{"type": "Question", "text": "Does it last?", "why": "Open"}]}, {}, "mock:m")
-        r = client.post("/api/explore", json={"query": "Does AI reduce creativity?", "context": "essay", "count": 4})
-        d = r.json()
-        assert d["ok"] is True and d["query"].startswith("Does AI")
-        assert d["angles"][0]["text"] == "Does it last?"
-        assert d["mock"] is True

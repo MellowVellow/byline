@@ -9,7 +9,6 @@ export interface AppSettings {
   theme: ThemeMode
   ai: string
   grammar: string
-  explore: string
   fix: string
   selection: string
   suggest: string
@@ -47,6 +46,8 @@ export interface AppSettings {
   // Writing profile
   writingTheme: 'neutral' | 'academic' | 'gen-z' | 'buzzword'
   language: string
+  /** Ghost suggestion trigger thresholds (ms). */
+  slowMs: number
 }
 
 /** Runtime validation for stored settings. Unknown keys stripped, wrong
@@ -68,6 +69,7 @@ const SettingsSchema = z.object({
   showWordCount: z.boolean(),
   writingTheme: z.enum(['neutral', 'academic', 'gen-z', 'buzzword']),
   language: z.string().max(20),
+  slowMs: z.number().min(100).max(3000),
 }).partial()
 
 export interface ColorPreset {
@@ -75,7 +77,6 @@ export interface ColorPreset {
   description: string
   ai: string        // Purple / reader
   grammar: string   // Red / grammar underline + hold marks
-  explore: string   // Blue / explore underline
   fix: string       // Green / auto-fix flash
   suggest: string   // Grey / ghost suggestions
   selection: string // Yellow / selection highlight
@@ -97,7 +98,6 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     description: 'Default marks: red, purple, amber, blue',
     ai: '#6D3BE0',
     grammar: '#C0281F',
-    explore: '#1765CC',
     fix: '#16A34A',
     suggest: '#626A75',
     selection: '#F5E3B0',
@@ -116,7 +116,6 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     description: 'Dark red, indigo, brass, blue',
     ai: '#4338CA',
     grammar: '#B91C1C',
-    explore: '#1D4ED8',
     fix: '#15803D',
     suggest: '#475569',
     selection: '#E0E7FF',
@@ -135,7 +134,6 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     description: 'Rose, cyan, ochre, steel blue',
     ai: '#0891B2',
     grammar: '#E11D48',
-    explore: '#0284C7',
     fix: '#059669',
     suggest: '#64748B',
     selection: '#CFFAFE',
@@ -154,7 +152,6 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     description: 'Red, green, olive, sky blue',
     ai: '#059669',
     grammar: '#DC2626',
-    explore: '#0284C7',
     fix: '#16A34A',
     suggest: '#6B7280',
     selection: '#D1FAE5',
@@ -173,7 +170,6 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     description: 'Orange, magenta, gold, indigo',
     ai: '#C026D3',
     grammar: '#EA580C',
-    explore: '#4F46E5',
     fix: '#65A30D',
     suggest: '#78716C',
     selection: '#FDE68A',
@@ -192,7 +188,6 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     description: 'Gray scale for focused drafting',
     ai: '#3F3F46',
     grammar: '#52525B',
-    explore: '#52525B',
     fix: '#3F3F46',
     suggest: '#A1A1AA',
     selection: '#E4E4E7',
@@ -234,6 +229,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   reasoningEffort: 'minimal',
   writingTheme: 'neutral',
   language: 'en-US',
+  slowMs: 350,
 }
 
 const KEY = 'byline.settings.v1'
@@ -272,7 +268,6 @@ export function applySettings(s: AppSettings) {
   // Apply colors to root CSS custom properties
   root.style.setProperty('--ai', s.ai)
   root.style.setProperty('--lt', s.grammar || COLOR_PRESETS.byline.grammar)
-  root.style.setProperty('--explore', s.explore || COLOR_PRESETS.byline.explore)
   root.style.setProperty('--fix', s.fix || COLOR_PRESETS.byline.fix)
   root.style.setProperty('--grey', s.suggest || COLOR_PRESETS.byline.suggest)
   root.style.setProperty('--link', s.selection)
@@ -332,20 +327,21 @@ export function saveSettings(s: AppSettings) {
 export interface Shortcut { keys: string; action: string; context?: string }
 export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
   { group: 'Drafting', items: [
-    { keys: 'Ctrl/⌘ Space', action: 'Request completions at cursor', context: 'Editor' },
+    { keys: 'Ctrl/⌘ Space', action: 'Request ghost text — or paraphrase grid when text is selected', context: 'Editor' },
     { keys: 'Ctrl/⌘ /', action: 'Open links and connectors', context: 'Editor' },
-    { keys: '1 – 4', action: 'Set completion level (cue / question / fragment / sentence)', context: 'Options open' },
-    { keys: '1 – 9', action: 'Accept grid cell', context: 'Grid open' },
-    { keys: 'Tab', action: 'Accept first option', context: 'Options open' },
-    { keys: 'Alt + R / `', action: 'List new options', context: 'Options open' },
+    { keys: '1 – 4', action: 'Select completion level (cue / question / fragment / sentence)', context: 'Options open' },
+    { keys: '1 – 9', action: 'Select grid cell', context: 'Grid open' },
+    { keys: 'Tab', action: 'Accept selected option', context: 'Options open' },
+    { keys: 'Ctrl/⌘ [ / ]', action: 'Previous / next alternative (grid page)', context: 'Options open' },
+    { keys: 'Alt', action: 'Dismiss options', context: 'Options open' },
     { keys: 'Ctrl/⌘ .', action: 'Show last suggestions (reopens after dismiss)', context: 'Editor' },
-    { keys: 'Esc', action: 'Close options / clear selection', context: 'Options open' },
+    { keys: 'Esc', action: 'Close options and cancel the request', context: 'Options open' },
     { keys: 'Double-click word', action: 'Show synonyms for word', context: 'Editor' },
   ] },
   { group: 'Review & Edit', items: [
     { keys: 'Click line', action: 'Show Reader note below cursor', context: 'Edit mode' },
     { keys: 'Select text', action: 'Show options below selection', context: 'Edit mode' },
-    { keys: 'Tab', action: 'Show next Reader note', context: 'Note open' },
+    { keys: '|', action: 'Show next note in the same area', context: 'Note open' },
     { keys: 'Enter / Click Accept', action: 'Apply change to draft', context: 'Note open' },
     { keys: 'Esc', action: 'Close review note', context: 'Note open' },
   ] },

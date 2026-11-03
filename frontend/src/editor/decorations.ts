@@ -26,12 +26,11 @@ export function subtractRange(r: { from: number; to: number }, taken: { from: nu
   return segs.filter(s => s.to > s.from)
 }
 
-// Underline palette: purple reader, red grammar, blue explore.
+// Underline palette: purple reader, red grammar.
 const KIND_COLORS: Record<string, string> = {
   reader: 'var(--ai)',
   reaction: 'var(--ai)',
   grammar: 'var(--lt)',
-  explore: 'var(--explore, var(--blue))',
 }
 
 function groupOverlapping(anchors: Array<{ id: string; kind: string; from: number; to: number }>): Array<{ items: typeof anchors; from: number; to: number }> {

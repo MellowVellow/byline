@@ -54,7 +54,7 @@ def complete_prompt(context, level, before, after, assist, facts=None, last_two=
             f"TEXT BEFORE CURSOR:\n{fence('BEFORE', before or '(empty)')}\nTEXT AFTER CURSOR:\n{fence('AFTER', after or '(empty)')}\n")
     return system, user
 
-def complete_levels_prompt(before, after, level, avoid=None, n=6):
+def complete_levels_prompt(context, before, after, level, avoid=None, n=6):
     # One call returning all four ghost levels; the app parses the groups.
     # cue = 2-4 word nudge; question = a short question that prompts the writer;
     # fragment = words that continue the text; sentence = words that finish the sentence.
@@ -66,7 +66,7 @@ def complete_levels_prompt(before, after, level, avoid=None, n=6):
     avoid_list = [(a or "")[:120] for a in (avoid or [])[:24]]
     avoid_list = [a for a in avoid_list if a.strip()]
     avoid_block = (f"ALREADY SHOWN (all {n} must differ from these — do not repeat or reword):\n{fence('AVOID', chr(10).join(avoid_list))}\n" if avoid_list else "")
-    user = (f"{_lvl(level)}\nTEXT BEFORE CURSOR:\n{fence('BEFORE', before or '(empty)')}\n"
+    user = (f"CONTEXT (what the finished text is about): {context or '(infer from text)'}\n{_lvl(level)}\nTEXT BEFORE CURSOR:\n{fence('BEFORE', before or '(empty)')}\n"
             f"TEXT AFTER CURSOR:\n{fence('AFTER', after or '(empty)')}\n{avoid_block}"
             f'TASK: Return ONLY JSON {{"cue":[{n} strings],"question":[{n} strings],"fragment":[{n} strings],"sentence":[{n} strings]}}. '
             "cue = 2-4 word nudge; question = a short question that prompts the writer (each ends with '?'); "

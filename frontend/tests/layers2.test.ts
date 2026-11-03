@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { RIGHT_TAB_ORDER, TAB_THEME, ANNOTATION_COLORS, anchorKey, toggled, groupByClaim, ghostInsertText, safeUrl, rankByAccepted, lastTwoSentences } from '../src/lib/layers'
-import { FALLBACK_ISSUES, FALLBACK_REACTIONS, FALLBACK_READINGS, SAMPLE_DOC } from '../src/lib/fallback'
 
 describe('tab order + colors', () => {
   it('order is language reader sources suggest lint', () => {
@@ -39,10 +38,4 @@ describe('safeUrl + ranking + lastTwo', () => {
     expect(rankByAccepted(['generic filler words here', 'daily walks cost care'], ['daily walks and cost of care'])[0]).toContain('daily')
   })
   it('extracts last two sentences', () => { expect(lastTwoSentences('One. Two! Three? Four.')).toBe('Three? Four.') })
-})
-describe('demo fallback anchors verbatim in SAMPLE_DOC', () => {
-  const plain = SAMPLE_DOC.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
-  it('issues anchored', () => { for (const i of FALLBACK_ISSUES) expect(plain).toContain(i.quote) })
-  it('reactions anchored', () => { for (const r of FALLBACK_REACTIONS) expect(plain).toContain(r.quote) })
-  it('readings anchored', () => { for (const r of FALLBACK_READINGS) expect(plain).toContain(r.claim_quote) })
 })

@@ -61,7 +61,7 @@ export default function ReviewDock({
   onToggleCollapse,
 }: ReviewDockProps) {
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedStatus, setSelectedStatus] = useState<FindingStatus | 'all'>('all')
+  const [selectedStatus, setSelectedStatus] = useState<FindingStatus | 'all'>('open')
   const [sortBy, setSortBy] = useState<'document' | 'newest'>('document')
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [sortMenuOpen, setSortMenuOpen] = useState(false)
@@ -159,7 +159,11 @@ export default function ReviewDock({
             title="Run Reader review"
             style={{ padding: '3px 10px', fontSize: 11.5, fontWeight: 700, minHeight: 'auto' }}
           >
-            {analyzing ? 'Reading…' : 'Run Review'}
+            {analyzing ? (
+              <span className="reading-pulse">Reading…</span>
+            ) : (
+              'Run Review'
+            )}
           </button>
           {onToggleCollapse && (
             <button
@@ -287,10 +291,10 @@ export default function ReviewDock({
           )}
         </div>
 
-        {(selectedStatus !== 'all' || sortBy !== 'document') && (
+        {(selectedStatus !== 'open' || sortBy !== 'document') && (
           <button
             type="button"
-            onClick={() => { setSelectedStatus('all'); setSortBy('document') }}
+            onClick={() => { setSelectedStatus('open'); setSortBy('document') }}
             title="Clear filters and sort"
             style={{ padding: '4px 8px', fontSize: 11, color: 'var(--muted)', border: 'none', background: 'none', cursor: 'pointer', minHeight: 'auto' }}
           >
@@ -344,6 +348,11 @@ export default function ReviewDock({
                     {f.status === 'stale' && (
                       <span style={{ fontSize: 10, color: 'var(--ink-4)', background: 'var(--ink-1)', padding: '1px 4px', borderRadius: 2 }}>
                         Stale Anchor
+                      </span>
+                    )}
+                    {f.status === 'dismissed' && (
+                      <span style={{ fontSize: 10, color: 'var(--ink-4)', background: 'var(--ink-1)', padding: '1px 4px', borderRadius: 2 }}>
+                        Dismissed
                       </span>
                     )}
                     {f.status === 'resolved' && (

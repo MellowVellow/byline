@@ -59,11 +59,11 @@ export interface TriggerState {
   fired: { g?: string; c?: string; p?: string }
 }
 
-/** Dual-threshold trigger evaluator: slow ~350ms pause-anywhere ghost, long 2500ms between-sentence connective. */
-export function useGhostTriggers(slowMs = 350, longMs = 2500) {
+/** Trigger evaluator: slow ~350ms pause-anywhere ghost. */
+export function useGhostTriggers(slowMs = 350) {
   const ref = useRef<TriggerState>({ lastKey: performance.now(), bursts: 0, sentIdx: 0, fired: {} })
-  const thresh = useRef({ slowMs, longMs })
-  thresh.current = { slowMs, longMs }
+  const thresh = useRef({ slowMs })
+  thresh.current = { slowMs }
   function onInput(fullText: string, caret: number) {
     const now = performance.now()
     const s = caretSignals(fullText, caret, caret)
@@ -79,38 +79,22 @@ export function useGhostTriggers(slowMs = 350, longMs = 2500) {
     ref.current.fired = {}
   }
   function evaluate(fullText: string, caret: number, selEnd: number): { ghost: boolean; connective: boolean; phrase: boolean } {
-    const { slowMs: slow, longMs: long } = thresh.current
+    const { slowMs: slow } = thresh.current
     const idle = performance.now() - ref.current.lastKey
     const s = caretSignals(fullText, caret, selEnd)
     if (fullText.trim().length <= 8) return { ghost: false, connective: false, phrase: false }
     const key = `${s.sentIdx}|${caret}`
     const out = { ghost: false, connective: false, phrase: false }
-    // Pause-anywhere: any caret pause fires ghost (per product: suggest on every
-    // pause, mid-word/mid-sentence included). Sentence state still biases the
-    // preselected level via ghostTriggerForState, it just never suppresses here.
-    // NOTE: ghost is intentionally stateless (no fired.* dedup). The poller's
-    // 150ms armed-confirm needs 2+ consecutive ghost:true ticks, and a one-shot
-    // fired flag would turn the 2nd tick false and deadlock auto-fire forever.
-    // Refire loops are prevented by the poller itself (skips while a ghost is
-    // visible) + onInput clearing fired + dismiss touching lastKey.
     void s.zone
     if (idle >= slow) {
       out.ghost = true
-    }
-    if (idle >= long && s.zone === 'between' && !ref.current.fired.c) {
-      ref.current.fired.c = key
-      out.connective = true
-    }
-    if (idle >= long && s.zone === 'end' && !s.complete && ref.current.bursts >= 3 && !ref.current.fired.p) {
-      ref.current.fired.p = key
-      out.phrase = true
     }
     return out
   }
   function touch() {
     ref.current.lastKey = performance.now()
   }
-  return { ref, onInput, evaluate, touch, slowMs, longMs }
+  return { ref, onInput, evaluate, touch, slowMs }
 }
 
 export type UseGhostTriggers = ReturnType<typeof useGhostTriggers>

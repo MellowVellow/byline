@@ -37,7 +37,6 @@ export const keys = {
   citeStyle: 'byline.citeStyle',
   researchAuto: 'byline.researchAuto',
   leftOpen: 'byline.leftOpen',
-  rightOpen: 'byline.rightOpen',
   dict: 'byline.dict.v1',
   metrics: 'byline.metrics.v3',
   dataset: 'byline.dataset',

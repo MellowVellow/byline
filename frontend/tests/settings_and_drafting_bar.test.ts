@@ -18,7 +18,7 @@ describe('Settings Revamp & Shortcuts', () => {
     // Inline review shortcuts (Reader only)
     const reviewGroup = SHORTCUTS.find(g => g.group === 'Review & Edit')
     expect(reviewGroup?.items.some(i => i.keys.includes('Click line'))).toBe(true)
-    expect(reviewGroup?.items.some(i => i.keys.includes('Tab'))).toBe(true)
+    expect(reviewGroup?.items.some(i => i.keys === '|')).toBe(true)
   })
 
   it('provides default meta inference and editor UI settings', () => {

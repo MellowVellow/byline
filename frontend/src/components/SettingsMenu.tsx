@@ -13,15 +13,15 @@ import {
   type SfxInstrument,
 } from '../lib/sfx'
 import { Logo } from './Brand'
+import { SUPPORTED_LANGUAGES } from '../domain/writing-profile'
 
 type Tab = 'colors' | 'document' | 'ai' | 'accessibility' | 'shortcuts'
 
 // Mark colors: red grammar, purple reader, blue explore, green fix, grey completions,
 // plus UI surfaces (dark + light), writing space, caret, buttons.
-const PERSONA_FIELDS: { key: 'ai' | 'grammar' | 'explore' | 'fix' | 'suggest' | 'uiBg' | 'uiPanel' | 'uiBgLight' | 'uiPanelLight' | 'paper' | 'paperLine' | 'caret' | 'btnBg' | 'btnInk'; label: string; hint: string; defaultColor: string }[] = [
+const PERSONA_FIELDS: { key: 'ai' | 'grammar' | 'fix' | 'suggest' | 'uiBg' | 'uiPanel' | 'uiBgLight' | 'uiPanelLight' | 'paper' | 'paperLine' | 'caret' | 'btnBg' | 'btnInk'; label: string; hint: string; defaultColor: string }[] = [
   { key: 'ai',         label: 'Reader',     hint: 'Reader notes on tone and clarity', defaultColor: '#6D3BE0' },
   { key: 'grammar',    label: 'Grammar',    hint: 'Red line shown before correction',    defaultColor: '#C0281F' },
-  { key: 'explore',    label: 'Explore',    hint: 'Blue line for source-backed text',    defaultColor: '#1765CC' },
   { key: 'fix',        label: 'Fix flash', hint: 'Green fade after a fix applies', defaultColor: '#16A34A' },
   { key: 'suggest',    label: 'Completions',hint: 'Faint text at cursor',  defaultColor: '#626A75' },
   { key: 'uiBg',       label: 'UI Background (dark)', hint: 'Dark-mode app background',          defaultColor: '#0F1115' },
@@ -79,7 +79,7 @@ export default function SettingsMenu({
   const TABS: { id: Tab; label: string }[] = [
     { id: 'colors',        label: 'Colors & Theme' },
     { id: 'document',      label: 'Document' },
-    { id: 'ai',            label: 'AI Routing' },
+    { id: 'ai',            label: 'AI' },
     { id: 'accessibility', label: 'Audio & Display' },
     { id: 'shortcuts',     label: 'Shortcuts' },
   ]
@@ -202,7 +202,6 @@ export default function SettingsMenu({
                     const isSelected =
                       settings.ai === p.ai &&
                       settings.grammar === p.grammar &&
-                      settings.explore === p.explore &&
                       settings.fix === p.fix &&
                       settings.suggest === p.suggest &&
                       settings.selection === p.selection &&
@@ -219,7 +218,6 @@ export default function SettingsMenu({
                           set({
                             ai: p.ai,
                             grammar: p.grammar,
-                            explore: p.explore,
                             fix: p.fix,
                             suggest: p.suggest,
                             selection: p.selection,
@@ -251,7 +249,6 @@ export default function SettingsMenu({
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                           <span style={{ width: 11, height: 11, borderRadius: '50%', background: p.grammar }} title="Grammar" />
                           <span style={{ width: 11, height: 11, borderRadius: '50%', background: p.ai }} title="Reader" />
-                          <span style={{ width: 11, height: 11, borderRadius: '50%', background: p.explore }} title="Explore" />
                           <span style={{ width: 11, height: 11, borderRadius: '50%', background: p.fix }} title="Auto-fix" />
                         </div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{p.label}</div>
@@ -360,9 +357,6 @@ export default function SettingsMenu({
                   <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: settings.ai, color: '#fff', fontWeight: 600 }}>
                     Reader
                   </span>
-                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: settings.explore, color: '#fff', fontWeight: 600 }}>
-                    Explore
-                  </span>
                   <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: settings.fix, color: '#fff', fontWeight: 600 }}>
                     Fix
                   </span>
@@ -376,7 +370,7 @@ export default function SettingsMenu({
           )}
 
           {/* ══════════════════════════════════════════════════
-              TAB 2: AI ROUTING + USAGE
+              TAB 2: AI + USAGE
           ══════════════════════════════════════════════════ */}
           {tab === 'ai' && (
             <div style={{ display: 'grid', gap: 22 }}>
@@ -413,6 +407,25 @@ export default function SettingsMenu({
                     Server active: <strong style={{ color: 'var(--ink)' }}>{modelInfo.active_model}</strong> · {modelInfo.active_provider}
                   </div>
                 )}
+              </div>
+
+              <div>
+                <label htmlFor="byline-language" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', display: 'block', marginBottom: 8 }}>
+                  Language
+                </label>
+                <select
+                  id="byline-language"
+                  value={settings.language || 'en-US'}
+                  onChange={e => set({ language: e.target.value })}
+                  style={{ width: '100%', maxWidth: 440, padding: '6px 8px', fontSize: 12, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--dock)', color: 'var(--ink)', boxSizing: 'border-box' }}
+                >
+                  {SUPPORTED_LANGUAGES.map(l => (
+                    <option key={l.code} value={l.code}>{l.label}</option>
+                  ))}
+                </select>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                  Used for grammar checks and spelling.
+                </div>
               </div>
 
               <div>
@@ -473,9 +486,33 @@ export default function SettingsMenu({
                   Quota is token-based; the dollar figure is an estimate using placeholder prices.
                 </div>
               </div>
+
+              {/* Section 3: Typing State (Ghost Triggers) */}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)', paddingBottom: 6, borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
+                  Typing State
+                </div>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink)' }}>Pause trigger</span>
+                    <input
+                      type="range"
+                      min={100}
+                      max={1500}
+                      step={50}
+                      value={settings.slowMs}
+                      onChange={e => set({ slowMs: +e.target.value })}
+                      style={{ width: '100%', maxWidth: 340 }}
+                    />
+                    <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>
+                      Ghost text and selection paraphrase fire after this pause ({(settings.slowMs / 1000).toFixed(2)}s)
+                    </span>
+                  </label>
+                </div>
+              </div>
+
             </div>
           )}
-
           {/* ══════════════════════════════════════════════════
               TAB 2: DOCUMENT (FONT, LINE, WIDTH)
           ══════════════════════════════════════════════════ */}

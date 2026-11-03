@@ -18,10 +18,8 @@ document.documentElement.dataset.theme = (() => {
 })()
 
 const path = location.pathname
-const Page = path.startsWith('/app')
+const Page = path.startsWith('/app') || path.startsWith('/demo')
   ? <EditorPage />
-  : path.startsWith('/demo')
-  ? <EditorPage demo />
   : <Landing />
 
 createRoot(document.getElementById('root')!).render(

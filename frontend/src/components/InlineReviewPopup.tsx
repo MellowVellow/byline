@@ -32,7 +32,7 @@ export const PERSONA_STYLES: Record<string, { label: string; color: string; bord
 /**
  * Inline Review Popup below the cursor in Edit Mode.
  * Shows suggestions for fixes, or the comment from the specific color/persona.
- * If multiple colors on the same text, renders them side by side with Next-Tab navigation.
+ * If multiple colors on the same text, renders them side by side with Next-| navigation.
  */
 export default function InlineReviewPopup({
   findings,
@@ -57,7 +57,8 @@ export default function InlineReviewPopup({
         return
       }
 
-      if (e.key === 'Tab' && findings.length > 1) {
+      // "|" advances to the next comment in the same sentence/area.
+      if (e.key === '|' && findings.length > 1) {
         e.preventDefault()
         blip('select')
         setActiveIdx(prev => (prev + 1) % findings.length)
@@ -75,7 +76,9 @@ export default function InlineReviewPopup({
         return
       }
 
-      if ((e.key === 'Delete' || e.key === 'Backspace')) {
+      // Delete marks the finding dismissed (stays listed like a stale anchor).
+      // Esc only closes the popup; Backspace stays available for editing.
+      if (e.key === 'Delete') {
         e.preventDefault()
         onDismissFinding(activeFinding.id)
         if (findings.length > 1) {
@@ -167,8 +170,9 @@ export default function InlineReviewPopup({
         </div>
       )}
       <div style={{ display: 'flex', gap: 14, marginTop: 6, padding: '3px 6px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 13 }}>
-        {findings.length > 1 && <span>Next<kbd style={{ fontFamily: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>tab</kbd></span>}
-        <span>Dismiss<kbd style={{ fontFamily: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>esc</kbd></span>
+        {findings.length > 1 && <span>Next<kbd style={{ fontFamily: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>|</kbd></span>}
+        <span>Dismiss<kbd style={{ fontFamily: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>del</kbd></span>
+        <span>Close<kbd style={{ fontFamily: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>esc</kbd></span>
       </div>
     </div>
   )

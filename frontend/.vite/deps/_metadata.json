@@ -1,0 +1,175 @@
+{
+  "hash": "164f9608",
+  "configHash": "3dea04a6",
+  "lockfileHash": "14213e1d",
+  "browserHash": "08a70097",
+  "optimized": {
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "caada6ab",
+      "needsInterop": true
+    },
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "64909e6b",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "32e823dd",
+      "needsInterop": true
+    },
+    "@vercel/analytics/react": {
+      "src": "../../node_modules/@vercel/analytics/dist/react/index.mjs",
+      "file": "@vercel_analytics_react.js",
+      "fileHash": "c089d749",
+      "needsInterop": false
+    },
+    "zod": {
+      "src": "../../node_modules/zod/index.js",
+      "file": "zod.js",
+      "fileHash": "e3c77197",
+      "needsInterop": false
+    },
+    "lucide-react": {
+      "src": "../../node_modules/lucide-react/dist/esm/lucide-react.mjs",
+      "file": "lucide-react.js",
+      "fileHash": "2a3379b0",
+      "needsInterop": false
+    },
+    "@tiptap/react": {
+      "src": "../../node_modules/@tiptap/react/dist/index.js",
+      "file": "@tiptap_react.js",
+      "fileHash": "b28104c7",
+      "needsInterop": false
+    },
+    "@tiptap/starter-kit": {
+      "src": "../../node_modules/@tiptap/starter-kit/dist/index.js",
+      "file": "@tiptap_starter-kit.js",
+      "fileHash": "75c5d993",
+      "needsInterop": false
+    },
+    "@tiptap/extension-highlight": {
+      "src": "../../node_modules/@tiptap/extension-highlight/dist/index.js",
+      "file": "@tiptap_extension-highlight.js",
+      "fileHash": "e58045db",
+      "needsInterop": false
+    },
+    "@tiptap/extension-table-of-contents": {
+      "src": "../../node_modules/@tiptap/extension-table-of-contents/dist/index.js",
+      "file": "@tiptap_extension-table-of-contents.js",
+      "fileHash": "b6071f8d",
+      "needsInterop": false
+    },
+    "@tiptap/extension-text-align": {
+      "src": "../../node_modules/@tiptap/extension-text-align/dist/index.js",
+      "file": "@tiptap_extension-text-align.js",
+      "fileHash": "ea1921bb",
+      "needsInterop": false
+    },
+    "@tiptap/extension-character-count": {
+      "src": "../../node_modules/@tiptap/extension-character-count/dist/index.js",
+      "file": "@tiptap_extension-character-count.js",
+      "fileHash": "278de52d",
+      "needsInterop": false
+    },
+    "@tiptap/extension-underline": {
+      "src": "../../node_modules/@tiptap/extension-underline/dist/index.js",
+      "file": "@tiptap_extension-underline.js",
+      "fileHash": "15b9587e",
+      "needsInterop": false
+    },
+    "tone": {
+      "src": "../../node_modules/tone/build/esm/index.js",
+      "file": "tone.js",
+      "fileHash": "d7ef2dea",
+      "needsInterop": false
+    },
+    "idb": {
+      "src": "../../node_modules/idb/build/index.js",
+      "file": "idb.js",
+      "fileHash": "c9bc550b",
+      "needsInterop": false
+    },
+    "harper.js": {
+      "src": "../../node_modules/harper.js/dist/index.js",
+      "file": "harper__js.js",
+      "fileHash": "576a3895",
+      "needsInterop": false
+    },
+    "harper.js/binary": {
+      "src": "../../node_modules/harper.js/dist/binary.js",
+      "file": "harper__js_binary.js",
+      "fileHash": "0b5f4784",
+      "needsInterop": false
+    },
+    "@tiptap/pm/state": {
+      "src": "../../node_modules/@tiptap/pm/dist/state/index.js",
+      "file": "@tiptap_pm_state.js",
+      "fileHash": "2d168682",
+      "needsInterop": false
+    },
+    "@tiptap/pm/view": {
+      "src": "../../node_modules/@tiptap/pm/dist/view/index.js",
+      "file": "@tiptap_pm_view.js",
+      "fileHash": "73e04a3f",
+      "needsInterop": false
+    },
+    "turndown": {
+      "src": "../../node_modules/turndown/lib/turndown.browser.es.js",
+      "file": "turndown.js",
+      "fileHash": "9736abcc",
+      "needsInterop": false
+    },
+    "docx": {
+      "src": "../../node_modules/docx/dist/index.mjs",
+      "file": "docx.js",
+      "fileHash": "9b338a83",
+      "needsInterop": false
+    },
+    "@tiptap/core": {
+      "src": "../../node_modules/@tiptap/core/dist/index.js",
+      "file": "@tiptap_core.js",
+      "fileHash": "920a45d1",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "fs-Q6PD5DVB": {
+      "file": "fs-Q6PD5DVB.js"
+    },
+    "chunk-NP36FUWI": {
+      "file": "chunk-NP36FUWI.js"
+    },
+    "chunk-7TQ7AKFZ": {
+      "file": "chunk-7TQ7AKFZ.js"
+    },
+    "chunk-JCAKUOG4": {
+      "file": "chunk-JCAKUOG4.js"
+    },
+    "chunk-LMTIF247": {
+      "file": "chunk-LMTIF247.js"
+    },
+    "chunk-KYOV4473": {
+      "file": "chunk-KYOV4473.js"
+    },
+    "chunk-6QU47IJB": {
+      "file": "chunk-6QU47IJB.js"
+    },
+    "chunk-ET24TL4Q": {
+      "file": "chunk-ET24TL4Q.js"
+    },
+    "chunk-Y7PHLXZH": {
+      "file": "chunk-Y7PHLXZH.js"
+    },
+    "chunk-F3Y7C6DL": {
+      "file": "chunk-F3Y7C6DL.js"
+    },
+    "chunk-PX6F3LHL": {
+      "file": "chunk-PX6F3LHL.js"
+    }
+  }
+}

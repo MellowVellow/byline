@@ -85,12 +85,12 @@ async def complete(body: CompleteIn):
         # `avoid` (previously: fell into the single-level path and 422'd on >3
         # avoid items) and bypass cache by design.
         if body.assist_level == "All":
-            ck = cache.key("complete:all", body.level, body.before[-400:], body.after[:200])
+            ck = cache.key("complete:all", body.context, body.level, body.before[-400:], body.after[:200])
             if not body.avoid:
                 hit = cache.get(ck)
                 if hit is not None:
                     return ok(levels=hit, version=body.version, model="cache", ms=0, usage={}, cached=True)
-            s, u = prompts.complete_levels_prompt(body.before, body.after, body.level, body.avoid)
+            s, u = prompts.complete_levels_prompt(body.context, body.before, body.after, body.level, body.avoid)
             try:
                 data, usage, model = await llm.json_call(s, u, max_tokens=1300, temperature=0.8)
                 levels = {

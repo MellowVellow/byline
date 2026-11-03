@@ -51,6 +51,7 @@ export interface CaretPopupProps {
   // shared
   onAccept: () => void
   onReroll: () => void
+  onRerollPrev?: () => void
   onDismiss: () => void
 }
 
@@ -72,6 +73,7 @@ export default function CaretPopup({
   onSelCell,
   onAccept,
   onReroll,
+  onRerollPrev,
   onDismiss,
 }: CaretPopupProps) {
   const hasGhost = GHOST_LEVELS.some(l => (ghostGroups[l] || []).length > 0)
@@ -181,18 +183,27 @@ export default function CaretPopup({
         </button>
         <button
           type="button"
-          onClick={onReroll}
+          onClick={onRerollPrev ?? onReroll}
+          title="Previous alternative (Ctrl+[)"
           style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
         >
-          Reroll<kbd style={{ font: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>alt</kbd>
+          ←<kbd style={{ font: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>ctrl+[</kbd>
+        </button>
+        <button
+          type="button"
+          onClick={onReroll}
+          title="Next alternative (Ctrl+])"
+          style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
+        >
+          Reroll<kbd style={{ font: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>ctrl+]</kbd>
         </button>
         <button
           type="button"
           onClick={onDismiss}
-          title="Esc to dismiss"
+          title="Alt to dismiss"
           style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer', marginLeft: 'auto' }}
         >
-          ✕
+          Dismiss<kbd style={{ font: 'inherit', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px', marginLeft: 4 }}>alt</kbd>
         </button>
       </div>
     </div>

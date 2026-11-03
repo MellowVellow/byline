@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/harper.js/dist/binary.js"],
+  "sourcesContent": ["import { BinaryModuleImpl } from \"./BinaryModule-S5UABkWQ.js\";\nconst binaryUrl = \"\" + new URL(\"harper_wasm_bg.wasm\", import.meta.url).href;\nconst binary = /* @__PURE__ */ BinaryModuleImpl.create(binaryUrl, \"full\");\nexport {\n  binary\n};\n"],
+  "mappings": ";;;;;;AACA,IAAM,YAAY,KAAK,IAAI,IAAI,uBAAuB,YAAY,GAAG,EAAE;AACvE,IAAM,SAAyB,iBAAiB,OAAO,WAAW,MAAM;",
+  "names": []
+}
