@@ -37,23 +37,40 @@ async def aclose_clients() -> None:
 class LLMError(RuntimeError): pass
 
 _FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
+_THINK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+_TRAIL_COMMA = re.compile(r",\s*([}\]])")
+
+def _try_load(c: str) -> dict[str, Any] | None:
+    try:
+        p = json.loads(c)
+        if isinstance(p, list): return {"items": p}
+        if isinstance(p, dict): return p
+        return None
+    except json.JSONDecodeError:
+        pass
+    try:
+        p = json.loads(_TRAIL_COMMA.sub(r"\1", c))
+        if isinstance(p, list): return {"items": p}
+        if isinstance(p, dict): return p
+    except json.JSONDecodeError:
+        pass
+    return None
 
 def extract_json(content: str) -> dict[str, Any]:
     content = (content or "").strip()
     if not content: raise LLMError("empty response")
-    cands = [content]
-    m = _FENCE.search(content)
+    # Reasoning models may wrap chain-of-thought in <think> tags before the JSON.
+    text = _THINK.sub("", content).strip()
+    cands = [text]
+    m = _FENCE.search(text)
     if m: cands.append(m.group(1).strip())
     for op, cl in (("{", "}"), ("[", "]")):
-        s, e = content.find(op), content.rfind(cl)
-        if s != -1 and e > s: cands.append(content[s:e + 1])
+        s, e = text.find(op), text.rfind(cl)
+        if s != -1 and e > s: cands.append(text[s:e + 1])
     for c in cands:
-        try:
-            p = json.loads(c)
-            if isinstance(p, list): return {"items": p}
-            if isinstance(p, dict): return p
-        except json.JSONDecodeError: continue
-    raise LLMError("unparseable JSON")
+        hit = _try_load(c)
+        if hit is not None: return hit
+    raise LLMError(f"unparseable JSON: {text[:200]!r}")
 
 async def _call(url: str, key: str, model: str, system: str, user: str, max_tokens: int, temp: float, is_meta_api: bool = False, custom_headers: dict | None = None) -> tuple[str, dict]:
     valid_model = validate_meta_model(model)
@@ -334,7 +351,17 @@ async def chat(system: str, user: str, *, model: str | None = None, max_tokens: 
 
 async def json_call(system: str, user: str, *, model: str | None = None, max_tokens: int = 900, temperature: float = 0.5) -> tuple[dict, dict, str]:
     c, u, m = await chat(system, user, model=model, max_tokens=max_tokens, temperature=temperature)
-    return extract_json(c), u, m
+    try:
+        return extract_json(c), u, m
+    except LLMError:
+        log.warning("json parse failed (model=%s): %r", m, (c or "")[:500])
+    # One repair attempt: ask for the same payload as bare JSON only.
+    c2, u2, m2 = await chat(
+        system + "\nReply with ONLY a valid JSON object. No prose, no fences, no commentary.",
+        "Your previous reply was not valid JSON. Return ONLY the corrected JSON object for this task:\n" + user,
+        model=model, max_tokens=max_tokens, temperature=0.0,
+    )
+    return extract_json(c2), u2, m2
 
 async def text_call(system: str, user: str, *, model: str | None = None, max_tokens: int = 600, temperature: float = 0.7) -> tuple[str, dict, str]:
     return await chat(system, user, model=model, max_tokens=max_tokens, temperature=temperature)

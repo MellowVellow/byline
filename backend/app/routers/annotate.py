@@ -9,7 +9,10 @@ router = APIRouter()
 
 ZIPF_THRESHOLDS = {"Simple": 4.6, "Casual": 4.4, "Slang": 4.4, "General": 4.0, "Formal": 3.6, "Technical": 3.2, "Academic": 3.2, "Expert": 2.8, "Buzzwords": 4.2, "Bullshitting": 4.2}
 
-def frequency_candidates(text: str, level: str) -> str:
+def frequency_candidates(text: str, level: str, language: str = "en-US") -> str:
+    # EN-only wordfreq gate: skip for Bahasa (Latin regex + en zipf misfires on ID).
+    if (language or "").strip().lower().startswith("id"):
+        return ""
     try:
         from wordfreq import zipf_frequency
         import re as _re
@@ -24,7 +27,7 @@ def frequency_candidates(text: str, level: str) -> str:
 @router.post("/api/annotate")
 async def annotate(body: TextIn):
     try:
-        s, u = prompts.annotate_prompt(body.context, body.level, body.text, body.before, body.after, frequency_candidates(body.text, body.level))
+        s, u = prompts.annotate_prompt(body.context, body.level, body.text, body.before, body.after, frequency_candidates(body.text, body.level, body.language), language=body.language)
         data, usage, model = await llm.json_call(s, u, max_tokens=1000, temperature=0.4)
         issues = await enrich_alternatives(filter_anchored(data.get("issues", []), body.text), body.text, body.context, body.level)
         return ok(issues=issues, model=model, usage=usage, meta=meta("annotate", s, u, usage, model, 0, 0.4, 1000))
@@ -33,11 +36,11 @@ async def annotate(body: TextIn):
 @router.post("/api/reactions")
 async def reactions(body: TextIn):
     try:
-        ck = cache.key("reactions", body.level, body.text[:8000], body.persona, (body.avoid or [])[:24])
+        ck = cache.key("reactions", body.language, body.level, body.text[:8000], body.persona, (body.avoid or [])[:24])
         hit = cache.get(ck)
         if hit is not None:
             return ok(reactions=hit, model="cache", usage={}, cached=True)
-        s, u = prompts.reactions_prompt(body.context, body.level, body.text, body.persona, body.avoid)
+        s, u = prompts.reactions_prompt(body.context, body.level, body.text, body.persona, body.avoid, language=body.language)
         data, usage, model = await llm.json_call(s, u, max_tokens=1100, temperature=0.6)
         out = filter_anchored(data.get("reactions", []), body.text)
         cache.set(ck, out)
@@ -47,7 +50,7 @@ async def reactions(body: TextIn):
 @router.post("/api/main-idea")
 async def main_idea(body: TextIn):
     try:
-        s, u = prompts.main_idea_prompt(body.context, body.level, body.text)
+        s, u = prompts.main_idea_prompt(body.context, body.level, body.text, language=body.language)
         raw, usage, model, dt = await llm.timed_text(s, u, max_tokens=350, temperature=0.4)
         idea = raw.strip().splitlines()[0] if raw.strip() else ""
         return ok(main_idea=idea, model=model, ms=round(dt * 1000), usage=usage, meta=meta("main-idea", s, u, usage, model, dt*1000, 0.4, 350)) if idea else fail()
@@ -64,11 +67,11 @@ async def outline(body: TextIn):
 @router.post("/api/synonyms")
 async def synonyms(body: SynonymIn):
     try:
-        ck = cache.key("synonyms", body.level, (body.word or "").lower(), body.sentence[-300:])
+        ck = cache.key("synonyms", body.language, body.level, (body.word or "").lower(), body.sentence[-300:])
         hit = cache.get(ck)
         if hit is not None:
             return ok(synonyms=hit.get("synonyms", []), grid=hit.get("grid", {}), model="cache", usage={}, cached=True)
-        s, u = prompts.synonyms_prompt(body.context, body.level, body.word, body.sentence)
+        s, u = prompts.synonyms_prompt(body.context, body.level, body.word, body.sentence, language=body.language)
         data, usage, model = await llm.json_call(s, u, max_tokens=700, temperature=0.5)
         def _col(key: str) -> list[str]:
             seen = [w for w in data.get(key, []) if isinstance(w, str) and w.strip()]

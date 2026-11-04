@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { SHORTCUTS, DEFAULT_SETTINGS, COLOR_PRESETS } from '../src/lib/settings'
-import { SUPPORTED_LANGUAGES, THEME_DEFINITIONS } from '../src/domain/writing-profile'
+import { SUPPORTED_LANGUAGES, THEME_DEFINITIONS, languageShort, isIndonesian } from '../src/domain/writing-profile'
 
 describe('Settings Revamp & Shortcuts', () => {
   it('contains the updated shortcut categories matching the current codebase features', () => {
@@ -40,7 +40,15 @@ describe('Settings Revamp & Shortcuts', () => {
   it('provides supported languages and themes for drafting tools bar', () => {
     expect(SUPPORTED_LANGUAGES.length).toBeGreaterThan(0)
     expect(SUPPORTED_LANGUAGES.some(l => l.code === 'en-US')).toBe(true)
+    expect(SUPPORTED_LANGUAGES.some(l => l.code === 'id-ID')).toBe(true)
     expect(THEME_DEFINITIONS.neutral).toBeDefined()
     expect(THEME_DEFINITIONS.academic).toBeDefined()
+  })
+
+  it('exposes EN|ID context-language abbreviations for the nav toggle', () => {
+    expect(languageShort('en-US')).toBe('EN')
+    expect(languageShort('id-ID')).toBe('ID')
+    expect(isIndonesian('id-ID')).toBe(true)
+    expect(isIndonesian('en-US')).toBe(false)
   })
 })

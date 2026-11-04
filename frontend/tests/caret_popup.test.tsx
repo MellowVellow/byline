@@ -27,9 +27,10 @@ describe('caret popup helpers', () => {
     expect(ghostOption(GROUPS, 'sentence', 0)).toBe('')
   })
 
-  it('visibleCells pages 3 at a time with wraparound', () => {
-    expect(visibleCells(GRID, 0, 0)).toEqual(['procrastinated', 'dawdled', 'squandered'])
-    expect(visibleCells(GRID, 0, 1)).toEqual(['idled', 'stalled', 'procrastinated'])
+  it('visibleCells pages 1 at a time with wraparound', () => {
+    expect(visibleCells(GRID, 0, 0)).toEqual(['procrastinated'])
+    expect(visibleCells(GRID, 0, 1)).toEqual(['dawdled'])
+    expect(visibleCells(GRID, 0, 5)).toEqual(['procrastinated'])
     expect(visibleCells(GRID, 1, 0)).toEqual(['wasted for too long'])
     expect(visibleCells(GRID, 2, 0)).toEqual([])
   })
@@ -98,32 +99,33 @@ describe('CaretPopup ghost mode', () => {
 })
 
 describe('CaretPopup sel mode', () => {
-  it('renders 3 columns, highlights the active cell, clicks accept', () => {
+  it('renders 3 rows (1 per type), highlights the active cell, clicks accept', () => {
     const onSelCell = vi.fn()
     const { container, cleanup } = renderPopup({
       mode: 'sel',
       position: { x: 10, y: 10 },
       selGrid: GRID,
       selCol: 0,
-      selRow: 1,
+      selRow: 0,
       selPage: 0,
       onSelCell,
       onAccept: noop, onReroll: noop, onDismiss: noop,
     })
-    for (const c of ['Synonyms', 'Paraphrase', 'Tone']) {
+    for (const c of ['synonym', 'paraphrase']) {
       expect(container.textContent).toContain(c)
     }
-    expect(container.textContent).toContain('dawdled')
-    // Global 1-9 numbering across columns, full text shown (no truncation)
-    const badges = Array.from(container.querySelectorAll('[role="option"] span')).map(s => s.textContent)
-    expect(badges).toContain('1')
-    expect(badges).toContain('4')
-    const firstCell = Array.from(container.querySelectorAll('[role="option"]')).find(el => el.textContent === '1procrastinated')
+    // Empty Tone column is hidden for a cleaner fit
+    expect(container.textContent).not.toContain('tone')
+    expect(container.textContent).toContain('procrastinated')
+    expect(container.textContent).not.toContain('dawdled')
+    // 1/2/3 numbering per type, full text shown (no truncation)
+    const badges = Array.from(container.querySelectorAll('[role="option"] kbd')).map(s => s.textContent)
+    expect(badges).toEqual(['1', '2'])
+    const firstCell = Array.from(container.querySelectorAll('[role="option"]')).find(el => el.textContent?.includes('procrastinated'))
     expect(firstCell).toBeDefined()
     expect((firstCell as HTMLElement).style.whiteSpace).not.toBe('nowrap')
-    const cell = Array.from(container.querySelectorAll('[role="option"]')).find(el => el.textContent === '2dawdled')
-    act(() => { cell?.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    expect(onSelCell).toHaveBeenCalledWith(0, 1)
+    act(() => { firstCell?.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(onSelCell).toHaveBeenCalledWith(0, 0)
     cleanup()
   })
 

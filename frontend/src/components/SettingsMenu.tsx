@@ -13,7 +13,8 @@ import {
   type SfxInstrument,
 } from '../lib/sfx'
 import { Logo } from './Brand'
-import { SUPPORTED_LANGUAGES } from '../domain/writing-profile'
+import { SUPPORTED_LANGUAGES, languageShort } from '../domain/writing-profile'
+import { t } from '../i18n'
 
 type Tab = 'colors' | 'document' | 'ai' | 'accessibility' | 'shortcuts'
 
@@ -408,21 +409,14 @@ export default function SettingsMenu({
               </div>
 
               <div>
-                <label htmlFor="byline-language" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', display: 'block', marginBottom: 8 }}>
-                  Language
+                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', display: 'block', marginBottom: 8 }}>
+                  {t('contextLanguage')}
                 </label>
-                <select
-                  id="byline-language"
-                  value={settings.language || 'en-US'}
-                  onChange={e => set({ language: e.target.value })}
-                  style={{ width: '100%', maxWidth: 440, padding: '6px 8px', fontSize: 12, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--dock)', color: 'var(--ink)', boxSizing: 'border-box' }}
-                >
-                  {SUPPORTED_LANGUAGES.map(l => (
-                    <option key={l.code} value={l.code}>{l.label}</option>
-                  ))}
-                </select>
+                <div style={{ fontSize: 12, color: 'var(--ink)' }}>
+                  {languageShort(settings.language || 'en-US')} · {SUPPORTED_LANGUAGES.find(l => l.code === settings.language)?.label || 'English'}
+                </div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-                  Used for grammar checks and spelling.
+                  Switch via the EN | ID toggle in the top bar. Drives suggestion language; grammar checks stay English-only.
                 </div>
               </div>
 

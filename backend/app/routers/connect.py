@@ -10,7 +10,7 @@ router = APIRouter()
 @router.post("/api/connect")
 async def connect(body: ConnectIn):
     try:
-        s, u = prompts.connect_prompt(body.context, body.before, body.after, body.relation_hint)
+        s, u = prompts.connect_prompt(body.context, body.before, body.after, body.relation_hint, language=body.language)
         t0 = time.perf_counter()
         data, usage, model = await llm.json_call(s, u, max_tokens=700, temperature=0.6)
         dt = time.perf_counter() - t0

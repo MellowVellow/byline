@@ -39,3 +39,34 @@ def test_reactions_avoid_block():
     assert "ALREADY SHOWN" in u and "old option" in u
     _, u2 = prompts.reactions_prompt("c", "General", "hi")
     assert "ALREADY SHOWN" not in u2
+
+
+def test_language_directive_defaults_to_english():
+    s, u = prompts.complete_prompt("ctx", "General", "before", "", "Phrase", [], "")
+    assert "Respond in English" in s
+    assert "Bahasa Indonesia" not in s
+
+
+def test_language_directive_indonesian():
+    s, u = prompts.complete_prompt("ctx", "General", "Saya suka", "", "Phrase", [], "", None, "id-ID")
+    assert "Bahasa Indonesia" in s
+    assert "Bahasa Indonesia" in u
+    assert "standard Bahasa Indonesia" in u
+
+
+def test_synonyms_and_reactions_carry_indonesian():
+    s, u = prompts.synonyms_prompt("c", "General", "cepat", "Dia berlari cepat", language="id-ID")
+    assert "Bahasa Indonesia" in s
+    s2, _ = prompts.reactions_prompt("c", "General", "Halo dunia", language="id-ID")
+    assert "Bahasa Indonesia" in s2
+
+
+def test_frequency_candidates_skipped_for_indonesian():
+    from app.routers.annotate import frequency_candidates
+    assert frequency_candidates("Saya sangat suka menulis setiap hari", "General", "id-ID") == ""
+
+
+def test_merge_partial_skips_zipf_for_indonesian():
+    from app.routers.complete import merge_partial
+    # ID path returns suggestion unchanged instead of EN zipf merge
+    assert merge_partial("Saya mak", "an yang baik", language="id-ID") == "an yang baik"

@@ -45,8 +45,18 @@ export const THEME_DEFINITIONS: Record<ThemeId, ThemeDefinition> = {
 }
 
 export const SUPPORTED_LANGUAGES = [
-  { code: 'en-US', label: 'English (US)' },
-  { code: 'en-GB', label: 'English (UK)' },
-  { code: 'en-CA', label: 'English (Canada)' },
-  { code: 'en-AU', label: 'English (Australia)' },
+  { code: 'en-US', label: 'English', short: 'EN' },
+  { code: 'id-ID', label: 'Bahasa Indonesia', short: 'ID' },
 ]
+
+/** Abbreviation shown in nav-bar context toggle (EN | ID). */
+export const languageShort = (code: string): string => {
+  const hit = SUPPORTED_LANGUAGES.find(l => l.code === code)
+  if (hit && (hit as { short?: string }).short) return (hit as { short: string }).short
+  if (code?.toLowerCase().startsWith('id')) return 'ID'
+  return 'EN'
+}
+
+/** True for Bahasa Indonesia context (id, id-ID, …). */
+export const isIndonesian = (code: string): boolean =>
+  (code || '').trim().toLowerCase().startsWith('id')

@@ -35,6 +35,7 @@ import { resolveAnchor, applySafeReplacement, consumeProgrammaticApplyFlag, TEXT
 import type { Finding, Suggestion } from '../domain/finding'
 import { buildReaderFindings } from '../domain/finding'
 import { THEME_DEFINITIONS, SUPPORTED_LANGUAGES } from '../domain/writing-profile'
+import { t } from '../i18n'
 import { loadSettings, saveSettings, type AppSettings } from '../lib/settings'
 import { idbSetDoc, idbGetDoc } from '../lib/storage'
 import { api } from '../lib/api'
@@ -254,7 +255,7 @@ export default function EditorPage() {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ underline: false }),
       Highlight.configure({ multicolor: true }),
       Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
@@ -317,7 +318,7 @@ export default function EditorPage() {
 
       setSelectionContext(selCtx)
       if (selCtx && editor.view) {
-        setPopupPos(placePopupBesideEditor(editor.view, selCtx.to, 400, 300, 220))
+        setPopupPos(placePopupBesideEditor(editor.view, selCtx.to, 320, 260, 220))
       }
     },
     onCreate: ({ editor }) => {
@@ -631,12 +632,13 @@ export default function EditorPage() {
       const avoid = opts?.isReroll ? GHOST_LEVELS.flatMap(l => ghostGroups[l]).slice(0, 24) : undefined
       const cacheKey = opts?.isReroll
         ? null
-        : 'ghost:' + hashKey([suggestionNote, appSettings.writingTheme, cursorCtx.before.slice(-400), cursorCtx.after.slice(0, 200)])
+        : 'ghost:' + hashKey([suggestionNote, appSettings.writingTheme, appSettings.language, cursorCtx.before.slice(-400), cursorCtx.after.slice(0, 200)])
       const cached = cacheKey ? cacheGet<any>(cacheKey) : null
       if (cached) recordGhostCacheSaved()
       const res = cached ?? await api.complete({
         context: suggestionNote,
         level: appSettings.writingTheme || 'General',
+        language: appSettings.language,
         before: cursorCtx.before,
         after: cursorCtx.after,
         assist_level: 'All',
@@ -984,11 +986,12 @@ export default function EditorPage() {
     setSelError(null)
     try {
       const before = editor.state.doc.textBetween(Math.max(0, from - 300), from, '\n')
-      const selKey = 'sel:' + hashKey([suggestionNote, appSettings.writingTheme, selectedText.trim().toLowerCase(), before.slice(-300)])
+      const selKey = 'sel:' + hashKey([suggestionNote, appSettings.writingTheme, appSettings.language, selectedText.trim().toLowerCase(), before.slice(-300)])
       const cachedSel = cacheGet<any>(selKey)
       const res = cachedSel ?? await api.synonyms({
         context: suggestionNote,
         level: appSettings.writingTheme || 'General',
+        language: appSettings.language,
         word: selectedText.trim().slice(0, 500),
         sentence: before,
       }, ctl.signal)
@@ -1080,7 +1083,7 @@ export default function EditorPage() {
 
   const shiftSelPage = (dir: 1 | -1) => {
     recordGhostReroll()
-    const pages = Math.max(1, ...SEL_COLS.map(c => Math.ceil((selGrid[c]?.length || 0) / 3)))
+    const pages = Math.max(1, ...SEL_COLS.map(c => (selGrid[c]?.length || 0)))
     setSelPage(p => (p + dir + pages) % pages)
     setSelRow(0)
     blip('select')
@@ -1188,6 +1191,7 @@ export default function EditorPage() {
       const res = await api.reactions({
         context: contextNote,
         level: appSettings.writingTheme,
+        language: appSettings.language,
         text,
         persona: 'Critical Reader',
         avoid,
@@ -1383,8 +1387,7 @@ export default function EditorPage() {
       if (e.key === 'Tab' && !e.shiftKey && (ghostOpen || selOpen) && !inlineReviewState) {
         e.preventDefault()
         if (selOpen) {
-          const cells = visibleCells(selGrid, selCol, selPage)
-          if (cells[selRow] != null) handleAcceptSelCell(selCol, selRow)
+          if (visibleCells(selGrid, selCol, selPage)[0] != null) handleAcceptSelCell(selCol, 0)
         } else {
           handleSelectSuggestion(ghostIdx)
         }
@@ -1403,12 +1406,10 @@ export default function EditorPage() {
       if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey && (ghostOpen || selOpen) && !inlineReviewState) {
         const n = Number(e.key)
         if (selOpen) {
-          const col = Math.floor((n - 1) / 3)
-          const row = (n - 1) % 3
-          if (col < SEL_COLS.length && visibleCells(selGrid, col, selPage)[row] != null) {
+          if (n >= 1 && n <= SEL_COLS.length && visibleCells(selGrid, n - 1, selPage)[0] != null) {
             e.preventDefault()
-            setSelCol(col)
-            setSelRow(row)
+            setSelCol(n - 1)
+            setSelRow(0)
             blip('select')
           }
           return
@@ -1473,11 +1474,9 @@ export default function EditorPage() {
       }
       if (selOpen && /^Arrow/.test(e.key)) {
         e.preventDefault()
-        if (e.key === 'ArrowLeft') setSelCol(c => (c + SEL_COLS.length - 1) % SEL_COLS.length)
-        if (e.key === 'ArrowRight') setSelCol(c => (c + 1) % SEL_COLS.length)
-        const n = Math.max(1, visibleCells(selGrid, selCol, selPage).length)
-        if (e.key === 'ArrowUp') setSelRow(r => (r + n - 1) % n)
-        if (e.key === 'ArrowDown') setSelRow(r => (r + 1) % n)
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') setSelCol(c => (c + SEL_COLS.length - 1) % SEL_COLS.length)
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') setSelCol(c => (c + 1) % SEL_COLS.length)
+        setSelRow(0)
         return
       }
 
@@ -1533,11 +1532,12 @@ export default function EditorPage() {
     const text = editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n\n')
 
     try {
-      const readerKey = 'reader:' + hashKey([contextNote, appSettings.writingTheme, text.slice(0, 8000)])
+      const readerKey = 'reader:' + hashKey([contextNote, appSettings.writingTheme, appSettings.language, text.slice(0, 8000)])
       const cachedReader = cacheGet<any>(readerKey)
       const readRes = cachedReader ?? await api.reactions({
         context: contextNote,
         level: appSettings.writingTheme,
+        language: appSettings.language,
         text,
         persona: 'Critical Reader',
       })
@@ -1607,6 +1607,12 @@ export default function EditorPage() {
 
   const handleRunGrammar = async () => {
     if (!editor || grammarAbort) return
+    // Harper is English-only: skip with explanation for Bahasa context.
+    if (!harperService.isLanguageSupported(appSettings.language)) {
+      globalAnalysisService.replacePersona('grammar', [])
+      notify(t('grammarUnavailableId'))
+      return
+    }
     setAnalyzing(true)
     holdStore.holds = []
     syncHolds(editor)
@@ -1707,6 +1713,12 @@ export default function EditorPage() {
         onOpenSettings={() => { blip('open'); setSettingsOpen(true) }}
         onOpenMetrics={() => setMetricsOpen(true)}
         editor={editor}
+        language={appSettings.language}
+        onLanguageChange={code => {
+          const next = { ...appSettings, language: code }
+          setAppSettings(next)
+          saveSettings(next)
+        }}
         onToggleMobileDrawer={() => setMobileDrawerOpen(v => !v)}
         mobileDrawerOpen={mobileDrawerOpen}
         findingsCount={findings.filter(f => f.status === 'open' || f.status === 'stale').length}
@@ -1908,7 +1920,7 @@ export default function EditorPage() {
                 selRow={selRow}
                 selPage={selPage}
                 onSelCell={handleAcceptSelCell}
-                onAccept={() => handleAcceptSelCell(selCol, selRow)}
+                onAccept={() => handleAcceptSelCell(selCol, 0)}
                 onNext={() => shiftSelPage(1)}
                 onPrev={() => shiftSelPage(-1)}
                 onReroll={handleSelRefetch}
@@ -2026,7 +2038,7 @@ export default function EditorPage() {
               selRow={selRow}
               selPage={selPage}
               onSelCell={handleAcceptSelCell}
-              onAccept={() => handleAcceptSelCell(selCol, selRow)}
+              onAccept={() => handleAcceptSelCell(selCol, 0)}
               onNext={() => shiftSelPage(1)}
               onPrev={() => shiftSelPage(-1)}
               onReroll={handleSelRefetch}

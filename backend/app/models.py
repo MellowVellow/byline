@@ -5,6 +5,7 @@ S = lambda n: Field(default="", max_length=n)  # noqa: E731
 
 class CompleteIn(BaseModel):
     context: str = S(4000); level: str = Field(default="General", max_length=40)
+    language: str = Field(default="en-US", max_length=20)
     assist_level: str = Field(default="Phrase", max_length=20)
     before: str = S(8000); after: str = S(4000); version: int = 0
     facts: list[str] = Field(default_factory=list, max_length=5)
@@ -13,16 +14,19 @@ class CompleteIn(BaseModel):
 
 class TextIn(BaseModel):
     context: str = S(4000); level: str = Field(default="General", max_length=40); text: str = S(20000)
+    language: str = Field(default="en-US", max_length=20)
     before: str = S(4000); after: str = S(4000)
     persona: str = Field(default="Skeptical reader", max_length=60)
     avoid: list[str] = Field(default_factory=list, max_length=24)
 
 class SynonymIn(BaseModel):
     context: str = S(4000); level: str = Field(default="General", max_length=40)
-    word: str = S(80); sentence: str = S(2000)
+    language: str = Field(default="en-US", max_length=20)
+    word: str = S(500); sentence: str = S(2000)
 
 class ConnectIn(BaseModel):
     context: str = S(4000)
+    language: str = Field(default="en-US", max_length=20)
     before: str = S(6000)
     after: str = S(6000)
     relation_hint: str = Field(default="auto", max_length=50)
