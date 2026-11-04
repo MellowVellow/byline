@@ -1,4 +1,4 @@
-export type Persona = 'reader' | 'grammar'
+export type Persona = 'reader' | 'grammar' | 'research'
 
 export type FindingKind = 'reader_observation' | 'language_error'
 

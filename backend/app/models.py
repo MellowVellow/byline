@@ -80,3 +80,17 @@ class CiteIn(BaseModel):
 
 class BiblioIn(BaseModel):
     style: str = Field(default="apa", max_length=20); items: list[CiteIn] = Field(default_factory=list, max_length=50)
+
+class LibraryFetchIn(BaseModel):
+    url: str = S(2000); question: str = Field(default="", max_length=1000)
+
+class LibraryParseIn(BaseModel):
+    text: str = S(30000); url: str = S(2000); filename: str = S(500)
+    kind: str = Field(default="web", max_length=20)
+
+class LibraryRankIn(BaseModel):
+    paragraph: str = S(6000); cards: list[dict] = Field(default_factory=list, max_length=50)
+
+class LibraryVisionIn(BaseModel):
+    image_data_url: str = S(500000); page: int = 0; hint: str = S(1000)
+    source_title: str = S(500)

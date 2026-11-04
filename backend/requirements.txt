@@ -8,6 +8,7 @@ python-multipart>=0.0.9
 wordfreq>=2.5
 pytest>=8.0
 trafilatura>=1.10
+pypdf>=4.0
 # TestClient (starlette) rides on httpx — no extra test server deps.
 # Supabase uses raw httpx REST — no supabase-py required.
 # Pinned lock: requirements.lock (uv pip compile). Audit: pip-audit (clean).

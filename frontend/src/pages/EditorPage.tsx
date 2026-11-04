@@ -27,6 +27,7 @@ import MetricsPopup from '../components/MetricsPopup'
 import { recordSuggestionOffered, recordSuggestionAccepted, recordRevisionAccepted, recordGhostFired, recordGhostCacheSaved, recordGhostAborted, recordGhostStaleDropped, recordGhostDebounceSaved, recordGhostReroll } from '../lib/metrics'
 
 import { AnchorDecorations, anchorStore, syncAnchors, syncGhost, syncFlash, flashStore, modeStore, syncPops, popStore, holdStore, syncHolds, connectStore, syncConnect } from '../editor/decorations'
+import { SourceDot } from '../editor/sourcedot'
 import { TextSelection } from '@tiptap/pm/state'
 import { contextService, type SelectionContext } from '../services/context-service'
 import { globalAnalysisService } from '../services/analysis-service'
@@ -38,10 +39,19 @@ import { THEME_DEFINITIONS, SUPPORTED_LANGUAGES } from '../domain/writing-profil
 import { t } from '../i18n'
 import { loadSettings, saveSettings, type AppSettings } from '../lib/settings'
 import { idbSetDoc, idbGetDoc } from '../lib/storage'
-import { api } from '../lib/api'
-import { CONNECT_RELATIONS, type ConnectSession, createConnectSession, firstAltOfRel, hasConnectSelection, rerenderConnectSession } from '../lib/connect'
+import { api, uploadLibraryPdf } from '../lib/api'
+import LibraryPanel, { type ClaimHit } from '../components/LibraryPanel'
+import CitePopup, { type CiteItem, type CiteStage } from '../components/CitePopup'
+import ReferencesBox, { appendReference } from '../components/ReferencesBox'
+import SourceModal from '../components/SourceModal'
+import type { CiteType, LibraryCard, LibrarySource } from '../domain/library'
+import { CITE_TYPES, keywordsOf, loadLibrary, normalizeText, saveLibrary, saveSourceText } from '../domain/library'
+import { claimScore, stripCitationNoise } from '../lib/provenance'
+import { apaReference, fallbackSentence, quickCite } from '../lib/cite'
+import { CONNECT_RELATIONS, type ConnectSession, createConnectSession, firstAltOfRel, hasConnectSelection, isLongSelection, rerenderConnectSession } from '../lib/connect'
 import { hashKey, cacheGet, cacheSet, saveLastGhost, loadLastGhost } from '../lib/ai-cache'
 import { cascadePopupRects, type PopupBox, type PopupId } from '../lib/popupLayout'
+import { clampDockWidth, loadDockWidth, saveDockWidth } from '../lib/popupViewport'
 import { sfxAccept, sfxDismiss, blip } from '../lib/sfx'
 
 export type AssistGranularity = 'Hint' | 'Phrase' | 'Sentence' | 'Question'
@@ -114,6 +124,10 @@ export default function EditorPage() {
   })
 
   const [leftOpen, setLeftOpen] = useState(true)
+  const [dockWidth, setDockWidth] = useState<number>(() => loadDockWidth())
+  const [draggingDock, setDraggingDock] = useState(false)
+  const [viewportTick, setViewportTick] = useState(0)
+  const dockDragRef = useRef<{ startX: number; startW: number } | null>(null)
 
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -141,10 +155,73 @@ export default function EditorPage() {
       if (w > 768 && w <= 1120) {
         setLeftOpen(false)
       }
+      setDockWidth(prev => clampDockWidth(prev, w))
     }
     handleResize()
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  // Reposition + recascade popups on zoom / window / visualViewport resize so shells never stay cut off.
+  useEffect(() => {
+    let t: number | null = null
+    const bump = () => {
+      if (t != null) window.clearTimeout(t)
+      t = window.setTimeout(() => setViewportTick(v => v + 1), 100)
+    }
+    window.addEventListener('resize', bump)
+    const vv = (window as any).visualViewport
+    vv?.addEventListener?.('resize', bump)
+    return () => {
+      window.removeEventListener('resize', bump)
+      vv?.removeEventListener?.('resize', bump)
+      if (t != null) window.clearTimeout(t)
+    }
+  }, [])
+
+  const onDockSplitterPointerDown = useCallback((e: React.PointerEvent) => {
+    if (isMobile) return
+    dockDragRef.current = { startX: e.clientX, startW: dockWidth }
+    setDraggingDock(true)
+    ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
+  }, [isMobile, dockWidth])
+
+  const onDockSplitterPointerMove = useCallback((e: React.PointerEvent) => {
+    const drag = dockDragRef.current
+    if (!drag) return
+    setDockWidth(clampDockWidth(drag.startW + (e.clientX - drag.startX), window.innerWidth))
+  }, [])
+
+  const endDockDrag = useCallback(() => {
+    if (!dockDragRef.current) return
+    dockDragRef.current = null
+    setDraggingDock(false)
+    setDockWidth(prev => {
+      saveDockWidth(prev)
+      return prev
+    })
+  }, [])
+
+  const onDockSplitterKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const step = e.shiftKey ? 32 : 16
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault()
+      const dir = e.key === 'ArrowRight' ? 1 : -1
+      setDockWidth(prev => {
+        const next = clampDockWidth(prev + dir * step, window.innerWidth)
+        saveDockWidth(next)
+        return next
+      })
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      saveDockWidth(240)
+      setDockWidth(240)
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      const next = clampDockWidth(480, window.innerWidth)
+      saveDockWidth(next)
+      setDockWidth(next)
+    }
   }, [])
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -173,7 +250,27 @@ export default function EditorPage() {
   }
 
   const [highlightedFindingId, setHighlightedFindingId] = useState<string | null>(null)
-  const [reviewPersona, setReviewPersona] = useState<'all' | 'reader' | 'grammar'>('all')
+  const [reviewPersona, setReviewPersona] = useState<'all' | 'reader' | 'grammar' | 'research'>('all')
+  // Library (experimental)
+  const [dockTab, setDockTab] = useState<'review' | 'library'>('review')
+  const [cards, setCards] = useState<LibraryCard[]>(() => loadLibrary().cards)
+  const [sources, setSources] = useState<LibrarySource[]>(() => loadLibrary().sources)
+  const [libUrl, setLibUrl] = useState('')
+  const [libStatus, setLibStatus] = useState('')
+  const [libAdding, setLibAdding] = useState(false)
+  const [citeType, setCiteType] = useState<CiteType>('paren')
+  const [claimHits, setClaimHits] = useState<ClaimHit[]>([])
+  const [pageTexts, setPageTexts] = useState<Record<string, string>>({})
+  const [srcModal, setSrcModal] = useState<LibraryCard | null>(null)
+  // Cite popup (Ctrl+Shift+Space): filter -> think -> levels, plus synth
+  const [citeOpen, setCiteOpen] = useState(false)
+  const [citeStage, setCiteStage] = useState<CiteStage>('filter')
+  const [citeQuery, setCiteQuery] = useState('')
+  const [citeFilterSel, setCiteFilterSel] = useState(0)
+  const [citeCard, setCiteCard] = useState<LibraryCard | null>(null)
+  // Active citation type for the single-view levels stage (1-5 select, reroll cycles).
+  const [levelType, setLevelType] = useState<CiteType>('paren')
+  const [citePos, setCitePos] = useState({ x: 200, y: 300, w: 340 })
 
   const [docRevision, setDocRevision] = useState(1)
   const [counts, setCounts] = useState({ words: 0, chars: 0 })
@@ -262,6 +359,7 @@ export default function EditorPage() {
       CharacterCount,
       AnchorDecorations,
       TableOfContents,
+      SourceDot,
     ],
     content: (() => {
       try {
@@ -468,7 +566,7 @@ export default function EditorPage() {
       if (resolved) {
         anchors.push({
           id: f.id,
-          kind: f.persona === 'grammar' ? 'grammar' : 'reaction',
+          kind: f.persona === 'grammar' ? 'grammar' : f.persona === 'research' ? 'research' : 'reaction',
           from: resolved.from,
           to: resolved.to,
         })
@@ -786,6 +884,20 @@ export default function EditorPage() {
   draftLoadingRef.current = draftLoading
   const handleRequestGhostRef = useRef(handleRequestGhost)
   handleRequestGhostRef.current = handleRequestGhost
+  // Cite popup refs (avoid stale closures in global key handler).
+  const citeOpenRef = useRef(false)
+  citeOpenRef.current = citeOpen
+  const citeStageRef = useRef(citeStage)
+  citeStageRef.current = citeStage
+  const citeQueryRef = useRef('')
+  citeQueryRef.current = citeQuery
+  const citeRowCountRef = useRef(1)
+  const levelTypeRef = useRef<CiteType>('paren')
+  levelTypeRef.current = levelType
+  const closeCiteRef = useRef(() => {})
+  const pickFilteredRef = useRef(() => {})
+  const acceptLevelRef = useRef(() => {})
+  const rerollLevelRef = useRef(() => {})
 
   useEffect(() => {
     if (!editor) return
@@ -969,14 +1081,30 @@ export default function EditorPage() {
     return EMPTY_GRID
   }
 
-  const requestSelGrid = async (ctxArg?: SelectionContext) => {
+  const requestSelGrid = async (ctxArg?: SelectionContext, opts?: { force?: boolean }) => {
     const ctx = ctxArg ?? selectionContext
     if (!editor || !ctx) return
     const { selectedText, from } = ctx
-    if (selectedText.trim().length < 2) return
+    const trimmed = selectedText.trim()
+    if (trimmed.length < 2) return
     if (selTimerRef.current) {
       window.clearTimeout(selTimerRef.current)
       selTimerRef.current = null
+    }
+    // Long / multi-sentence drag-select: synonyms rarely return useful
+    // alternatives → skip API, surface Connect CTA with kbd instead.
+    if (!opts?.force && hasConnectSelection(trimmed) && isLongSelection(trimmed)) {
+      selAbort.current?.abort()
+      selAbort.current = null
+      selReqId.current++
+      setSelGrid(EMPTY_GRID)
+      setSelError('Long selection — use Connect to join sentences.')
+      setSelCol(1)
+      setSelRow(0)
+      setSelPage(0)
+      setSelLoading(false)
+      blip('select')
+      return
     }
     const myId = ++selReqId.current
     selAbort.current?.abort()
@@ -1002,7 +1130,15 @@ export default function EditorPage() {
       const grid = parseSelGrid(res)
       const any = SEL_COLS.some(c => (grid[c] ?? []).length > 0)
       setSelGrid(grid)
-      setSelError(any ? null : (res ? 'No alternatives found.' : 'Could not load alternatives.'))
+      if (any) {
+        setSelError(null)
+      } else if (!res) {
+        setSelError('Could not load alternatives.')
+      } else if (hasConnectSelection(trimmed)) {
+        setSelError('No alternatives found — try Connect to join sentences.')
+      } else {
+        setSelError('No alternatives found.')
+      }
       setSelCol(1)
       setSelRow(0)
       setSelPage(0)
@@ -1062,7 +1198,7 @@ export default function EditorPage() {
 
   const handleSelRefetch = () => {
     recordGhostReroll()
-    void requestSelGrid()
+    void requestSelGrid(undefined, { force: true })
   }
 
   const canExpandConnect =
@@ -1275,7 +1411,7 @@ export default function EditorPage() {
       }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, docRevision, selectionContext, selOpen, selLoading, ghostOpen, draftLoading, inlineReviewState, placePopupBesideEditor])
+  }, [editor, docRevision, selectionContext, selOpen, selLoading, ghostOpen, draftLoading, inlineReviewState, placePopupBesideEditor, viewportTick])
 
   useLayoutEffect(() => {
     if (isMobile) return
@@ -1337,10 +1473,42 @@ export default function EditorPage() {
     selectionContext,
     connectSession,
     docRevision,
+    viewportTick,
   ])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Cite popup (Ctrl+Shift+Space flow) takes precedence.
+      if (citeOpenRef.current) {
+        const k = e.key
+        if (k === 'Escape') { e.preventDefault(); closeCiteRef.current(); return }
+        if (citeStageRef.current === 'filter') {
+          const total = Math.max(1, citeRowCountRef.current)
+          if (k === 'ArrowDown' || k === 'ArrowUp') {
+            e.preventDefault()
+            setCiteFilterSel(s => (s + (k === 'ArrowDown' ? 1 : total - 1)) % total)
+            return
+          }
+          if (k === 'Enter') { e.preventDefault(); pickFilteredRef.current(); return }
+          if (k === 'Backspace' && !citeQueryRef.current) { e.preventDefault(); closeCiteRef.current(); return }
+        } else if (citeStageRef.current === 'levels') {
+          if (k === 'ArrowDown' || k === 'ArrowUp') {
+            e.preventDefault()
+            cycleLevelType(k === 'ArrowDown' ? 1 : -1)
+            return
+          }
+          if (/^[1-5]$/.test(k) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault()
+            setLevelType(CITE_TYPES[Number(k) - 1])
+            blip('select')
+            return
+          }
+          if (k === 'Tab') { e.preventDefault(); acceptLevelRef.current(); return }
+          if (k === 'Alt') { e.preventDefault(); rerollLevelRef.current(); return }
+          if (k === 'Backspace') { e.preventDefault(); setCiteStage('filter'); return }
+        }
+        return
+      }
       if (connectSessionRef.current) {
         if (e.key === 'Escape') {
           e.preventDefault()
@@ -1484,6 +1652,21 @@ export default function EditorPage() {
         e.preventDefault()
         handleDismissSuggestions()
         handleDismissSel()
+        return
+      }
+
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === 'KeyR' && ghostOpen && !selOpen && !inlineReviewState) {
+        e.preventDefault()
+        if (e.repeat) return
+        handleDismissSuggestions()
+        openCite()
+        return
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'Space') {
+        e.preventDefault()
+        if (citeOpen) { closeCite(); return }
+        openCite()
         return
       }
 
@@ -1669,6 +1852,313 @@ export default function EditorPage() {
     try { localStorage.setItem('byline.doc.suggestionNote', v) } catch {}
   }
 
+  // ---------- Library (experimental) ----------
+  const docTextAll = () => {
+    try {
+      return editor ? editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n\n') : ''
+    } catch { return '' }
+  }
+
+  const persistLib = (nc: LibraryCard[], ns: LibrarySource[]) => {
+    setCards(nc)
+    setSources(ns)
+    saveLibrary(nc, ns)
+  }
+
+  const ingestParsed = (parsedCards: any[], source: any, pageText: string) => {
+    const sid = `s${Date.now().toString(36)}${Math.floor(Math.random() * 999)}`
+    const kind = source?.type === 'webpage' ? 'Web' : 'PDF'
+    const ns: LibrarySource = {
+      id: sid, type: source?.type || 'webpage', title: source?.title || 'Untitled',
+      author: source?.author || [{ literal: 'Unknown' }],
+      'container-title': source?.['container-title'] || '',
+      issued: source?.issued || { 'date-parts': [[new Date().getFullYear()]] },
+      DOI: source?.DOI || '', URL: source?.URL || libUrl,
+      accessed: source?.accessed || { 'date-parts': [[new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate()]] },
+      provenance: source?.provenance || { author: 'inferred', issued: 'inferred' },
+      kind,
+    }
+    const ncards: LibraryCard[] = (parsedCards || []).map((c: any, i: number) => ({
+      id: `n${Date.now().toString(36)}${i}`,
+      kind: (c.kind === 'ai' || ['idea', 'question', 'premise', 'term', 'visual'].includes(c.type)) ? 'ai' : 'source',
+      type: c.type, finding: c.finding || '', passage: c.passage || '',
+      why_useful: c.why_useful || '', page: c.page || 1,
+      vision: !!c.vision, sourceId: sid, status: c.status || 'found',
+      keywords: keywordsOf(c.finding || '', c.type || ''),
+    }))
+    setPageTexts(prev => ({ ...prev, [sid]: pageText }))
+    void saveSourceText(sid, pageText)
+    persistLib([...cards, ...ncards], [...sources, ns])
+    const flagged = ncards.filter(c => c.status === 'flagged').length
+    const vision = ncards.filter(c => c.vision).length
+    setLibStatus(
+      ncards.length === 0
+        ? 'No cards extracted — try again.'
+        : `${ncards.length} cards added.` +
+          (flagged ? ` ${flagged} quote${flagged > 1 ? 's' : ''} not found — check.` : ' Evidence found.') +
+          (vision ? ` ${vision} from vision.` : ''),
+    )
+  }
+
+  const handleAddLink = async () => {
+    const url = libUrl.trim()
+    if (!url || libAdding) return
+    setLibAdding(true)
+    setLibStatus('Fetching via r.jina.ai…')
+    try {
+      const fetched: any = await api.libraryFetch({ url })
+      if (!fetched?.ok || !fetched.text) {
+        setLibStatus('Fetch failed (Jina thin + Tavily fallback). Try another link.')
+        setLibAdding(false)
+        return
+      }
+      setLibStatus('Parsing cards…')
+      const parsed: any = await api.libraryParse({ text: (fetched.text || '').slice(0, 25000), url, kind: 'web' })
+      if (!parsed?.ok) {
+        setLibStatus('Parse failed. Try again.')
+        setLibAdding(false)
+        return
+      }
+      setLibStatus('Checking evidence against the page text…')
+      ingestParsed(parsed.cards || [], parsed.source, (fetched.text || '').slice(0, 25000))
+    } catch {
+      setLibStatus('Add link failed (network or LLM). Try again.')
+    } finally {
+      setLibAdding(false)
+    }
+  }
+
+  const handleAddPdf = async (f: File) => {
+    if (libAdding) return
+    setLibAdding(true)
+    setLibStatus('Reading PDF…')
+    try {
+      const up: any = await uploadLibraryPdf(f)
+      if (!up?.ok || !up.text) {
+        setLibStatus('PDF read failed.')
+        setLibAdding(false)
+        return
+      }
+      if (up.needs_vision?.length) setLibStatus(`Page ${up.needs_vision[0]} is a figure: vision fallback available via Show in source. Parsing…`)
+      else setLibStatus('Matching evidence sentences…')
+      const parsed: any = await api.libraryParse({ text: (up.text || '').slice(0, 25000), url: '', filename: f.name, kind: 'pdf' })
+      if (!parsed?.ok) {
+        setLibStatus('PDF parse failed.')
+        setLibAdding(false)
+        return
+      }
+      // Cleaned text feeds parse/quotecheck; raw text feeds Show-in-source + saved full text.
+      ingestParsed(parsed.cards || [], parsed.source, (up.raw_text || up.text || '').slice(0, 25000))
+    } catch {
+      setLibStatus('Add PDF failed.')
+    } finally {
+      setLibAdding(false)
+    }
+  }
+
+  const insertAtCursor = (text: string) => {
+    if (!editor || !editor.view) return
+    editor.chain().focus().insertContentAt(editor.state.selection.from, text).run()
+    setDocRevision(r => r + 1)
+  }
+
+  const deleteCard = (card: LibraryCard) => {
+    persistLib(cards.filter(c => c.id !== card.id), sources)
+    blip('dismiss')
+  }
+
+  const citeCardQuick = (card: LibraryCard, sentence?: string) => {
+    const src = sources.find(s => s.id === card.sourceId)
+    if (!src) return
+    // AI-kind cards carry no citation: insert plain text, no reference entry.
+    if (card.kind === 'ai' || !card.passage) {
+      const text = sentence ?? card.finding
+      const before = docTextAll().slice(Math.max(0, editor!.state.selection.from - 1), editor!.state.selection.from)
+      insertAtCursor((before && !/\s/.test(before) ? ' ' : '') + text + ' ')
+      sfxAccept()
+      return
+    }
+    const text = sentence ?? quickCite(card, src, citeType)
+    const before = docTextAll().slice(Math.max(0, editor!.state.selection.from - 1), editor!.state.selection.from)
+    insertAtCursor((before && !/\s/.test(before) ? ' ' : '') + text + ' ')
+    appendReference(`<p>${apaReference(src)}</p>`)
+    sfxAccept()
+  }
+
+  const handleCheckClaims = () => {
+    // Score on citation-stripped prose, but anchor the ORIGINAL sentence
+    // so underlines resolve against the live document.
+    const rawSentences = docTextAll().split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean)
+    const hits: ClaimHit[] = []
+    const newFindings: Finding[] = []
+    const usedCards = new Set<string>()
+    rawSentences.slice(0, 60).forEach((raw, i) => {
+      const s = stripCitationNoise(raw)
+      if (s.length < 40) return
+      const l = s.toLowerCase()
+      let best: LibraryCard | null = null
+      let bestScore = 0
+      let runnerUp = 0
+      cards.forEach(c => {
+        if (!c.passage || c.status === 'flagged') return
+        const n = claimScore(s, c.finding, c.passage)
+        if (n > bestScore) { runnerUp = bestScore; bestScore = n; best = c }
+        else if (n > runnerUp) { runnerUp = n }
+      })
+      // Threshold + margin + one-claim-per-card: kills vague multi-matches.
+      if (!best || bestScore < 0.3 || bestScore - runnerUp < 0.05) return
+      const b = best as LibraryCard
+      if (usedCards.has(b.id)) return
+      usedCards.add(b.id)
+      const con = (b.negPhrases || []).some(x => l.includes(x.toLowerCase()))
+      const verdict = con ? 'contradicted' as const : 'supported' as const
+      hits.push({ sentence: raw, cardId: b.id, verdict })
+      newFindings.push({
+        id: `res-${Date.now()}-${i}`, documentId: 'active-doc', persona: 'research',
+        kind: 'reader_observation', anchor: { quotedText: raw, documentRevision: docRevision },
+        explanation: `${verdict === 'supported' ? 'Supported' : 'Contradicted'} by: ${b.finding}`,
+        suggestions: [], status: 'open', sourceRevision: docRevision, createdAt: Date.now(),
+      })
+      if (newFindings.length >= 10) return
+    })
+    setClaimHits(hits)
+    if (newFindings.length) {
+      globalAnalysisService.addFindings(newFindings)
+      setReviewPersona('research')
+      notify(`${hits.length} claims underlined in blue. Click one.`)
+    } else {
+      notify('No claims matched a card.')
+    }
+    blip('done')
+  }
+
+  // ----- Cite popup flow (opens straight into the reference popup) -----
+  const openCite = () => {
+    if (!editor || !editor.view) return
+    const coords = editor.view.coordsAtPos(editor.state.selection.from)
+    setCitePos({ x: Math.max(8, Math.min(coords.left, window.innerWidth - 356)), y: Math.max(56, Math.min(coords.bottom + 6, window.innerHeight - 200)), w: 340 })
+    setCiteOpen(true)
+    setCiteStage('filter')
+    setCiteQuery('')
+    setCiteFilterSel(0)
+  }
+  const closeCite = () => { setCiteOpen(false) }
+
+  /** Deterministic sentence for a card + citation type. No LLM calls. */
+  const composeCite = (card: LibraryCard, t: CiteType): { text: string; cited: boolean } => {
+    const src = sources.find(s => s.id === card.sourceId)
+    if (card.kind === 'ai' || !card.passage || !src) return { text: card.finding, cited: false }
+    return { text: fallbackSentence(card, src, t), cited: true }
+  }
+
+  const pickCiteCard = (card: LibraryCard) => {
+    setCiteCard(card)
+    // Start from the panel's citation type; 1-5 / reroll switch between all 5.
+    setLevelType(CITE_TYPES.includes(citeType) ? citeType : 'paren')
+    setCiteStage('levels')
+    blip('done')
+  }
+
+  const cycleLevelType = (dir: 1 | -1) => {
+    setLevelType(t => {
+      const i = CITE_TYPES.indexOf(t)
+      const n = (i + dir + CITE_TYPES.length) % CITE_TYPES.length
+      return CITE_TYPES[n]
+    })
+    blip('select')
+  }
+
+  const acceptCite = () => {
+    if (!citeCard) return
+    const { text, cited } = composeCite(citeCard, levelTypeRef.current)
+    if (!text) return
+    setCiteOpen(false)
+    const needsSpace = !/^\s/.test(text) && !/^[,.;)]/.test(text)
+    insertAtCursor((needsSpace ? ' ' : '') + text)
+    if (cited) {
+      const src = sources.find(s => s.id === citeCard.sourceId)
+      if (src) appendReference(`<p>${apaReference(src)}</p>`)
+    }
+    sfxAccept()
+    recordSuggestionAccepted()
+  }
+
+  // Ordered reference items: pinned top match first (when it scores > 0),
+  // everything else alphabetical. Selection indexes these items.
+  const citeItems: CiteItem[] = React.useMemo(() => {
+    const q = normalizeText(citeQuery).split(' ').filter(Boolean)
+    const full = docTextAll()
+    const scored = cards
+      .map(c => {
+        let n = 0
+        try {
+          const t = full.toLowerCase()
+          c.keywords.forEach(k => { if (k && t.includes(k)) n++ })
+          n = Math.min(3, n)
+        } catch { n = 0 }
+        return { c, n }
+      })
+      .filter(({ c }) => {
+        if (!q.length) return true
+        const hay = normalizeText(`${c.finding} ${c.type} ${c.kind}`)
+        return q.every(w => hay.includes(w))
+      })
+    scored.sort((a, b) => a.c.finding.localeCompare(b.c.finding))
+    let top: { c: LibraryCard; n: number } | null = null
+    let rest = scored
+    let mx = 0
+    scored.forEach(x => { if (x.n > mx) mx = x.n })
+    if (mx > 0) {
+      const i = scored.findIndex(x => x.n === mx)
+      top = scored[i]
+      rest = [...scored.slice(0, i), ...scored.slice(i + 1)]
+    }
+    const items: CiteItem[] = []
+    if (top) items.push({ c: top.c, n: top.n, top: true })
+    rest.slice(0, top ? 4 : 5).forEach(x => items.push({ c: x.c, n: x.n, top: false }))
+    return items
+  }, [citeQuery, cards, docRevision]) // eslint-disable-line react-hooks/exhaustive-deps
+  citeRowCountRef.current = Math.max(1, citeItems.length)
+
+  const pickCiteFiltered = () => {
+    const hit = citeItems[citeFilterSel]
+    if (hit) pickCiteCard(hit.c)
+  }
+  // Document-level card-drop guard (capture): catches drops landing outside
+  // the paper (rails, references box, gaps) that TipTap would otherwise paste
+  // as raw "card:xxx" text. Runs before TipTap's own drop handler.
+  useEffect(() => {
+    const onDrop = (e: DragEvent) => {
+      let payload = ''
+      try {
+        payload = e.dataTransfer?.getData('text/plain') || ''
+      } catch { return }
+      const m = payload.match(/^card:(.+)/)
+      if (!m || !editor?.view) return
+      e.preventDefault()
+      e.stopPropagation()
+      const card = cards.find(c => c.id === m[1])
+      if (!card) return
+      try {
+        const pos = (editor.view as any).posAtCoords?.({ left: e.clientX, top: e.clientY })
+        if (pos && typeof pos.pos === 'number') {
+          editor.chain().setTextSelection(pos.pos).focus().run()
+        } else {
+          editor.chain().focus().run()
+        }
+      } catch { try { editor.chain().focus().run() } catch {} }
+      const src = sources.find(s => s.id === card.sourceId)
+      citeCardQuick(card, card.kind === 'ai' || !src ? card.finding : fallbackSentence(card, src, citeType))
+    }
+    document.addEventListener('drop', onDrop, true)
+    return () => document.removeEventListener('drop', onDrop, true)
+  }, [editor, cards, sources, citeType]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  closeCiteRef.current = closeCite
+  pickFilteredRef.current = pickCiteFiltered
+  acceptLevelRef.current = () => acceptCite()
+  rerollLevelRef.current = () => cycleLevelType(1)
+
   if (!booted) {
     return (
       <BootLoader
@@ -1733,7 +2223,9 @@ export default function EditorPage() {
           display: 'grid',
           gridTemplateColumns: isMobile
             ? '1fr'
-            : `${leftOpen ? 'minmax(240px, 280px)' : '44px'} minmax(0, 1fr)`,
+            : leftOpen
+              ? `${clampDockWidth(dockWidth)}px 6px minmax(0, 1fr)`
+              : '44px minmax(0, 1fr)',
           flex: 1,
           height: 'calc(100vh - 48px)',
           overflow: 'hidden',
@@ -1757,18 +2249,63 @@ export default function EditorPage() {
             }}
           >
             {leftOpen ? (
-              <ReviewDock
-                findings={findings}
-                onStatusChange={(id, st) => globalAnalysisService.updateStatus(id, st)}
-                onRunAnalysis={handleRunFullAnalysis}
-                analyzing={analyzing}
-                editor={editor}
-                highlightedFindingId={highlightedFindingId}
-                onToggleCollapse={() => setLeftOpen(false)}
-                onApplied={() => { void handleRunGrammar() }}
-                personaFilter={reviewPersona}
-                onPersonaFilterChange={setReviewPersona}
-              />
+              <>
+                <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
+                  {(['review', 'library'] as const).map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => { blip('select'); setDockTab(t) }}
+                      style={{
+                        flex: 1, border: 0, borderRadius: 0, background: 'none',
+                        padding: 10, fontWeight: 700,
+                        color: dockTab === t ? 'var(--btn-bg, var(--ai))' : 'var(--muted)',
+                        boxShadow: dockTab === t ? 'inset 0 -2px var(--btn-bg, var(--ai))' : 'none',
+                        textTransform: 'capitalize',
+                      }}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                  {dockTab === 'review' ? (
+                    <ReviewDock
+                      findings={findings}
+                      onStatusChange={(id, st) => globalAnalysisService.updateStatus(id, st)}
+                      onRunAnalysis={handleRunFullAnalysis}
+                      analyzing={analyzing}
+                      editor={editor}
+                      highlightedFindingId={highlightedFindingId}
+                      onToggleCollapse={() => setLeftOpen(false)}
+                      onApplied={() => { void handleRunGrammar() }}
+                      personaFilter={reviewPersona}
+                      onPersonaFilterChange={setReviewPersona}
+                    />
+                  ) : (
+                    <div style={{ padding: '10px 14px 12px' }}>
+                      <LibraryPanel
+                        cards={cards}
+                        sources={sources}
+                        docText={docTextAll()}
+                        citeType={citeType}
+                        onCiteType={setCiteType}
+                        status={libStatus}
+                        url={libUrl}
+                        onUrl={setLibUrl}
+                        onAddLink={() => void handleAddLink()}
+                        onAddPdf={f => void handleAddPdf(f)}
+                        adding={libAdding}
+                        onCite={c => citeCardQuick(c)}
+                        onShowSource={c => setSrcModal(c)}
+                        onDelete={deleteCard}
+                        onCheckClaims={handleCheckClaims}
+                        claimHits={claimHits}
+                      />
+                    </div>
+                  )}
+                </div>
+              </>
             ) : (
               <div className="rail-strip" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 0' }}>
                 <button
@@ -1787,6 +2324,26 @@ export default function EditorPage() {
               </div>
             )}
           </aside>
+        )}
+        {!isMobile && leftOpen && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize review dock"
+            aria-valuenow={clampDockWidth(dockWidth)}
+            aria-valuemin={240}
+            aria-valuemax={480}
+            tabIndex={0}
+            data-drag={draggingDock ? 'true' : 'false'}
+            className="dock-splitter"
+            title="Drag to resize dock · double-click to reset"
+            onPointerDown={onDockSplitterPointerDown}
+            onPointerMove={onDockSplitterPointerMove}
+            onPointerUp={endDockDrag}
+            onPointerCancel={endDockDrag}
+            onKeyDown={onDockSplitterKeyDown}
+            onDoubleClick={() => { saveDockWidth(280); setDockWidth(280); blip('select') }}
+          />
         )}
 
         {/* Center: Expression (Paper Editor) */}
@@ -1850,6 +2407,35 @@ export default function EditorPage() {
             >
               <div
                 className="paper"
+                onClick={e => {
+                  const dot = (e.target as HTMLElement).closest?.('.src-dot') as HTMLElement | null
+                  if (!dot) return
+                  const cid = dot.getAttribute('data-card')
+                  const hit = cards.find(c => c.id === cid)
+                  if (hit) {
+                    blip('select')
+                    setSrcModal(hit)
+                  }
+                }}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  const m = (e.dataTransfer.getData('text/plain') || '').match(/^card:(.+)/)
+                  if (!m || !editor?.view) return
+                  e.preventDefault()
+                  const card = cards.find(c => c.id === m[1])
+                  if (!card) return
+                  try {
+                    let r: Range | null = null
+                    if (document.caretRangeFromPoint) r = document.caretRangeFromPoint(e.clientX, e.clientY)
+                    if (r && editor.view.dom.contains(r.startContainer)) {
+                      const pos = editor.view.posAtDOM(r.startContainer, r.startOffset)
+                      editor.chain().setTextSelection(pos).focus().run()
+                    }
+                  } catch { /* keep cursor */ }
+                  const src = sources.find(s => s.id === card.sourceId)
+                  const sent = card.kind === 'ai' || !src ? card.finding : fallbackSentence(card, src, citeType)
+                  citeCardQuick(card, sent)
+                }}
                 style={{
                   width: '100%',
                   maxWidth:
@@ -1866,6 +2452,7 @@ export default function EditorPage() {
               >
                 <EditorContent editor={editor} />
               </div>
+              <ReferencesBox />
             </div>
 
             {/* Unified caret popup (feel-test): ghost levels at caret, selection grid on range */}
@@ -1885,6 +2472,7 @@ export default function EditorPage() {
                 onPrev={() => stepGhostOption(-1)}
                 onReroll={handleGhostRefetch}
                 onDismiss={handleDismissSuggestions}
+                onReference={() => { handleDismissSuggestions(); openCite() }}
               />
             )}
 
@@ -1925,6 +2513,36 @@ export default function EditorPage() {
                 onPrev={() => shiftSelPage(-1)}
                 onReroll={handleSelRefetch}
                 onDismiss={handleDismissSel}
+              />
+            )}
+            {/* Cite popup (Ctrl+Shift+Space): filter -> single-view levels */}
+            {citeOpen && !isMobile && (
+              <CitePopup
+                position={citePos}
+                stage={citeStage}
+                query={citeQuery}
+                onQuery={q => { setCiteQuery(q); setCiteFilterSel(0) }}
+                items={citeItems}
+                filterSel={citeFilterSel}
+                onFilterSel={setCiteFilterSel}
+                onPickCard={c => pickCiteCard(c)}
+                card={citeCard}
+                sentence={citeCard ? composeCite(citeCard, levelType).text : ''}
+                activeType={levelType}
+                onTypeSelect={t => { setLevelType(t); blip('select') }}
+                onRerollType={() => cycleLevelType(1)}
+                hasCitation={citeCard ? composeCite(citeCard, levelType).cited : false}
+                onAccept={() => acceptCite()}
+                onBack={() => { if (citeStage === 'filter') closeCite(); else setCiteStage('filter') }}
+                onClose={closeCite}
+              />
+            )}
+            {srcModal && (
+              <SourceModal
+                card={srcModal}
+                source={sources.find(s => s.id === srcModal.sourceId) || null}
+                pageText={pageTexts[srcModal.sourceId] || ''}
+                onClose={() => setSrcModal(null)}
               />
             )}
           </div>
@@ -2019,10 +2637,11 @@ export default function EditorPage() {
               onNext={() => stepGhostOption(1)}
               onPrev={() => stepGhostOption(-1)}
               onReroll={handleGhostRefetch}
-              onDismiss={handleDismissSuggestions}
-            />
-          )}
-          {selectionContext && !inlineReviewState && (selOpen || selLoading || !!selError) && (
+                onDismiss={handleDismissSuggestions}
+                onReference={() => { handleDismissSuggestions(); openCite() }}
+              />
+            )}
+            {selectionContext && !inlineReviewState && (selOpen || selLoading || !!selError) && (
             <CaretPopup
               sheet
               containerRef={setPopupRef('selection')}

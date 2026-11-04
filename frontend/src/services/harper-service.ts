@@ -1,6 +1,14 @@
 import { WorkerLinter, LocalLinter, Dialect, type Linter, type LintOptions } from 'harper.js'
 import { binary } from 'harper.js/binary'
 import type { Finding } from '../domain/finding'
+import { citationRanges, insideCitation } from '../lib/citation-spans'
+
+/**
+ * Harper scope: capitalization + grammar (+ agreement/punctuation).
+ * Spelling is off — it fires on author names inside citations
+ * (e.g. "Octaberlina" in "(Octaberlina, 2024, p. 1)").
+ */
+const HARPER_KIND_ALLOWLIST = new Set(['capitalization', 'grammar', 'agreement', 'punctuation'])
 
 const DIALECT_MAP: Record<string, Dialect> = {
   'en-US': Dialect.American,
@@ -173,13 +181,19 @@ export class HarperService {
       const organized = await this.linter.organizedLints(text, LINT_OPTIONS)
       const findings: Finding[] = []
       let counter = 0
+      const cites = citationRanges(text)
 
       for (const [ruleId, lints] of Object.entries(organized)) {
         for (const lint of lints) {
           counter++
+          // Kind gate: capitalization + grammar (+ agreement/punctuation) only.
+          const kind = (lint.lint_kind?.() || '').toLowerCase()
+          if (!HARPER_KIND_ALLOWLIST.has(kind)) continue
           const span = lint.span()
           // Guard zero-length / out-of-range spans
           if (span.end <= span.start || span.start < 0 || span.end > text.length) continue
+          // Citation immunity: never lint inside (Author, Year) spans.
+          if (insideCitation(span.start, span.end, cites)) continue
           const problemText = lint.get_problem_text() || text.slice(span.start, span.end)
           if (!problemText || !problemText.trim()) continue
           // Guard single-char slices inside a larger word (Harper mis-slice

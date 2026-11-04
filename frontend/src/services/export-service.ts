@@ -12,20 +12,43 @@ export const exportService = {
 
     const sanitizedTitle = title.replace(/[^a-zA-Z0-9_-]/g, '_') || 'Byline-Draft'
 
+    const refsHtml = (() => {
+      try {
+        return document.getElementById('byline-refs')?.innerHTML || localStorage.getItem('byline.refs.html') || ''
+      } catch { return '' }
+    })()
+    const refsText = refsHtml
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+
     if (format === 'docx') {
-      await exportDocx(editor.getJSON(), { title, filename: `${sanitizedTitle}.docx` })
+      const json: any = editor.getJSON()
+      if (refsText) {
+        json.content = [
+          ...(json.content || []),
+          { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'References' }] },
+          ...refsText.split('\n').filter(l => l.trim()).map(line => ({
+            type: 'paragraph', content: [{ type: 'text', text: line }],
+          })),
+        ]
+      }
+      await exportDocx(json, { title, filename: `${sanitizedTitle}.docx` })
       return
     }
 
     if (format === 'txt') {
       const text = editor.state.doc.textBetween(0, editor.state.doc.content.size, '\n\n')
-      this.triggerDownload(`${sanitizedTitle}.txt`, text, 'text/plain;charset=utf-8')
+      const full = refsText ? `${text}\n\nReferences\n${refsText}` : text
+      this.triggerDownload(`${sanitizedTitle}.txt`, full, 'text/plain;charset=utf-8')
       return
     }
 
     if (format === 'markdown') {
       const md = this.htmlToMarkdown(editor.getHTML())
-      this.triggerDownload(`${sanitizedTitle}.md`, md, 'text/markdown;charset=utf-8')
+      const full = refsText ? `${md}\n\n## References\n\n${refsText}` : md
+      this.triggerDownload(`${sanitizedTitle}.md`, full, 'text/markdown;charset=utf-8')
       return
     }
   },

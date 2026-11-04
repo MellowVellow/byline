@@ -30,6 +30,7 @@ const KIND_COLORS: Record<string, string> = {
   reader: 'var(--ai)',
   reaction: 'var(--ai)',
   grammar: 'var(--lt)',
+  research: 'var(--blue)',
 }
 
 /** Resolve a CSS var to hex for SVG data URIs. */
