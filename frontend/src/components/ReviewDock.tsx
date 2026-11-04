@@ -14,7 +14,6 @@ export interface ReviewDockProps {
   analyzing: boolean
   editor: Editor | null
   highlightedFindingId?: string | null
-  onToggleCollapse?: () => void
   onApplied?: () => void
   /** Persona filter. Controlled when onPersonaFilterChange is given. */
   personaFilter?: PersonaFilter
@@ -91,7 +90,6 @@ export default function ReviewDock({
   analyzing,
   editor,
   highlightedFindingId,
-  onToggleCollapse,
   onApplied,
   personaFilter,
   onPersonaFilterChange,
@@ -186,7 +184,6 @@ export default function ReviewDock({
     <aside className="dock dock-right" ref={popoverRef} style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', margin: 0, padding: 0, position: 'relative' }}>
       <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-
           <span className="meta" style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 6, whiteSpace: 'nowrap' }}>
             {openCount} open
           </span>
@@ -211,21 +208,6 @@ export default function ReviewDock({
               'Run Review'
             )}
           </button>
-          {onToggleCollapse && (
-            <button
-              type="button"
-              onClick={() => { blip('toggle'); onToggleCollapse() }}
-              title="Collapse dock — hides underlines"
-              style={{
-                background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer',
-                padding: '2px 6px', minHeight: 'auto', fontSize: 13, fontWeight: 700,
-                textDecoration: 'underline', textDecorationColor: 'var(--ai)',
-                textDecorationThickness: 2, textUnderlineOffset: 3,
-              }}
-            >
-              ‹
-            </button>
-          )}
         </div>
       </div>
 

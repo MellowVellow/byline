@@ -28,19 +28,43 @@ export const THEME_DEFINITIONS: Record<ThemeId, ThemeDefinition> = {
   },
   'gen-z': {
     id: 'gen-z',
-    name: 'Gen Z',
+    name: 'Gen Z style',
     tagline: 'Punchy, direct, and conversational',
-    description: 'Fast-paced, authentic, concise, and engaging without bureaucratic pretense.',
-    systemPromptModifier: 'Write with fresh, punchy energy. Keep rhythm dynamic, eliminate corporate fluff, and maintain an authentic voice.',
-    sampleTone: 'Punchy cadence, engaging hooks, zero fluff.',
+    description: 'brevity, lowercase aesthetics, and strategic use of abbreviations',
+    systemPromptModifier: 'write dynamic rhythm, direct & punchy sentences. Include slang abbreviations (e.g., ngl, fr, iykyk) where natural, and maintain an authentic voice.',
+    sampleTone: 'Punchy cadence fr, zero bullshit.',
   },
   buzzword: {
     id: 'buzzword',
-    name: 'Buzzword-Heavy',
-    tagline: 'Strategic, synergistic, and enterprise-grade',
-    description: 'Leverages high-density executive rhetoric, paradigm frameworks, strategic alignments, and forward-looking momentum.',
-    systemPromptModifier: 'Employ strategic executive diction. Weave in high-impact frameworks, synergy, alignment, and value-multiplier phrasing.',
-    sampleTone: 'Executive-ready, synergistic framing, transformative impact.',
+    name: 'Corporate Jargon',
+    tagline: 'High-level, cross-functional, and hyper-synergistic',
+    description: 'dense corporate buzzwords, strategic business jargon, and enterprise-grade fluff',
+    systemPromptModifier: 'Leverage hyper-specialized enterprise nomenclature, market-facing buzzwords, and strategic paradigms. Drive alignment across multi-stakeholder ecosystems using dynamic business phrasing.',
+    sampleTone: 'Let us circle back to operationalize core synergies, optimize mission-critical bandwidth, and deliver high-leverage paradigms end-to-end.'
+  },
+  'unhinged-marketer': {
+    id: 'unhinged-marketer',
+    name: 'Unhinged Marketer',
+    tagline: 'Aggressive, breathless, and dangerously enthusiastic',
+    description: 'excessive exclamation points, urgency-driven FOMO, and relentless hype train momentum',
+    systemPromptModifier: 'Write with absolute, unhinged marketing hype. Treat every feature like a historic miracle, use capital letters for emphasis, and make everything feel like a once-in-a-lifetime urgency.',
+    sampleTone: 'STOP EVERYTHING YOU ARE DOING right now because this updates EVERYTHING you thought you knew about productivity!!!',
+  },
+  'over-dramatic-victorian': {
+    id: 'over-dramatic-victorian',
+    name: 'Over-Dramatic Victorian',
+    tagline: 'Melodramatic, fainting-prone, and severely distressed',
+    description: '19th-century gothic panic, archaic vocabulary, and extreme emotional hand-wringing',
+    systemPromptModifier: 'Write with Victorian gothic melodrama. Use archaic vocabulary, theatrical distress, fainting spells, and existential anguish over minor details.',
+    sampleTone: 'Alas! My fragile heart cannot sustain such harrowing technical debt! I shall retreat to the fainting couch forthwith.',
+  },
+  'dialogue': {
+  id: 'dialogue',
+  name: 'Natural Dialogue',
+  tagline: 'Conversational, subtextual, and character-driven',
+  description: 'realistic speech cadence, unsaid subtext, distinct vocal tones, and natural turn-taking',
+  systemPromptModifier: 'Write authentic spoken dialogue. Include subtle interruptions, natural contractions, character-driven vocabulary, and unspoken subtext behind every exchange.',
+  sampleTone: '"You were actually going to tell me?" "Eventually. When the timing made sense."'
   },
 }
 

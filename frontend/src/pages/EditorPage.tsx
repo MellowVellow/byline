@@ -2250,7 +2250,7 @@ export default function EditorPage() {
           >
             {leftOpen ? (
               <>
-                <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'stretch', borderBottom: '1px solid var(--border)' }}>
                   {(['review', 'library'] as const).map(t => (
                     <button
                       key={t}
@@ -2267,6 +2267,22 @@ export default function EditorPage() {
                       {t}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    onClick={() => { blip('toggle'); setLeftOpen(false) }}
+                    title="Collapse dock — hides underlines"
+                    aria-label="Collapse dock"
+                    style={{
+                      flex: '0 0 auto', width: 36, display: 'grid', placeItems: 'center',
+                      background: 'none', border: 0, borderRadius: 0,
+                      color: 'var(--muted)', cursor: 'pointer',
+                      padding: 0, fontSize: 16, fontWeight: 700, lineHeight: 1,
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--hover)'; e.currentTarget.style.color = 'var(--ink)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--muted)' }}
+                  >
+                    ‹
+                  </button>
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                   {dockTab === 'review' ? (
@@ -2277,7 +2293,6 @@ export default function EditorPage() {
                       analyzing={analyzing}
                       editor={editor}
                       highlightedFindingId={highlightedFindingId}
-                      onToggleCollapse={() => setLeftOpen(false)}
                       onApplied={() => { void handleRunGrammar() }}
                       personaFilter={reviewPersona}
                       onPersonaFilterChange={setReviewPersona}

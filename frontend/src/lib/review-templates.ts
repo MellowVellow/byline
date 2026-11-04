@@ -67,4 +67,40 @@ export const REVIEW_TEMPLATES: ReviewTemplate[] = [
       LINT_RULES.map(r => `${r}.`).join(' ') +
       ' For each violation, quote the exact words and propose a grammatical replacement.',
   },
+  {
+    id: 'michelin_critic',
+    label: 'Pretentious Food Critic',
+    text:
+      'Pretentious Food Critic: review prose structure like an elite Michelin critic evaluating an under-seasoned dish. ' +
+      'Flag bland tone, heavy-handed phrasing, bad structural texture, uninspired transitions, and lack of stylistic depth. ' +
+      'Each issue must include a grammatical replacement plus up to two alternatives. ' +
+      'Never flag grammar or spelling (handled elsewhere).',
+  },
+  {
+    id: 'domain_sme',
+    label: 'Subject Matter Expert',
+    text:
+      'Domain SME: evaluate technical accuracy, domain rigor, precise terminology, and industry context. ' +
+      'Flag imprecise nomenclature, oversimplified mechanics, outdated operational assumptions, and misleading analogies. ' +
+      'Each issue must include a grammatical replacement plus up to two alternatives. ' +
+      'Never flag grammar or spelling (handled elsewhere).',
+  },
+  {
+    id: 'devils_advocate',
+    label: "Devil's Advocate",
+    text:
+      "Devil's Advocate: challenge core premises, stress-test underlying logic, and probe for hidden assumptions. " +
+      'Flag unaddressed counter-arguments, weak edge-case handling, overconfident assertions, and fragile claims. ' +
+      'Each issue must include a grammatical replacement plus up to two alternatives. ' +
+      'Never flag grammar or spelling (handled elsewhere).',
+  },
+  {
+    id: 'tutor',
+    label: 'Tutor',
+    text:
+      'Tutor: evaluate readability from a learning perspective, focusing on clarity of underlying logic and concept scaffolding. ' +
+      'Flag sudden jumps in complexity, missing foundational context, unexplained prerequisite concepts, and unguided leaps in reasoning. ' +
+      'Each issue must include a grammatical replacement plus up to two alternatives. ' +
+      'Never flag grammar or spelling (handled elsewhere).',
+  },
 ]

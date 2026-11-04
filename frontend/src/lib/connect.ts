@@ -38,10 +38,77 @@ export interface ConnectSession {
   alts: ConnectAlt[][]
 }
 
+const ABBREV = new Set([
+  'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'st', 'vs', 'etc',
+  'fig', 'eq', 'no', 'ch', 'sec', 'p', 'pp', 'al', 'ex', 'approx',
+  'appt', 'dept', 'est', 'min', 'max',
+])
+
+function isAbbrevPeriod(text: string, dotIdx: number): boolean {
+  const m = text.slice(0, dotIdx).match(/[A-Za-z]+$/)
+  if (!m) return false
+  const w = m[0]
+  if (w.length === 1) return true
+  return ABBREV.has(w.toLowerCase())
+}
+
 export function splitSentences(text: string): string[] {
-  return (text.match(/[^.!?]+(?:[.!?]+|$)/g) || [])
-    .map(x => x.trim())
-    .filter(Boolean)
+  const out: string[] = []
+  let start = 0
+  let depth = 0
+  let i = 0
+  const n = text.length
+  const isCloser = (c: string) => c === '"' || c === "'" || c === '”' || c === '’' || c === ')' || c === ']'
+  while (i < n) {
+    const c = text[i]
+    if (c === '(' || c === '[') depth++
+    else if (c === ')' || c === ']') depth = Math.max(0, depth - 1)
+    if ((c === '.' || c === '!' || c === '?') && depth === 0) {
+      let j = i
+      while (j + 1 < n && (text[j + 1] === '.' || text[j + 1] === '!' || text[j + 1] === '?')) j++
+      const isDotRun = text.slice(i, j + 1).includes('.')
+      let boundary = true
+      if (isDotRun) {
+        const prev = i > 0 ? text[i - 1] : ''
+        const next = j + 1 < n ? text[j + 1] : ''
+        if (/\d/.test(prev) && /\d/.test(next)) boundary = false
+        else if (c === '.' && isAbbrevPeriod(text, i)) boundary = false
+      }
+      if (boundary) {
+        let k = j + 1
+        while (k < n && isCloser(text[k])) k++
+        if (k >= n) {
+          out.push(text.slice(start).trim())
+          start = n
+          break
+        }
+        if (/\s/.test(text[k] || '')) {
+          let m = k
+          while (m < n && /\s/.test(text[m])) m++
+          while (m < n && (text[m] === '"' || text[m] === "'" || text[m] === '“' || text[m] === '‘' || text[m] === '(' || text[m] === '[')) m++
+          if (m < n && /[A-Za-z0-9]/.test(text[m])) {
+            out.push(text.slice(start, k).trim())
+            start = m
+            i = m
+            continue
+          }
+          if (m >= n) {
+            out.push(text.slice(start).trim())
+            start = n
+            break
+          }
+        }
+      }
+      i = j + 1
+      continue
+    }
+    i++
+  }
+  if (start < n) {
+    const tail = text.slice(start).trim()
+    if (tail) out.push(tail)
+  }
+  return out.filter(Boolean)
 }
 
 export function sentenceCount(text: string): number {

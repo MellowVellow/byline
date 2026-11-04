@@ -47,7 +47,7 @@ export default function LibraryPanel(p: Props) {
         <input
           value={p.url}
           onChange={e => p.onUrl(e.target.value)}
-          placeholder="Paste here"
+          placeholder="Paste..."
           aria-label="Link"
           style={{ flex: 1, minWidth: 0 }}
         />
@@ -116,9 +116,6 @@ export default function LibraryPanel(p: Props) {
           {p.claimHits.length} claim{p.claimHits.length > 1 ? 's' : ''} underlined in blue — click one.
         </div>
       )}
-      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted)' }}>
-        Sorted by match to the whole text
-      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {sorted.length === 0 && (
           <div style={{ fontSize: 12, color: 'var(--muted)', padding: '12px 4px' }}>
