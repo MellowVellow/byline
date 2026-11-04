@@ -37,8 +37,18 @@ export const GRAMMAR_ACCENT = {
   dot: '🔴',
 }
 
+export const RESEARCH_ACCENT = {
+  label: 'Research',
+  color: 'var(--blue)',
+  border: 'color-mix(in srgb, var(--blue) 45%, transparent)',
+  bg: 'color-mix(in srgb, var(--blue) 10%, var(--paper))',
+  dot: '🔵',
+}
+
 export function accentFor(finding: { persona: string }) {
-  return finding.persona === 'grammar' ? GRAMMAR_ACCENT : READER_ACCENT
+  if (finding.persona === 'grammar') return GRAMMAR_ACCENT
+  if (finding.persona === 'research') return RESEARCH_ACCENT
+  return READER_ACCENT
 }
 
 export function truncateQuote(q: string, maxWords = 20): string {
@@ -64,12 +74,14 @@ const PERSONA_LABELS: Record<PersonaFilter, string> = {
   all: 'All',
   reader: 'Reader',
   grammar: 'Grammar',
+  research: 'Research',
 }
 
 const PERSONA_OPTIONS: { id: PersonaFilter; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'reader', label: 'Reader' },
   { id: 'grammar', label: 'Grammar' },
+  { id: 'research', label: 'Research' },
 ]
 
 export default function ReviewDock({
@@ -147,11 +159,6 @@ export default function ReviewDock({
     }
   }
 
-  const handleDismiss = (id: string) => {
-    sfxDismiss()
-    onStatusChange(id, 'dismissed')
-  }
-
   const filtered = findings.filter(f => {
     if (selectedPersona !== 'all' && f.persona !== selectedPersona) return false
     if (selectedStatus !== 'all' && f.status !== selectedStatus) return false
@@ -179,8 +186,7 @@ export default function ReviewDock({
     <aside className="dock dock-right" ref={popoverRef} style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', margin: 0, padding: 0, position: 'relative' }}>
       <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          <span className="swatch" style={{ background: 'var(--ai)' }} />
-          <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--ink)', whiteSpace: 'nowrap' }}>Review</h3>
+
           <span className="meta" style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 6, whiteSpace: 'nowrap' }}>
             {openCount} open
           </span>
@@ -440,6 +446,30 @@ export default function ReviewDock({
                       </span>
                     )}
                   </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleJumpToText(first) }}
+                      title="Jump to quote in editor"
+                      style={{ background: 'none', border: 'none', color: '#1765CC', cursor: 'pointer', fontSize: 11, whiteSpace: 'nowrap', padding: 0 }}
+                    >
+                      Jump ↗
+                    </button>
+                    {g.items.some(f => f.status === 'open') && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          sfxDismiss()
+                          g.items.forEach(f => { if (f.status === 'open') onStatusChange(f.id, 'dismissed') })
+                        }}
+                        title="Dismiss"
+                        style={{ background: 'none', border: 'none', color: 'var(--ink-4)', cursor: 'pointer', fontSize: 11, padding: 0 }}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div style={{ fontSize: 12, color: 'var(--ink-5)', lineHeight: 1.45 }}>
@@ -450,42 +480,21 @@ export default function ReviewDock({
                   const isHighlighted = highlightedFindingId === f.id
                   return (
                     <div key={f.id} id={`finding-card-${f.id}`} style={{ display: 'grid', gap: 4, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                        {f.anchor?.quotedText && (
-                          <div
-                            title={f.anchor.quotedText}
-                            style={{
-                              flex: 1,
-                              fontFamily: '"Source Serif 4", serif', fontStyle: 'italic', fontSize: 13,
-                              lineHeight: 1.4,
-                              color: 'var(--ink-5)', background: 'var(--paper-2)', padding: '3px 6px',
-                              borderRadius: 4, borderLeft: `2px solid ${meta.color}`,
-                              minWidth: 0, overflowWrap: 'anywhere', wordBreak: 'break-word',
-                              outline: isHighlighted ? `2px solid ${meta.color}` : 'none',
-                            }}
-                          >
-                            “{truncateQuote(f.anchor.quotedText)}”
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); handleJumpToText(f) }}
-                          title="Jump to quote in editor"
-                          style={{ background: 'none', border: 'none', color: '#1765CC', cursor: 'pointer', fontSize: 11, whiteSpace: 'nowrap' }}
+                      {f.anchor?.quotedText && (
+                        <div
+                          title={f.anchor.quotedText}
+                          style={{
+                            fontFamily: '"Source Serif 4", serif', fontStyle: 'italic', fontSize: 13,
+                            lineHeight: 1.4,
+                            color: 'var(--ink-5)', background: 'var(--paper-2)', padding: '3px 6px',
+                            borderRadius: 4, borderLeft: `2px solid ${meta.color}`,
+                            minWidth: 0, overflowWrap: 'anywhere', wordBreak: 'break-word',
+                            outline: isHighlighted ? `2px solid ${meta.color}` : 'none',
+                          }}
                         >
-                          Jump ↗
-                        </button>
-                        {f.status === 'open' && (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); handleDismiss(f.id) }}
-                            title="Dismiss"
-                            style={{ background: 'none', border: 'none', color: 'var(--ink-4)', cursor: 'pointer', fontSize: 11 }}
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
+                          “{truncateQuote(f.anchor.quotedText)}”
+                        </div>
+                      )}
                       {f.status === 'stale' && (
                         <span style={{ fontSize: 10, color: 'var(--ink-4)', background: 'var(--ink-1)', padding: '1px 4px', borderRadius: 2, justifySelf: 'start' }}>
                           Stale Anchor

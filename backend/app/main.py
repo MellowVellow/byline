@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from .config import cors_list, settings
 from .security import rate_ok
 from . import budget
-from .routers import system, complete, annotate, research, lint, connect
+from .routers import system, complete, annotate, research, lint, connect, library
 
 logging.basicConfig(level=logging.INFO)
 if settings.env in ("prod", "production") and not settings.api_key:
@@ -109,5 +109,5 @@ async def _budget_handler(_request: Request, exc: budget.BudgetExceeded):
     return _budget_error(exc)
 
 
-for _router in (system.router, complete.router, annotate.router, research.router, lint.router, connect.router):
+for _router in (system.router, complete.router, annotate.router, research.router, lint.router, connect.router, library.router):
     app.include_router(_router)

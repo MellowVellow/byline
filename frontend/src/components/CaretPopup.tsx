@@ -1,4 +1,5 @@
 import React from 'react'
+import { popupMaxHeight } from '../lib/popupViewport'
 
 export type GhostLevel = 'cue' | 'question' | 'fragment' | 'sentence'
 export const GHOST_LEVELS: GhostLevel[] = ['cue', 'question', 'fragment', 'sentence']
@@ -59,6 +60,7 @@ export interface CaretPopupProps {
   onPrev?: () => void
   onReroll: () => void
   onDismiss: () => void
+  onReference?: () => void
   sheet?: boolean
 }
 
@@ -85,6 +87,7 @@ export default function CaretPopup({
   onPrev,
   onReroll,
   onDismiss,
+  onReference,
   sheet,
 }: CaretPopupProps) {
   const hasGhost = GHOST_LEVELS.some(l => (ghostGroups[l] || []).length > 0)
@@ -94,6 +97,8 @@ export default function CaretPopup({
 
   const q = mode === 'ghost' && ghostLv === 'question'
   const qText = q ? ghostOption(ghostGroups, 'question', ghostIdx) : ''
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+  const shellMaxH = sheet ? undefined : popupMaxHeight(position.y, vh, 420)
 
   return (
     <div
@@ -101,7 +106,7 @@ export default function CaretPopup({
       data-popup={mode === 'ghost' ? 'ghost' : 'selection'}
       role="listbox"
       aria-label="Suggestions"
-      className="caret-pop fade"
+      className="caret-pop fade popup-shell"
       onMouseDown={e => e.preventDefault()}
       style={sheet ? {
         position: 'static',
@@ -123,6 +128,9 @@ export default function CaretPopup({
         zIndex: 150,
         minWidth: Math.min(170, maxWidth ?? 170),
         maxWidth: Math.min(maxWidth ?? 320, 320),
+        maxHeight: shellMaxH,
+        overflowY: 'auto',
+        overscrollBehavior: 'contain',
         background: 'var(--paper)',
         border: '1px solid var(--border)',
         borderRadius: 8,
@@ -132,6 +140,7 @@ export default function CaretPopup({
         boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
         fontFamily: '"Source Serif 4", Georgia, serif',
         color: 'var(--ink)',
+        boxSizing: 'border-box',
       }}
     >
       {loading && !hasGhost && !hasSel ? (
@@ -172,7 +181,17 @@ export default function CaretPopup({
         </>
       ) : showEmpty ? (
         <div style={{ padding: '6px 6px', fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>
-          {message}
+          <div>{message}</div>
+          {showConnect && onConnect ? (
+            <button
+              type="button"
+              onClick={onConnect}
+              title="Expand Connect panel for this 2+ sentence selection (Ctrl/Cmd+Shift+/)"
+              style={{ font: 'inherit', color: 'var(--ink)', fontWeight: 600, background: 'none', border: 0, padding: '6px 0 0', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+            >
+              Connect<kbd style={{ font: 'inherit', fontSize: 11, fontWeight: 400, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>ctrl+shift+/</kbd>
+            </button>
+          ) : null}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: '100%' }}>
@@ -206,7 +225,7 @@ export default function CaretPopup({
           })}
         </div>
       )}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4, padding: '2px 4px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 12 }}>
+      <div className="popup-foot" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4, padding: '2px 4px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 12 }}>
         <button
           type="button"
           onClick={onAccept}
@@ -252,10 +271,20 @@ export default function CaretPopup({
             Connect<kbd style={{ font: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>ctrl+shift+/</kbd>
           </button>
         ) : null}
+        {onReference && (
+          <button
+            type="button"
+            onClick={onReference}
+            title="Open reference popup (cite from library)"
+            style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer', marginLeft: 'auto' }}
+          >
+            Reference<kbd style={{ font: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>alt+r</kbd>
+          </button>
+        )}
         <button
           type="button"
           onClick={onDismiss}
-          style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer', marginLeft: 'auto' }}
+          style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer', ...(onReference ? null : { marginLeft: 'auto' }) }}
         >
           Dismiss<kbd style={{ font: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>shift+`</kbd>
         </button>

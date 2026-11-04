@@ -11,6 +11,40 @@ def _author_last(title: str) -> str:
     return t[:60] if t else "n.d."
 
 
+# Sentinel author values meaning "no author given" (APA: use the title
+# instead). An explicit "Anonymous" is a real byline — keep it as the author.
+_UNKNOWN_AUTHOR_TOKENS = {"unknown", "anon", "n.a.", "na", ""}
+
+
+def is_unknown_author(authors) -> bool:
+    """True when no usable author exists (APA: substitute the title)."""
+    if not authors:
+        return True
+    if not isinstance(authors, list) or len(authors) != 1:
+        return False
+    a = authors[0]
+    if isinstance(a, dict):
+        if (a.get("family") or "").strip():
+            return False
+        key = (a.get("literal") or "").strip()
+    elif isinstance(a, str):
+        key = a.strip()
+    else:
+        return False
+    if not key:
+        return True
+    if key.lower() == "anonymous":
+        return False
+    return key.lower().rstrip(".") in _UNKNOWN_AUTHOR_TOKENS
+
+
+def title_short(title: str, n: int = 4) -> str:
+    """First few words of the title for in-text citations (APA)."""
+    words = (title or "").strip().split()
+    short = " ".join(words[:max(1, n)]).rstrip(",;:")
+    return short or "Untitled"
+
+
 def format_inline(source_title: str = "", url: str = "", locator: str = "",
                   style: str = "apa", year: str = "") -> str:
     """Short inline citation, e.g. APA: (Title, p. 3)."""
@@ -48,6 +82,133 @@ CITATION_TEMPLATES = {
     "stat": "{claim} ({stat} per {inline})",
     "define": "{term} is defined as {excerpt} {inline}",
 }
+
+CITATION_TYPES = ("intext", "narr", "paren", "direct", "para")
+
+
+def _apa_authors(authors) -> str:
+    """CSL author list -> APA author string. Empty when author unknown
+    (callers move the title to the author position instead)."""
+    if not authors or is_unknown_author(authors):
+        return ""
+    parts = []
+    for a in authors:
+        if isinstance(a, dict) and a.get("literal"):
+            parts.append(a["literal"])
+        elif isinstance(a, dict) and a.get("family"):
+            fam = a.get("family", "")
+            giv = (a.get("given") or "").strip()
+            parts.append(f"{fam}, {giv[0]}." if giv else fam)
+        elif isinstance(a, str) and a.strip():
+            parts.append(a.strip())
+    if len(parts) > 1:
+        return ", ".join(parts[:-1]) + ", & " + parts[-1]
+    return parts[0] if parts else ""
+
+
+def _apa_year(source: dict) -> str:
+    try:
+        dp = ((source or {}).get("issued") or {}).get("date-parts") or [[]]
+        y = dp[0][0] if dp and dp[0] else ""
+        return str(y) if y else "n.d."
+    except Exception:
+        return "n.d."
+
+
+def _apa_first_cite(source: dict) -> str:
+    authors = (source or {}).get("author") or []
+    title = ((source or {}).get("title") or "").strip()
+    if is_unknown_author(authors):
+        # APA: first few words of the title in double quotes (it appears in
+        # plain text in our reference list, never italicized).
+        return f'"{title_short(title)}"'
+    if authors and isinstance(authors[0], dict):
+        a0 = authors[0]
+        if a0.get("literal"):
+            return a0["literal"].split()[0] if a0["literal"].split() else "Anon"
+        return a0.get("family") or "Anon"
+    if authors and isinstance(authors[0], str):
+        return authors[0].split()[0]
+    t = (title or "Anon").strip()
+    return t.split()[0] if t.split() else "Anon"
+
+
+def format_apa_inline(source: dict, ctype: str = "paren", page: int = 0) -> str:
+    """Deterministic APA inline for a CSL-like source dict."""
+    ctype = (ctype or "paren").lower()
+    year = _apa_year(source)
+    first = _apa_first_cite(source)
+    is_pdfish = ((source or {}).get("type") in ("article-journal", "report")) or page
+    loc = f", p. {page}" if page and ctype in ("paren", "direct", "intext") else ""
+    if ctype == "narr":
+        return f"{first} ({year})"
+    return f"({first}, {year}{loc})"
+
+
+def format_apa_reference(source: dict) -> str:
+    """Deterministic APA7 reference line from CSL-like source dict."""
+    s = source or {}
+    unknown = is_unknown_author(s.get("author"))
+    au = "" if unknown else _apa_authors(s.get("author"))
+    if not au and not unknown:
+        au = _apa_first_cite(s)
+    year = _apa_year(s)
+    title = (s.get("title") or "Untitled").strip()
+    stype = (s.get("type") or "webpage")
+    url = (s.get("URL") or s.get("url") or "").strip()
+    doi = (s.get("DOI") or s.get("doi") or "").strip()
+    container = (s.get("container-title") or s.get("container") or "").strip()
+    acc = ""
+    try:
+        dp = (s.get("accessed") or {}).get("date-parts") or [[]]
+        if dp and len(dp[0]) >= 3:
+            y, m, d = dp[0][:3]
+            from datetime import date as _d
+            acc = _d(int(y), int(m), int(d)).strftime("Retrieved %B %d, %Y, from ")
+    except Exception:
+        acc = ""
+    link = f"https://doi.org/{doi}" if doi else url
+    if unknown:
+        # APA: move the full title to the author position, then the date.
+        t = title.rstrip(".")
+        if stype == "article-journal":
+            base = f"{t}. ({year}). {container}." if container else f"{t}. ({year})."
+            return f"{base} {link}".strip() if link and link not in base else base
+        if stype == "webpage":
+            base = f"{t}. ({year})."
+            if container:
+                base += f" {container}."
+            return f"{base} {acc}{link}".strip() if link else base
+        base = f"{t}. ({year}). [Report]."
+        return f"{base} {link}".strip() if link else base
+    link = f"https://doi.org/{doi}" if doi else url
+    if stype == "article-journal":
+        vol = s.get("volume") or s.get("vol") or ""
+        iss = s.get("issue") or s.get("iss") or ""
+        pages = s.get("pages") or s.get("page") or ""
+        tail = f"{container}, {vol}({iss}), {pages}".strip(" ,") if container else title
+        base = f"{au} ({year}). {title}. {tail}." if container else f"{au} ({year}). {title}."
+        return f"{base} {link}".strip() if link and link not in base else base
+    if stype == "webpage":
+        site = container or ""
+        base = f"{au} ({year}). {title}."
+        if site:
+            base += f" {site}."
+        return f"{base} {acc}{link}".strip() if link else base
+    base = f"{au} ({year}). {title} [Report]."
+    return f"{base} {link}".strip() if link else base
+
+
+def normalize_text(t: str) -> str:
+    t = (t or "").lower().replace("-\n", "").replace("-\r", "")
+    t = re.sub(r"[^a-z0-9% ]+", " ", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def passage_found(passage: str, text: str) -> bool:
+    if not passage or not passage.strip():
+        return False
+    return normalize_text(passage) in normalize_text(text)
 
 
 def apply_template(name: str, inline: str = "", claim: str = "",

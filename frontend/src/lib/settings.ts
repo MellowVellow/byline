@@ -334,6 +334,7 @@ export interface Shortcut { keys: string; action: string; context?: string }
 export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
   { group: 'Drafting', items: [
     { keys: 'Ctrl/⌘ Space', action: 'Request ghost text — or synonym/paraphrase grid when text is selected', context: 'Editor' },
+    { keys: 'Ctrl/⌘ ⇧ Space', action: 'Cite from library — reference filter then full-sentence variants', context: 'Editor' },
     { keys: 'Ctrl/⌘ ⇧ /', action: 'Expand Connect for a 2+ sentence selection', context: 'Selection grid open' },
     { keys: 'Esc / Tab', action: 'Undo / keep an applied Connect', context: 'Connect open' },
     { keys: 'Alt + 1–9 / Alt + R', action: 'Toggle a Connect seam / reroll connectors', context: 'Connect open' },

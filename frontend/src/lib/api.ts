@@ -73,8 +73,41 @@ export const api = {
   health: async () => { try { const r = await fetch(`${BASE}/api/health`); return r.ok ? await r.json() : null } catch { return null } },
   models: async () => { try { const r = await fetch(`${BASE}/api/models`); return r.ok ? await r.json() : null } catch { return null } },
   usage: async () => { try { const r = await fetch(`${BASE}/api/usage`, { headers: providerHeaders() }); return r.ok ? await r.json() : null } catch { return null } },
+  metricsUsage: async (adminToken: string, params?: { window_hours?: number; limit_ips?: number; limit_endpoints?: number }) => {
+    try {
+      const q = new URLSearchParams()
+      if (params?.window_hours) q.set('window_hours', String(params.window_hours))
+      if (params?.limit_ips) q.set('limit_ips', String(params.limit_ips))
+      if (params?.limit_endpoints) q.set('limit_endpoints', String(params.limit_endpoints))
+      const qs = q.toString() ? `?${q.toString()}` : ''
+      const r = await fetch(`${BASE}/api/metrics/usage${qs}`, { headers: { 'X-Admin-Token': adminToken } })
+      return r.ok ? await r.json() : { ok: false, error: `HTTP ${r.status}` }
+    } catch { return null }
+  },
   complete: (b: unknown, s?: AbortSignal) => post('/api/complete', b, s),
   reactions: (b: unknown, s?: AbortSignal) => post('/api/reactions', b, s),
   synonyms: (b: unknown, s?: AbortSignal) => post('/api/synonyms', b, s),
   waitlist: (email: string, note = '') => postRaw('/api/waitlist', { email, note }),
+  libraryFetch: (b: unknown, s?: AbortSignal) => post('/api/library/fetch', b, s),
+  libraryParse: (b: unknown, s?: AbortSignal) => post('/api/library/parse', b, s),
+  libraryRank: (b: unknown, s?: AbortSignal) => post('/api/library/rank', b, s),
+  libraryVision: (b: unknown, s?: AbortSignal) => post('/api/library/vision', b, s),
+}
+
+export async function uploadLibraryPdf(file: File): Promise<any> {
+  try {
+    const fd = new FormData()
+    fd.append('file', file)
+    const h: Record<string, string> = {}
+    try {
+      const { loadSettings } = await import('./settings')
+      const s = loadSettings()
+      h['X-Byline-Provider'] = s.metaProvider === 'baseten' || s.metaProvider === 'meta' ? s.metaProvider : 'auto'
+      if (s.apiKey) h['X-API-Key'] = s.apiKey
+    } catch { h['X-Byline-Provider'] = 'auto' }
+    const r = await fetch(`${BASE}/api/library/pdf`, { method: 'POST', headers: h, body: fd })
+    return await r.json().catch(() => null)
+  } catch {
+    return null
+  }
 }
