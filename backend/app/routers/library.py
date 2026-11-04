@@ -1,5 +1,6 @@
 """Library: fetch (jina/tavily) -> parse-once -> rank -> cite-variants. No scraper."""
 from __future__ import annotations
+import html
 import json
 import re
 import tempfile
@@ -159,10 +160,55 @@ def _normalize_cap(value: object, default: int = 8) -> int:
     return max(1, min(100, cap))
 
 
-def _coerce_cards(data: dict, url: str, filename: str, cap: int = 10) -> tuple[list, dict]:
+def _looks_like_url_title(value: str) -> bool:
+    return bool(re.match(r"^(?:https?://|www\.)", (value or "").strip(), re.I))
+
+
+def _clean_title(value: object) -> str:
+    s = html.unescape(str(value or "")).strip().strip("'\"")
+    s = re.sub(r"^#{1,6}\s*", "", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def extract_page_title(text: str) -> str:
+    """Best-effort page title from fetched text (Jina/frontmatter/HTML/H1)."""
+    head = (text or "")[:5000]
+    candidates: list[str] = []
+    for m in re.finditer(r"(?im)^\s*(?:title|og:title)\s*:\s*(.+?)\s*$", head):
+        candidates.append(m.group(1))
+    m = re.search(r"(?is)<title[^>]*>(.*?)</title>", head)
+    if m:
+        candidates.append(m.group(1))
+    for m in re.finditer(r"(?m)^\s{0,3}#{1,2}\s+(.+?)\s*#*\s*$", head):
+        candidates.append(m.group(1))
+    for cand in candidates:
+        title = _clean_title(cand)
+        if title and not _looks_like_url_title(title) and title.lower() != "untitled":
+            return title[:300]
+    return ""
+
+
+def _source_title(page_title: str, llm_title: object, filename: str) -> str:
+    title = _clean_title(page_title) or _clean_title(llm_title) or _clean_title(filename)
+    if not title or _looks_like_url_title(title):
+        title = _clean_title(filename) or "Untitled source"
+    return title[:300]
+
+
+def _coerce_cards(
+    data: dict,
+    url: str,
+    filename: str,
+    cap: int = 10,
+    page_title: str = "",
+) -> tuple[list, dict]:
     raw = data.get("cards", []) if isinstance(data, dict) else []
+    cap = _normalize_cap(cap, default=10)
     cards = []
-    for i, c in enumerate(raw[:_normalize_cap(cap, default=10)]):
+    seen: set[str] = set()
+    for c in raw:
+        if len(cards) >= cap:
+            break
         if not isinstance(c, dict):
             continue
         t = str(c.get("type", "fact")).lower().strip()
@@ -179,6 +225,10 @@ def _coerce_cards(data: dict, url: str, filename: str, cap: int = 10) -> tuple[l
             passage = finding  # LLM must give exact sentence; fallback keeps quotecheck honest
         if not finding:
             continue
+        key = citations.normalize_text(finding)
+        if key in seen:
+            continue
+        seen.add(key)
         try:
             page = int(c.get("page", 0) or 0)
         except Exception:
@@ -217,7 +267,7 @@ def _coerce_cards(data: dict, url: str, filename: str, cap: int = 10) -> tuple[l
         doi = doi.rstrip(".,;")
     source = {
         "type": src.get("type") or ("webpage" if not filename.lower().endswith(".pdf") else "report"),
-        "title": (src.get("title") or filename or url or "Untitled source")[:300],
+        "title": _source_title(page_title, src.get("title"), filename),
         "author": norm_auth,
         "container-title": src.get("container-title", ""),
         "issued": issued, "DOI": doi,
@@ -245,11 +295,25 @@ async def library_parse(body: LibraryParseIn):
     if len(text) < 50:
         return fail(error="text_too_short")
     cap = _normalize_cap(body.card_cap, default=8)
+    page_title = extract_page_title(text)
     try:
         ck = cache.key("library:parse", (body.url or "")[:300], (body.filename or "")[:100], text[:2000], cap)
         hit = cache.get(ck)
         if hit is not None and hit.get("cards"):
-            return ok(**hit, cached=True)
+            seen: set[str] = set()
+            cards = []
+            for c in hit["cards"]:
+                key = citations.normalize_text(str(c.get("finding") or ""))
+                if key and key in seen:
+                    continue
+                if key:
+                    seen.add(key)
+                cards.append(c)
+            src = dict(hit.get("source") or {})
+            src["title"] = _source_title(page_title, src.get("title"), body.filename)
+            patched = {**hit, "cards": cards[:cap], "source": src}
+            cache.set(ck, patched)
+            return ok(**patched, cached=True)
         s, u = prompts.library_parse_prompt(text, body.url, body.filename, cap)
         t0 = time.perf_counter()
         try:
@@ -258,12 +322,13 @@ async def library_parse(body: LibraryParseIn):
             # Deterministic fallback: first sentences become fact cards so UI stays usable.
             data = {"cards": _fallback_card_dicts(text), "source": {}}
             usage, model = {}, "fallback:deterministic"
-        cards, source = _coerce_cards(data if isinstance(data, dict) else {}, body.url, body.filename, cap)
+        cards, source = _coerce_cards(
+            data if isinstance(data, dict) else {}, body.url, body.filename, cap, page_title)
         if not cards:
             # LLM returned valid JSON but zero usable cards: deterministic fallback, never "0 cards".
             src_block = data.get("source", {}) if isinstance(data, dict) else {}
             data = {"cards": _fallback_card_dicts(text), "source": src_block}
-            cards, source = _coerce_cards(data, body.url, body.filename, cap)
+            cards, source = _coerce_cards(data, body.url, body.filename, cap, page_title)
             model = "fallback:empty-cards"
         if source["author"] == [{"literal": "Unknown"}] and len(text) > 500:
             # Second chance: metadata-only pass often succeeds where the big
@@ -273,7 +338,7 @@ async def library_parse(body: LibraryParseIn):
                 data2, _, _ = await llm.json_call(s2, u2, max_tokens=800, temperature=0.2)
                 _, retry_src = _coerce_cards(
                     {"cards": [], "source": (data2.get("source", {}) if isinstance(data2, dict) else {})},
-                    body.url, body.filename)
+                    body.url, body.filename, page_title=page_title)
                 if retry_src["author"] != [{"literal": "Unknown"}]:
                     retry_src["provenance"] = {"author": "verified", "issued": "verified"}
                     source = retry_src

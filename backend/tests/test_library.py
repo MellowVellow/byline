@@ -191,3 +191,69 @@ def test_apa_inline_preserves_literal_et_al():
 
 
 
+
+
+def test_extract_page_title_prefers_metadata_then_heading():
+    from app.routers.library import extract_page_title
+    assert extract_page_title(
+        "Title: AI Usage Statistics 2026\nURL Source: https://example.com/a\n\nBody"
+    ) == "AI Usage Statistics 2026"
+    assert extract_page_title("---\ntitle: 'Quoted Title'\n---\n# Heading") == "Quoted Title"
+    assert extract_page_title("# Heading Only\nBody") == "Heading Only"
+    assert extract_page_title("Title: https://example.com/a\nBody") == ""
+
+
+def test_coerce_dedupes_normalized_findings_and_uses_page_title():
+    from app.routers.library import _coerce_cards
+    data = {"cards": [
+        {"type": "stat", "finding": "The US has about 179 million AI users.", "passage": "The US has about 179 million AI users."},
+        {"type": "stat", "finding": "the us has about 179 million ai users", "passage": "The US has about 179 million AI users."},
+        {"type": "stat", "finding": "China has about 250 million users.", "passage": "China has about 250 million users."},
+    ], "source": {"title": "https://www.digitalapplied.com/blog/ai-usage-statistics-2026"}}
+    cards, source = _coerce_cards(data, "https://www.digitalapplied.com/blog/ai-usage-statistics-2026", "",
+                                  page_title="AI Usage Statistics 2026")
+    assert [c["finding"] for c in cards] == [
+        "The US has about 179 million AI users.",
+        "China has about 250 million users.",
+    ]
+    assert source["title"] == "AI Usage Statistics 2026"
+
+
+def test_coerce_never_uses_url_as_title():
+    from app.routers.library import _coerce_cards
+    _, source = _coerce_cards(
+        {"cards": [], "source": {"title": "https://example.com/article"}},
+        "https://example.com/article", "",
+    )
+    assert source["title"] == "Untitled source"
+
+
+def test_parse_route_uses_page_title_and_dedupes_cards():
+    from unittest.mock import AsyncMock, patch
+    from fastapi.testclient import TestClient
+    from app.main import app
+    cl = TestClient(app)
+    text = (
+        "Title: AI Usage Statistics 2026\n"
+        "URL Source: https://www.digitalapplied.com/blog/ai-usage-statistics-2026\n\n"
+        "The US has about 179 million AI users while China has about 250 million on domestic platforms. "
+        "More than 1 billion people use standalone AI tools monthly today."
+    )
+    same = {
+        "type": "stat",
+        "finding": "The US has about 179 million AI users while China has about 250 million.",
+        "passage": "The US has about 179 million AI users while China has about 250 million on domestic platforms.",
+    }
+    with patch("app.routers.library.llm.json_call", AsyncMock(return_value=(
+        {"cards": [same, {**same, "finding": same["finding"].lower()}],
+         "source": {"title": "https://www.digitalapplied.com/blog/ai-usage-statistics-2026"}},
+        {}, "mock:m"))):
+        r = cl.post("/api/library/parse", json={
+            "text": text,
+            "url": "https://www.digitalapplied.com/blog/ai-usage-statistics-2026",
+            "filename": "", "kind": "web",
+        })
+    d = r.json()
+    assert d.get("ok") is True, d
+    assert len(d.get("cards", [])) == 1
+    assert d["source"]["title"] == "AI Usage Statistics 2026"

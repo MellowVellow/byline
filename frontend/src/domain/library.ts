@@ -68,6 +68,70 @@ export function normalizeText(t: string): string {
     .trim()
 }
 
+export function isUrlLikeTitle(t: string): boolean {
+  return /^(?:https?:\/\/|www\.)/i.test((t || '').trim())
+}
+
+/** Stable page key: scheme/query/hash ignored, www and trailing slash folded. */
+export function normalizeUrl(u: string): string {
+  const raw = (u || '').trim()
+  if (!raw) return ''
+  try {
+    const url = new URL(raw)
+    const host = url.hostname.toLowerCase().replace(/^www\./, '')
+    const path = url.pathname.replace(/\/+$/, '') || '/'
+    return `${host}${path}`
+  } catch {
+    return raw.replace(/[?#].*$/, '').replace(/\/+$/, '').toLowerCase()
+  }
+}
+
+export function cardTextKey(c: Pick<LibraryCard, 'finding' | 'passage'>): string {
+  return normalizeText(c.finding) || normalizeText(c.passage)
+}
+
+/** Dedupe by normalized finding, but only within the same page/URL. */
+export function dedupeCardsBySource(cards: LibraryCard[], sources: LibrarySource[]): LibraryCard[] {
+  const pageBySource = new Map<string, string>()
+  for (const s of sources || []) pageBySource.set(s.id, normalizeUrl(s.URL || '') || `id:${s.id}`)
+  const seen = new Set<string>()
+  return (cards || []).filter(c => {
+    const textKey = cardTextKey(c)
+    if (!textKey) return true
+    const pageKey = pageBySource.get(c.sourceId) || `id:${c.sourceId}`
+    const key = `${pageKey}::${textKey}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+/** If duplicate sources share a URL, reuse the first non-URL title for all. */
+export function normalizeSourceTitles(sources: LibrarySource[]): LibrarySource[] {
+  const titleByPage = new Map<string, string>()
+  for (const s of sources || []) {
+    const page = normalizeUrl(s.URL || '')
+    const title = (s.title || '').trim()
+    if (page && title && !isUrlLikeTitle(title) && !titleByPage.has(page)) {
+      titleByPage.set(page, title)
+    }
+  }
+  return (sources || []).map(s => {
+    const page = normalizeUrl(s.URL || '')
+    const title = (s.title || '').trim()
+    const replacement = page ? titleByPage.get(page) : ''
+    return replacement && (!title || isUrlLikeTitle(title)) ? { ...s, title: replacement } : s
+  })
+}
+
+export function normalizeLibrary(
+  cards: LibraryCard[],
+  sources: LibrarySource[],
+): { cards: LibraryCard[]; sources: LibrarySource[] } {
+  const nextSources = normalizeSourceTitles(sources)
+  return { cards: dedupeCardsBySource(cards, nextSources), sources: nextSources }
+}
+
 export function keywordsOf(finding: string, type: string): string[] {
   const stop = new Set('the,a,an,and,or,of,to,in,on,for,with,is,are,was,were,be,by,as,at,from,that,this,it,its,into,per,about,than,more,less,than'.split(','))
   return normalizeText(`${finding} ${type}`)
@@ -156,7 +220,9 @@ export function loadLibrary(): { cards: LibraryCard[]; sources: LibrarySource[] 
     const raw = localStorage.getItem(LIB_KEY)
     if (raw) {
       const p = JSON.parse(raw)
-      if (Array.isArray(p.cards) && Array.isArray(p.sources)) return p
+      if (Array.isArray(p.cards) && Array.isArray(p.sources)) {
+        return normalizeLibrary(p.cards, p.sources)
+      }
     }
   } catch { /* ignore */ }
   return { cards: [], sources: [] }

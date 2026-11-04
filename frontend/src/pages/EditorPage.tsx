@@ -45,7 +45,7 @@ import CitePopup, { type CiteItem, type CiteStage } from '../components/CitePopu
 import ReferencesBox, { appendReference } from '../components/ReferencesBox'
 import SourceModal from '../components/SourceModal'
 import type { CiteType, LibraryCard, LibrarySource } from '../domain/library'
-import { CITE_TYPES, keywordsOf, loadLibrary, normalizeText, saveLibrary, saveSourceText } from '../domain/library'
+import { CITE_TYPES, dedupeCardsBySource, isUrlLikeTitle, keywordsOf, loadLibrary, normalizeSourceTitles, normalizeText, normalizeUrl, saveLibrary, saveSourceText } from '../domain/library'
 import { claimScore, stripCitationNoise } from '../lib/provenance'
 import { apaReference, fallbackSentence, quickCite } from '../lib/cite'
 import { CONNECT_RELATIONS, type ConnectSession, createConnectSession, firstAltOfRel, hasConnectSelection, isLongSelection, rerenderConnectSession } from '../lib/connect'
@@ -1867,17 +1867,19 @@ export default function EditorPage() {
   }
 
   const ingestParsed = (parsedCards: any[], source: any, pageText: string) => {
-    const sid = `s${Date.now().toString(36)}${Math.floor(Math.random() * 999)}`
     const kind = source?.type === 'webpage' ? 'Web' : 'PDF'
-    const ns: LibrarySource = {
-      id: sid, type: source?.type || 'webpage', title: source?.title || 'Untitled',
-      author: source?.author || [{ literal: 'Unknown' }],
-      'container-title': source?.['container-title'] || '',
-      issued: source?.issued || { 'date-parts': [[new Date().getFullYear()]] },
-      DOI: source?.DOI || '', URL: source?.URL || libUrl,
-      accessed: source?.accessed || { 'date-parts': [[new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate()]] },
-      provenance: source?.provenance || { author: 'inferred', issued: 'inferred' },
-      kind,
+    const page = normalizeUrl(source?.URL || '')
+    const rawTitle = (source?.title || '').trim()
+    const title = rawTitle && !isUrlLikeTitle(rawTitle) ? rawTitle : (kind === 'Web' ? 'Untitled source' : 'Untitled')
+    const existing = page ? sources.find(s => normalizeUrl(s.URL || '') === page) : undefined
+    const sid = existing?.id || `s${Date.now().toString(36)}${Math.floor(Math.random() * 999)}`
+    let nextSources = normalizeSourceTitles(sources)
+    if (page && title) {
+      nextSources = nextSources.map(s => {
+        if (normalizeUrl(s.URL || '') !== page) return s
+        const current = (s.title || '').trim()
+        return title === 'Untitled source' && current && !isUrlLikeTitle(current) ? s : { ...s, title }
+      })
     }
     const ncards: LibraryCard[] = (parsedCards || []).map((c: any, i: number) => ({
       id: `n${Date.now().toString(36)}${i}`,
@@ -1887,17 +1889,39 @@ export default function EditorPage() {
       vision: !!c.vision, sourceId: sid, status: c.status || 'found',
       keywords: keywordsOf(c.finding || '', c.type || ''),
     }))
-    setPageTexts(prev => ({ ...prev, [sid]: pageText }))
-    void saveSourceText(sid, pageText)
-    persistLib([...cards, ...ncards], [...sources, ns])
+    if (!existing && ncards.length > 0) {
+      const ns: LibrarySource = {
+        id: sid, type: source?.type || 'webpage', title,
+        author: source?.author || [{ literal: 'Unknown' }],
+        'container-title': source?.['container-title'] || '',
+        issued: source?.issued || { 'date-parts': [[new Date().getFullYear()]] },
+        DOI: source?.DOI || '', URL: source?.URL || '',
+        accessed: source?.accessed || { 'date-parts': [[new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate()]] },
+        provenance: source?.provenance || { author: 'inferred', issued: 'inferred' },
+        kind,
+      }
+      nextSources = [...nextSources, ns]
+    }
+    const oldIds = new Set(cards.map(c => c.id))
+    const merged = dedupeCardsBySource([...cards, ...ncards], nextSources)
+    const added = merged.filter(c => !oldIds.has(c.id)).length
+    const skipped = ncards.length - added
+    if (existing || ncards.length > 0) {
+      setPageTexts(prev => ({ ...prev, [sid]: pageText }))
+      void saveSourceText(sid, pageText)
+    }
+    persistLib(merged, nextSources)
     const flagged = ncards.filter(c => c.status === 'flagged').length
     const vision = ncards.filter(c => c.vision).length
     setLibStatus(
       ncards.length === 0
         ? 'No cards extracted — try again.'
-        : `${ncards.length} cards added.` +
-          (flagged ? ` ${flagged} quote${flagged > 1 ? 's' : ''} not found — check.` : ' Evidence found.') +
-          (vision ? ` ${vision} from vision.` : ''),
+        : added === 0
+          ? `No new cards — ${skipped} duplicate${skipped === 1 ? '' : 's'} skipped.`
+          : `${added} card${added === 1 ? '' : 's'} added.` +
+            (skipped ? ` ${skipped} duplicate${skipped === 1 ? '' : 's'} skipped.` : '') +
+            (flagged ? ` ${flagged} quote${flagged > 1 ? 's' : ''} not found — check.` : ' Evidence found.') +
+            (vision ? ` ${vision} from vision.` : ''),
     )
   }
 

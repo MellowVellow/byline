@@ -29,11 +29,12 @@ _CON: sqlite3.Connection | None = None
 
 
 class BudgetExceeded(RuntimeError):
-    def __init__(self, limit: int, used: int, reset_at: float):
+    def __init__(self, limit: float, used: float, reset_at: float, unit: str = "tokens"):
         super().__init__("budget_exhausted")
         self.limit = limit
         self.used = used
         self.reset_at = reset_at
+        self.unit = unit
 
 
 def _con() -> sqlite3.Connection:
@@ -59,11 +60,15 @@ def _con() -> sqlite3.Connection:
             tok_out INTEGER NOT NULL DEFAULT 0,
             tok_reasoning INTEGER NOT NULL DEFAULT 0,
             reserved INTEGER NOT NULL DEFAULT 0,
+            reserved_usd REAL NOT NULL DEFAULT 0,
             settled INTEGER NOT NULL DEFAULT 0,
             mock INTEGER NOT NULL DEFAULT 0
         )
         """
     )
+    cols = {row[1] for row in con.execute("PRAGMA table_info(usage)").fetchall()}
+    if "reserved_usd" not in cols:
+        con.execute("ALTER TABLE usage ADD COLUMN reserved_usd REAL NOT NULL DEFAULT 0")
     con.execute("CREATE INDEX IF NOT EXISTS idx_usage_ip_ts ON usage(ip, ts)")
     con.execute("CREATE INDEX IF NOT EXISTS idx_usage_ts_settled ON usage(ts, settled)")
     con.execute("CREATE INDEX IF NOT EXISTS idx_usage_endpoint_ts ON usage(endpoint, ts)")
@@ -105,6 +110,12 @@ def estimate_usd(tok_in: int, tok_out: int, tok_reasoning: int = 0) -> float:
     )
 
 
+def estimate_call_usd(system: str, user: str, max_tokens: int) -> float:
+    """Conservative pre-flight dollar estimate: prompt + full output allowance."""
+    prompt_tokens = max(1, (len(system or "") + len(user or "")) // 4)
+    return estimate_usd(prompt_tokens, max(0, int(max_tokens)))
+
+
 def _usage_tokens(usage: dict | None) -> tuple[int, int, int]:
     u = usage or {}
     tok_in = int(u.get("prompt_tokens") or u.get("input_tokens") or 0)
@@ -124,26 +135,51 @@ def _used_tokens(ip: str, now: float) -> int:
     return int(row[0] or 0)
 
 
-def reserve(ip: str, estimated_tokens: int, endpoint: str = "") -> int | None:
+def _used_usd(ip: str, now: float) -> float:
+    """Settled spend plus in-flight reservations."""
+    cutoff = now - _window()
+    row = _con().execute(
+        """SELECT COALESCE(SUM(CASE WHEN settled = 1 THEN tok_in ELSE 0 END), 0),
+                  COALESCE(SUM(CASE WHEN settled = 1 THEN tok_out ELSE 0 END), 0),
+                  COALESCE(SUM(CASE WHEN settled = 1 THEN tok_reasoning ELSE 0 END), 0),
+                  COALESCE(SUM(CASE WHEN settled = 0 THEN reserved_usd ELSE 0 END), 0)
+           FROM usage WHERE ip = ? AND ts >= ?""",
+        (ip, cutoff),
+    ).fetchone()
+    spent = estimate_usd(int(row[0] or 0), int(row[1] or 0), int(row[2] or 0))
+    return round(spent + float(row[3] or 0.0), 6)
+
+
+def reserve(
+    ip: str,
+    estimated_tokens: int,
+    endpoint: str = "",
+    estimated_usd: float | None = None,
+) -> int | None:
     """Reserve budget before an upstream call. Raises BudgetExceeded if full."""
     if not settings.ip_budget_enabled or not ip:
         return None
     est = max(0, int(estimated_tokens))
+    est_usd = max(0.0, float(estimated_usd)) if estimated_usd is not None else estimate_usd(0, est)
     with _LOCK:
         con = _con()
         now = time.time()
         con.execute("DELETE FROM usage WHERE ts < ?", (now - RETENTION_SECONDS,))
         used = _used_tokens(ip, now)
         limit = settings.ip_token_budget
-        if limit > 0 and used + est > limit:
+        usd_limit = settings.ip_budget_usd
+        used_usd = _used_usd(ip, now)
+        if (limit > 0 and used + est > limit) or (usd_limit > 0 and used_usd + est_usd > usd_limit):
             oldest = con.execute(
                 "SELECT MIN(ts) FROM usage WHERE ip = ? AND ts >= ?", (ip, now - _window())
             ).fetchone()[0]
             reset_at = (float(oldest) + _window()) if oldest else (now + _window())
+            if usd_limit > 0 and used_usd + est_usd > usd_limit:
+                raise BudgetExceeded(limit=usd_limit, used=used_usd, reset_at=reset_at, unit="usd")
             raise BudgetExceeded(limit=limit, used=used, reset_at=reset_at)
         cur = con.execute(
-            "INSERT INTO usage(ts, ip, endpoint, reserved) VALUES(?, ?, ?, ?)",
-            (now, ip, endpoint, est),
+            "INSERT INTO usage(ts, ip, endpoint, reserved, reserved_usd) VALUES(?, ?, ?, ?, ?)",
+            (now, ip, endpoint, est, round(est_usd, 6)),
         )
         con.commit()
         return int(cur.lastrowid)
@@ -163,7 +199,7 @@ def settle(rid: int | None, usage: dict | None, model: str, provider: str, mock:
         con = _con()
         con.execute(
             """UPDATE usage SET tok_in = ?, tok_out = ?, tok_reasoning = ?, reserved = 0,
-               settled = 1, mock = ?, model = ?, provider = ? WHERE id = ?""",
+               reserved_usd = 0, settled = 1, mock = ?, model = ?, provider = ? WHERE id = ?""",
             (tok_in, tok_out, reasoning, 1 if mock else 0, model or "", provider or "", rid),
         )
         con.commit()
@@ -218,6 +254,8 @@ def snapshot(ip: str) -> dict:
             (ip, cutoff),
         ).fetchall()
     limit = settings.ip_token_budget
+    limit_usd = settings.ip_budget_usd
+    used_usd = _used_usd(ip, now)
     by_provider = {
         str(p): {
             "tokens": int(t),
@@ -236,6 +274,9 @@ def snapshot(ip: str) -> dict:
         "limit_tokens": limit,
         "used_tokens": used,
         "remaining_tokens": max(0, limit - used) if limit > 0 else 0,
+        "limit_usd": limit_usd,
+        "used_usd": used_usd,
+        "remaining_usd": round(max(0.0, limit_usd - used_usd), 6) if limit_usd > 0 else 0,
         "window_hours": settings.ip_budget_window_hours,
         "reset_at": (float(oldest) + _window()) if oldest else (now + _window()),
         "requests": int(requests),

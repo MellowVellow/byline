@@ -59,9 +59,18 @@ def client_ip(request: Request) -> str:
 
 def _budget_error(exc: budget.BudgetExceeded) -> JSONResponse:
     return JSONResponse(
-        {"ok": False, "error": "budget_exhausted", "limit": exc.limit,
-         "used": exc.used, "reset_at": exc.reset_at},
+        {"ok": False, "error": "budget_exhausted", "unit": exc.unit,
+         "limit": exc.limit, "used": exc.used, "reset_at": exc.reset_at},
         status_code=429,
+    )
+
+
+def _rate_error(scope: str, limit: int, window: float) -> JSONResponse:
+    return JSONResponse(
+        {"ok": False, "error": "rate_limited", "scope": scope,
+         "limit": limit, "window_seconds": int(window)},
+        status_code=429,
+        headers={"Retry-After": str(int(window))},
     )
 
 
@@ -81,9 +90,20 @@ async def guard(request: Request, call_next):
                 return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
         if request.url.path not in _BUDGET_EXEMPT:
-            if not rate_ok(f"{ip}:{request.url.path}", limit=120, window=60.0):
-                return JSONResponse({"ok": False, "error": "rate_limited"}, status_code=429)
+            if request.url.path == "/api/complete":
+                if not rate_ok(f"suggest:min:{ip}", limit=settings.suggest_rate_per_minute, window=60.0):
+                    return _rate_error("suggestion_minute", settings.suggest_rate_per_minute, 60.0)
+                if not rate_ok(f"suggest:day:{ip}", limit=settings.suggest_rate_per_day, window=86400.0):
+                    return _rate_error("suggestion_day", settings.suggest_rate_per_day, 86400.0)
+            elif not rate_ok(f"{ip}:{request.url.path}", limit=120, window=60.0):
+                return _rate_error("endpoint", 120, 60.0)
             snap = budget.snapshot(ip)
+            if settings.ip_budget_enabled and settings.ip_budget_usd > 0 and snap["used_usd"] >= settings.ip_budget_usd:
+                return _budget_error(
+                    budget.BudgetExceeded(
+                        snap["limit_usd"], snap["used_usd"], snap["reset_at"], unit="usd"
+                    )
+                )
             if settings.ip_budget_enabled and snap["limit_tokens"] > 0 and snap["used_tokens"] >= snap["limit_tokens"]:
                 return _budget_error(
                     budget.BudgetExceeded(snap["limit_tokens"], snap["used_tokens"], snap["reset_at"])

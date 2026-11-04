@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { keywordsOf, normalizeText, relevanceScore, type LibraryCard } from '../src/domain/library'
+import { dedupeCardsBySource, keywordsOf, normalizeLibrary, normalizeSourceTitles, normalizeText, normalizeUrl, relevanceScore, type LibraryCard } from '../src/domain/library'
 import { claimScore, rankSources, stripCitationNoise, traceProvenance } from '../src/lib/provenance'
 import { apaInline, apaReference, fallbackSentence, quickCite } from '../src/lib/cite'
 import type { LibrarySource } from '../src/domain/library'
@@ -32,6 +32,37 @@ describe('library helpers', () => {
   it('scores relevance 0-3 by keyword overlap', () => {
     expect(relevanceScore(card(), 'unrelated text here')).toBe(0)
     expect(relevanceScore(card(), 'water liters data center cooling')).toBe(3)
+  })
+  it('dedupes cards only within the same page url', () => {
+    const a = { ...card(), id: 'a', finding: 'The US has about 179 million AI users.', sourceId: 's1' }
+    const b = { ...card(), id: 'b', finding: 'the us has about 179 million ai users', sourceId: 's1' }
+    const c = { ...card(), id: 'c', finding: 'The US has about 179 million AI users.', sourceId: 's2' }
+    const sources: LibrarySource[] = [
+      { ...src(), id: 's1', URL: 'https://example.com/report' },
+      { ...src(), id: 's2', URL: 'https://other.example.org/report' },
+    ]
+    expect(dedupeCardsBySource([a, b, c], sources).map(x => x.id)).toEqual(['a', 'c'])
+  })
+  it('folds url variants into one page key', () => {
+    expect(normalizeUrl('https://www.example.com/a/?utm=x#top')).toBe('example.com/a')
+    expect(normalizeUrl('http://example.com/a')).toBe('example.com/a')
+  })
+  it('reuses the page title across duplicate sources', () => {
+    const good: LibrarySource = { ...src(), id: 's1', URL: 'https://example.com/a', title: 'AI Usage Statistics 2026' }
+    const raw: LibrarySource = { ...src(), id: 's2', URL: 'https://www.example.com/a?utm=x', title: 'https://example.com/a' }
+    const out = normalizeSourceTitles([raw, good])
+    expect(out.find(s => s.id === 's2')?.title).toBe('AI Usage Statistics 2026')
+  })
+  it('normalizes a loaded library within each page', () => {
+    const a = { ...card(), id: 'a', finding: 'Same stat.', sourceId: 's1' }
+    const b = { ...card(), id: 'b', finding: 'same stat', sourceId: 's2' }
+    const sources: LibrarySource[] = [
+      { ...src(), id: 's1', URL: 'https://example.com/a', title: 'Real Title' },
+      { ...src(), id: 's2', URL: 'https://example.com/a', title: 'https://example.com/a' },
+    ]
+    const out = normalizeLibrary([a, b], sources)
+    expect(out.cards.map(x => x.id)).toEqual(['a'])
+    expect(out.sources.find(s => s.id === 's2')?.title).toBe('Real Title')
   })
   it('extracts keywords', () => {
     expect(keywordsOf('Water usage effectiveness is liters per kWh', 'term').length).toBeGreaterThan(2)

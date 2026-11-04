@@ -53,6 +53,27 @@ def test_public_endpoints_exempt():
         assert r.json().get("error") != "unauthorized"
 
 
+def test_suggestion_minute_rate_limit():
+    with patch.dict(os.environ, {"API_KEY": "", "SUGGEST_RATE_PER_MINUTE": "2", "SUGGEST_RATE_PER_DAY": "500"}):
+        body = {"context": "x" * 5000}
+        assert client.post("/api/complete", json=body).status_code != 429
+        assert client.post("/api/complete", json=body).status_code != 429
+        r = client.post("/api/complete", json=body)
+        assert r.status_code == 429
+        assert r.json()["scope"] == "suggestion_minute"
+        assert r.headers.get("retry-after") == "60"
+
+
+def test_suggestion_daily_rate_limit():
+    with patch.dict(os.environ, {"API_KEY": "", "SUGGEST_RATE_PER_MINUTE": "100", "SUGGEST_RATE_PER_DAY": "2"}):
+        body = {"context": "x" * 5000}
+        assert client.post("/api/complete", json=body).status_code != 429
+        assert client.post("/api/complete", json=body).status_code != 429
+        r = client.post("/api/complete", json=body)
+        assert r.status_code == 429
+        assert r.json()["scope"] == "suggestion_day"
+
+
 def test_waitlist_throttle():
     with patch.dict(os.environ, {"API_KEY": ""}):
         statuses = [

@@ -1,106 +1,154 @@
-# Byline — Writer-Controlled AI Writing Workspace
+# Byline
 
-> **Meta Global AI Developer Hackathon Submission**  
-> *Write what you mean. Find your way forward.*
+**Think it. Write it.**
 
-Byline is a writer-controlled AI writing workspace that helps people express their ideas, connect their thoughts, and improve their writing without handing the entire draft over to an automated generator.
+Byline is a writer-controlled editor. It does not write your draft for you. It offers the next words, a phrase, or a question, as options you can accept or ignore.
 
----
+## Manifesto
 
-## 1. Core Architecture (The Three-Part Model)
+AI writing is usually sold as completion: give a prompt, receive a paragraph. That model replaces the writer's judgment with a model's average.
 
-- **Intent (Left Dock):** Context (topic, purpose, audience, background, key ideas, constraints) and interactive hierarchical Outline nodes linking to editor blocks.
-- **Expression (Center Paper):** TipTap/ProseMirror paper editor with local Draft Assistance (Hint 1–4 words, Phrase, Sentence, Paragraph), Connect (select 2+ sentences to apply inline connectors, with seam options in a popup beside the editor), and Selection-based Paraphrase (3 distinct alternatives: Paraphrase, Shorten, Change Tone).
-- **Reflection (Right Dock):** Unified findings rail aggregating observations across all four personas:
-  - **Red (Grammar):** Deterministic language correctness & direct corrections.
-  - **Purple (Reader):** Observations on perceived ambiguity and reader interpretation (without unsolicited rewrites).
-  - **Yellow (Supervisor):** Intention and outline-grounded structural, flow, and argumentation review with up to 3 alternatives.
-  - **Blue (Researcher):** Claim extraction, evidence status (`supported`, `contradicted`, `unverified`), and citation grounding.
+Byline challenges that assumption. Writing is not a single completion event. It is a sequence of small decisions: the next word, the next clause, the next transition, the next question. Byline keeps those decisions small and visible:
 
----
+- It suggests **bits**, not blocks: cues, fragments, sentences, and questions.
+- It offers **options**, not answers: several alternatives at each level.
+- It waits for **approval**: nothing enters the draft until you accept it.
+- It stays **grounded**: source cards must carry a verbatim passage; citations are deterministic APA from metadata, not free text.
 
-## 2. Meta-Authored AI Models Exclusively
+The writer remains the author. The model is a fast, opinionated margin note.
 
-Byline strictly enforces Meta-authored models across all inference paths. Server-side allowlist guards reject non-Meta models:
+## Main features
 
-| Provider | Supported Meta Models | Role in Byline |
-|---|---|---|
-| **OpenRouter** | `meta-llama/llama-3.3-70b-instruct`, `meta-llama/llama-3.1-70b-instruct`, `meta-llama/llama-3.1-8b-instruct` | Primary reasoning for Supervisor, Reader, Paraphrase |
-| **Meta Model API** | `muse-spark-1.3`, `muse-glimmer-30b`, `muse-voice-transcribe-1.0` | Ghost draft completions, structured responses, audio transcriptions |
-| **Baseten** | `meta-llama/Llama-3.3-70B-Instruct`, `meta-llama/Meta-Llama-3.1-70B-Instruct` | Dedicated Meta inference endpoints |
-| **Internal Mock Engine** | Deterministic Meta simulation | Offline development, local testing, and offline evaluation with zero external dependencies |
+- **Suggest with assist levels**: cues, phrases, sentences, and questions at the cursor.
+- **Review feedback**: Reader notes anchored to exact passages.
+- **Paraphrasing**: synonym and rewrite options for selected text.
+- **Phrase connecting**: connectors and drafted bridges between sentences.
+- **Library from provided sources**: grounded cards and APA citations from URLs, PDFs, and documents.
 
----
+## What Byline is
 
-## 3. Quickstart & Local Execution
+- A Tiptap-based rich-text editor that runs in the browser.
+- Ghost text at the cursor with four levels: cue, phrase, sentence, and question.
+- A Reader rail that anchors critiques to exact passages.
+- Local grammar checks via Harper.js (WebAssembly, offline-capable).
+- Connect seams that join sentences with contrast, cause, elaboration, or example.
+- A Library of source cards with verbatim passages and APA citations.
+- Provenance tracing that matches draft sentences to saved source text.
+- A per-IP budget and model allowlist that keep usage bounded and Meta-only.
 
-### Backend Setup
-```bash
-# 1. Environment configuration
-cp .env.example .env
-# Edit .env with your OPENROUTER_API_KEY or META_API_KEY (optional: offline mock works automatically)
+## What Byline is not
 
-# 2. Run backend
-python3 -m venv backend/.venv
-source backend/.venv/bin/activate
-pip install -r backend/requirements.txt
-uvicorn app.main:app --port 8000 --app-dir backend
+- It is not a chatbot that writes your draft.
+- It does not auto-apply rewrites except small grammar fixes.
+- It does not store your document on a server by default.
+- It is not a general-purpose LLM gateway: the backend allowlists Meta-authored models only.
+
+## Core features
+
+### Ghost text levels
+
+When you pause, Byline offers a small set of options at the cursor:
+
+- **Cue**: 2-4 word nudge.
+- **Phrase**: finish the current clause.
+- **Sentence**: finish the sentence with one new idea.
+- **Question**: three questions that prompt the writer.
+
+You can switch levels, cycle alternatives, reroll, and accept with Tab or a number key.
+
+### Reader review
+
+The Reader persona reads the draft and leaves notes anchored to exact spans. Each note can include replacement options. Notes are grouped by explanation, can be reprompted for fresh alternatives, and can be dismissed. Grammar findings are a separate persona, so mechanical fixes do not masquerade as style advice.
+
+### Grammar
+
+Harper.js runs in the browser and flags capitalization, grammar, agreement, and punctuation. It is citation-immune: text inside `(Author, Year)` spans is not flagged. Custom words and ignored rules persist locally.
+
+### Connect
+
+Select two or more sentences and expand Connect. Byline inserts connector words at each seam and lets you toggle or cycle alternatives for contrast, cause, elaboration, and example. The transform is client-side and deterministic.
+
+### Library and citations
+
+Paste a URL or upload a PDF, DOCX, TXT, CSV, or Markdown file. Byline extracts source cards (facts, stats, quotes) and AI cards (ideas, questions, premises, terms, visuals). Each source card must carry a verbatim passage; cards that cannot be verified are flagged. Source metadata is formatted as deterministic APA. Full source text is stored locally for provenance tracing.
+
+### Local-first storage
+
+Drafts, settings, library cards, sources, and full source text stay in the browser (localStorage and IndexedDB). The backend receives only the text you send for a check.
+
+### Meta-only models
+
+The backend allowlists Meta-authored models (Muse Spark Open via Baseten, Muse Spark 1.3 via the Meta Model API, Llama 3.3 via OpenRouter, optional local vLLM). Any other model name is rejected.
+
+## Architecture
+
+```text
+frontend/  React 19 + Vite + Tiptap editor
+backend/   FastAPI routers, LLM gateway, budget accounting
+supabase/  Optional waitlist and usage rollup SQL
+data/      Local SQLite usage database (gitignored)
 ```
 
-### Frontend Setup
-```bash
-npm --prefix frontend install
-npm --prefix frontend run dev
-# Open http://localhost:5173
-```
+Frontend talks to the backend through `/api/*`. In production, Vercel rewrites `/api/*` to the backend. The backend enforces a shared API key, per-IP rate limits, per-IP token and USD budgets, and a request body cap.
 
----
+## Quick start
 
-## 4. Testing & Verification
+### Backend
 
 ```bash
-# Run backend pytest suite (38 passing tests)
-pytest backend/tests -v
-
-# Run frontend vitest suite (35 passing tests)
-npm test --prefix frontend
-
-# Run frontend typecheck and production build
-npm run build --prefix frontend
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 ```
 
----
+### Frontend
 
-## 6. Inference Benchmarks (Latency & Token Speed)
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-Measured 2026-11-04 with a fixed ghost-completion prompt
-(`Sentence` assist level, temperature 0.7, 3 sequential non-streaming
-`POST /chat/completions` trials per provider).
-Latency = wall-clock per request; token speed = `completion_tokens / wall-clock`
-(completion tokens include reasoning tokens on reasoning models).
+Open `http://localhost:5173`. The app runs at `/demo` or `/app`.
 
-| Provider | Model | Mean latency | Mean token speed | Mean completion tokens | Notes |
-|---|---|---|---|---|---|
-| **Baseten** (dedicated) | `meta-models/muse-spark-open-1026` | 2.86 s | ~202 tok/s | ~582 | Reasoning-heavy (~400–700 reasoning tok/req); needs `max_tokens ≈ 1200` — at 600 budget 2/3 trials truncated (`finish=length`, no visible text) |
-| **Meta Model API** | `muse-spark-1.3` (`reasoning_effort=minimal`) | 2.05 s | ~55 tok/s | ~113 | Stable `finish=stop` at 600 budget; lowest latency, best for interactive ghost-text |
-| **OpenRouter** (free) | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` | 1.77 s | ~71 tok/s | ~129 | Reasoning-light (~50–170 reasoning tok/req); clean `finish=stop` + visible text on all 3 trials at 600 budget; fastest mean latency measured |
-| **OpenRouter** (paid, no `:free` variant exists) | `google/gemini-3.1-flash-lite` ($0.25/M in) | 3.55 s | ~9 tok/s | ~17 | High routing variance per trial: 1.13 / 2.38 / 7.15 s; terse outputs (~15–19 tok) so tok/s understates it — quality visible text (~80–100 chars) every trial |
-| **Internal Mock Engine** | Deterministic Meta simulation | ~0 s (no network) | n/a | fixed | Offline dev / tests only; zero external dependencies |
+### Tests
 
-Takeaway: Meta API → interactive path (lowest stable latency);
-Baseten → highest raw throughput once given reasoning headroom;
-Nemotron 3 Nano (`:free`) → fastest mean latency at $0;
-Gemini 3.1 Flash Lite → terse but high-variance routing, paid-only.
-Non-Meta rows are reference benchmarks only — the backend allowlist (§2)
-still rejects them at inference time. Free-tier caps: 20 req/min, 50 req/day
-(< $10 credits purchased).
+```bash
+cd backend && pytest
+cd frontend && npm test
+```
 
----
+## Configuration
 
-## 7. Keyboard Shortcuts
-- `1`, `2`, `3`: Accept corresponding alternative when suggestion overlay or paraphrase popup is active.
-- `Tab`: Accept focused or primary suggestion.
-- `Alt` / visible button: Reroll alternative options for the current suggestion or finding.
-- `Ctrl/Cmd + Space`: Trigger draft assistance at cursor; with text selected opens synonym / paraphrase / tone popup (after `slowMs` pause).
-- `Ctrl/Cmd + Shift + /`: Expand Connect for a 2+ sentence selection from its synonym popup.
-- `Ctrl/Cmd + ,`: Open Settings & Writing Profile modal.
+Copy `.env.example` to `.env` in the project root and fill in the providers you want to use.
+
+Key variables:
+
+- `BASETEN_API_KEY`, `META_API_KEY`, `OPENROUTER_API_KEY`: provider credentials.
+- `LOCAL_BASE_URL`, `LOCAL_MODEL`, `LOCAL_PREFER`: optional local vLLM.
+- `API_KEY`: shared API key. Required when `ENV=prod`.
+- `ENV`: `dev` or `prod`. Prod refuses to boot without `API_KEY` and disables mock fallback.
+- `IP_BUDGET_ENABLED`, `IP_TOKEN_BUDGET`, `IP_BUDGET_USD`, `IP_BUDGET_WINDOW_HOURS`: per-IP limits.
+- `SUGGEST_RATE_PER_MINUTE`, `SUGGEST_RATE_PER_DAY`: completion request limits.
+- `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`: optional waitlist storage.
+- `TAVILY_API_KEY`: optional fallback for library fetching.
+- `ADMIN_TOKEN`: enables `/api/metrics/usage`.
+
+## Privacy
+
+- Drafts, settings, library data, and source text are stored in the browser.
+- The backend receives only text you explicitly send for a check.
+- Waitlist email storage is optional and can fall back to a local file in dev.
+- Per-IP usage is recorded in a local SQLite database for budgeting and admin metrics.
+
+## Project status
+
+This is a hackathon build. The core editing, suggestion, review, grammar, connect, library, and citation flows are implemented. Some features, such as Explore, use built-in sample data in this build.
+
+## Development notes
+
+- Backend constants in `backend/app/constants.py` mirror `frontend/src/lib/constants.ts`; keep them in sync.
+- The frontend uses Vite. Production builds are served from `frontend/dist`.
+- Vercel configuration is in `vercel.json`.

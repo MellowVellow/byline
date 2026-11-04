@@ -111,6 +111,18 @@ export default function TopNavigation({
         )}
 
         <Logo height={24} />
+        <span
+          className="desktop-only-btn"
+          style={{
+            fontSize: 11,
+            fontStyle: 'italic',
+            color: 'var(--muted)',
+            letterSpacing: '0.01em',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Think it. Write it.
+        </span>
 
         {/* Undo / Redo */}
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 1, marginLeft: 2 }}>

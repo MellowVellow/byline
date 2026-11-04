@@ -3,26 +3,27 @@ import { api } from '../lib/api'
 import { Logo, ThemeToggle } from '../components/Brand'
 
 const FEATURES = [
-  { color: '#6D3BE0', label: 'Reader', sub: 'shows how draft reads' },
-  { color: '#626A75', label: 'Suggest', sub: 'inactive until accepted' },
-  { color: '#8A5F00', label: 'Connect', sub: 'links between paragraphs' },
-  { color: '#C0281F', label: 'Grammar', sub: 'fixes as you type' },
+  { color: '#6D3BE0', label: 'Suggest', sub: 'assist levels at the cursor' },
+  { color: '#626A75', label: 'Review', sub: 'feedback on passages' },
+  { color: '#8A5F00', label: 'Paraphrase', sub: 'options for selected text' },
+  { color: '#C0281F', label: 'Connect', sub: 'links between sentences' },
+  { color: '#2E7D32', label: 'Library', sub: 'grounded citations' },
 ]
 
 const HOW_STEPS = [
-  { n: '01', title: 'Explore a question', body: 'Enter a question about your topic. Explore lists findings in a table. Save rows to your Library.' },
-  { n: '02', title: 'Write freely', body: 'Type in the editor. Short completions show when you pause. Press Tab to accept. Type to dismiss.' },
-  { n: '03', title: 'Read the Reader', body: 'The right rail shows Reader notes. Each note points to one passage. Nothing changes until you accept.' },
-  { n: '04', title: 'Accept or dismiss', body: 'Select a note to show the passage. Accept a fix or dismiss it. Grammar corrections apply directly.' },
+  { n: '01', title: 'Write a line', body: 'Type in the editor. Byline does not wait for a prompt. It watches the next small decision.' },
+  { n: '02', title: 'Receive bits', body: 'When you pause, Byline offers cues, phrases, sentences, and questions. Each is short. Each is one option among several.' },
+  { n: '03', title: 'Accept or dismiss', body: 'Press Tab or a number to accept one. Keep typing to dismiss all. Nothing enters the draft by default.' },
+  { n: '04', title: 'Read the Reader', body: 'The Reader rail leaves notes on exact passages. It suggests fixes. You accept or ignore each one.' },
 ]
 
 const WHY_POINTS = [
-  { icon: '✦', title: 'You decide each change', body: 'Byline lists options. You accept or dismiss each one. Ignored options close when you type.' },
-  { icon: '⬡', title: 'No setup form', body: 'Completions use nearby sentences only. They do not use a topic form or outline. Open the app and type.' },
-  { icon: '◎', title: 'One Reader', body: 'One reviewer notes questions, unclear parts, and broad claims. It gives no scores and no grades.' },
-  { icon: '◈', title: 'Links on demand', body: 'A list of connectors plus drafted bridges (Ctrl+/) joins paragraphs. Use them when needed.' },
+  { icon: '✦', title: 'Bits, not blocks', body: 'Byline offers the next few words or a short phrase. It does not hand you a finished paragraph to swallow whole.' },
+  { icon: '⬡', title: 'Options, not answers', body: 'Each pause gives several alternatives. You compare them in place, then accept one or none.' },
+  { icon: '◎', title: 'You decide each change', body: 'Suggestions wait for approval. Ignored options close when you type. The draft changes only when you say so.' },
+  { icon: '◈', title: 'Grounded sources', body: 'Source cards carry verbatim passages. Citations are deterministic APA from metadata, not model prose.' },
   { icon: '⬜', title: 'No account, local files', body: 'Drafts stay in your browser. There is no login. There is no upload.' },
-  { icon: '⬟', title: 'Meta models only', body: 'All checks run on Meta models (Muse Spark Open, Llama 3.3). The server allowlist blocks all other models.' },
+  { icon: '⬟', title: 'Meta models only', body: 'All checks run on Meta models. The server allowlist blocks all other models.' },
 ]
 
 const TESTIMONIALS = [
@@ -40,6 +41,251 @@ const FAQS = [
   { q: 'What does Explore do?', a: 'Explore takes a question and lists findings (facts, claims, terms, ideas) with source details. You can save rows to your Library. This build uses built-in sample data.' },
   { q: 'Can I run Byline offline?', a: 'Grammar checks (Harper.js) run in the browser via WebAssembly. They work offline. Checks for completions, notes, and sources need a link to the backend.' },
 ]
+
+
+function MockDisplay() {
+  const [active, setActive] = useState<'grammar' | 'reader'>('reader')
+  const [applied, setApplied] = useState<Record<string, boolean>>({})
+
+  return (
+    <div className="mock-display-shell" aria-label="Mock display reading experience">
+      <div className="mock-display-grid">
+        <div className="mock-paper" aria-label="Sample marked draft">
+          <div className="mock-paper-head">
+            <span className="mock-paper-title">The case for careful writing</span>
+            <div className="mock-toggles" role="group" aria-label="Underline layers">
+              <button
+                type="button"
+                className={`mock-toggle ${active === 'grammar' ? 'on' : ''}`}
+                onClick={() => setActive('grammar')}
+              >
+                Grammar
+              </button>
+              <button
+                type="button"
+                className={`mock-toggle ${active === 'reader' ? 'on' : ''}`}
+                onClick={() => setActive('reader')}
+              >
+                Reader
+              </button>
+            </div>
+          </div>
+          <p className="mock-para">
+            Studies show writers who revise less{' '}
+            <span
+              className={`mock-under mock-under-grammar ${active === 'grammar' ? 'active' : ''}`}
+              onClick={() => setActive('grammar')}
+            >
+              produces
+            </span>{' '}
+            better work.{' '}
+            <span
+              className={`mock-under mock-under-reader ${active === 'reader' ? 'active' : ''}`}
+              onClick={() => setActive('reader')}
+            >
+              This is clearly obvious
+            </span>{' '}
+            to anyone who has tried. One approach is to treat each draft as a conversation with a future reader.
+          </p>
+          <div className="mock-margin" aria-label="Margin notes">
+            <div
+              className={`mq mock-mq ${active === 'grammar' ? 'active' : ''}`}
+              onClick={() => setActive('grammar')}
+            >
+              mq — “produces” → “produce”. <span style={{ color: 'var(--muted)' }}>Grammar</span>
+            </div>
+            <div
+              className={`mq mock-mq ${active === 'reader' ? 'active' : ''}`}
+              onClick={() => setActive('reader')}
+            >
+              mq — “clearly obvious” repeats one meaning. <span style={{ color: 'var(--muted)' }}>Reader</span>
+            </div>
+          </div>
+          {active === 'grammar' && (
+            <div className="proof-popup mock-popup">
+              <div style={{ color: 'var(--muted)', fontSize: 12, lineHeight: 1.45, marginBottom: 6 }}>
+                Subject-verb agreement: “writers … produce”.
+              </div>
+              <div className="lp-ghost-rows">
+                <div className="lp-ghost-row">
+                  <span className="lp-ghost-n">1</span>produce
+                </div>
+              </div>
+              <div className="pp-hint" style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn primary"
+                  style={{ minHeight: 26, padding: '2px 10px', fontSize: 12 }}
+                  onClick={() => setApplied((p) => ({ ...p, grammar: true }))}
+                >
+                  {applied.grammar ? 'Applied ✔' : 'Apply fix'}
+                </button>
+                <span>Tab to accept · Esc to dismiss</span>
+              </div>
+            </div>
+          )}
+          {active === 'reader' && (
+            <div className="proof-popup mock-popup">
+              <div style={{ color: 'var(--muted)', fontSize: 12, lineHeight: 1.45, marginBottom: 6 }}>
+                “clearly obvious” repeats one meaning.
+              </div>
+              <div className="lp-ghost-rows">
+                <div className="lp-ghost-row"><span className="lp-ghost-n">1</span>obvious</div>
+                <div className="lp-ghost-row"><span className="lp-ghost-n">2</span>clear</div>
+              </div>
+              <div className="pp-hint" style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn primary"
+                  style={{ minHeight: 26, padding: '2px 10px', fontSize: 12 }}
+                  onClick={() => setApplied((p) => ({ ...p, reader: true }))}
+                >
+                  {applied.reader ? 'Applied ✔' : 'Apply suggestion'}
+                </button>
+                <span>` next · alt+` prev</span>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="mock-display-caption">
+          <h3>Reading experience</h3>
+          <p>
+            The Reader rail anchors reader comments to exact spans. Grammar fixes arrive as red wavy underlines;
+            reader observations as purple underlines. Click any underline to inspect and accept a replacement.
+          </p>
+          <div className="mock-legend">
+            <span><i className="mock-swatch mock-swatch-grammar" /> Grammar (red wavy)</span>
+            <span><i className="mock-swatch mock-swatch-reader" /> Reader (purple)</span>
+            <span><i className="mock-swatch mock-swatch-ghost" /> Ghost text (grey)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const MOCK_GHOST_OPTIONS: Record<string, string[]> = {
+  cue: ['quietly reshaped', 'changed team rhythms', 'rewritten collaboration'],
+  fragment: ['quietly reshaped how teams collaborate.', 'changed the rhythm of daily work.', 'rewritten the way teams meet.'],
+  sentence: ['quietly reshaped how teams collaborate across time zones.', 'changed the rhythm of daily work for everyone.', 'rewritten the way teams meet and decide.'],
+  question: ['How has remote work reshaped collaboration?', 'What changed in daily teamwork?', 'Which habits survived the shift?'],
+}
+
+const MOCK_GHOST_LABELS: Record<string, string> = {
+  cue: 'cue',
+  fragment: 'fragment',
+  sentence: 'sentence',
+  question: 'question',
+}
+
+function MockWriting() {
+  const [level, setLevel] = useState('fragment')
+  const [idx, setIdx] = useState(0)
+  const [accepted, setAccepted] = useState('')
+  const options = MOCK_GHOST_OPTIONS[level] || []
+  const ghost = options[idx % Math.max(1, options.length)] || ''
+  const levels = ['cue', 'fragment', 'sentence', 'question']
+
+  return (
+    <div className="mock-writing-shell" aria-label="Mock writing composition experience">
+      <div className="mock-display-grid mock-writing-grid">
+        <div className="mock-editor" aria-label="Sample composition editor">
+          <div className="mock-paper-head">
+            <span className="mock-paper-title">Composition</span>
+            <div className="mock-toggles" role="group" aria-label="Ghost levels">
+              {levels.map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  className={`mock-toggle ${level === l ? 'on' : ''}`}
+                  onClick={() => {
+                    setLevel(l)
+                    setIdx(0)
+                  }}
+                >
+                  {MOCK_GHOST_LABELS[l]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="mock-para mock-editor-para">
+            The shift to remote work has{accepted}
+            <span className="mock-ghost">{ghost ? ` ${ghost}` : ''}</span>
+            <span className="mock-caret" aria-hidden="true">|</span>
+          </p>
+          <div className="proof-popup mock-popup">
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+              <span className="chip" style={{ background: 'var(--grey)', color: '#fff', fontSize: 11, padding: '2px 7px' }}>Options</span>
+              <span style={{ fontFamily: 'var(--editor-font, "Source Serif 4", Georgia, serif)', fontSize: 15, color: 'var(--muted)' }}>
+                Options at cursor…
+              </span>
+            </div>
+            <div className="lp-ghost-rows">
+              {options.map((o, i) => (
+                <div
+                  key={i}
+                  className="lp-ghost-row"
+                  style={i === idx ? { color: 'var(--ink)', fontWeight: 600, background: 'color-mix(in srgb, var(--ai) 8%, var(--bg))' } : undefined}
+                  onClick={() => setIdx(i)}
+                >
+                  <span className="lp-ghost-n">{i + 1}</span>
+                  {o}
+                </div>
+              ))}
+            </div>
+            <div className="pp-hint" style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn primary"
+                style={{ minHeight: 26, padding: '2px 10px', fontSize: 12 }}
+                onClick={() => {
+                  if (ghost) {
+                    setAccepted((a) => a + ` ${ghost}`)
+                    setIdx((i) => (i + 1) % Math.max(1, options.length))
+                  }
+                }}
+              >
+                Accept (Tab)
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={{ minHeight: 26, padding: '2px 10px', fontSize: 12 }}
+                onClick={() => setIdx((i) => (i + 1) % Math.max(1, options.length))}
+              >
+                Reroll (` )
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={{ minHeight: 26, padding: '2px 10px', fontSize: 12 }}
+                onClick={() => {
+                  setAccepted('')
+                  setIdx(0)
+                }}
+              >
+                Reset
+              </button>
+              <span>1-9 choose · typing dismisses</span>
+            </div>
+          </div>
+        </div>
+        <div className="mock-display-caption">
+          <h3>Composition experience</h3>
+          <p>
+            Ghost text offers cues, fragments, sentences, and questions at the cursor. Cycle levels, pick an
+            option, or reroll. Gradients and motion keep the mockup feeling live. Nothing enters the draft until you
+            accept.
+          </p>
+          <div className="mock-legend">
+            <span><i className="mock-swatch mock-swatch-ghost" /> Ghost suggestion</span>
+            <span><i className="mock-swatch mock-swatch-ai" /> Accepted text</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function Landing() {
   const [email, setEmail] = useState('')
@@ -88,8 +334,8 @@ export default function Landing() {
         <section className="hero lp-section">
           <div className="hero-grid">
             <div className="hero-copy">
-              <h1>You write.<br />Byline lists options.<br />You decide.</h1>
-              <p>Other editors insert full paragraphs. Byline lists hints, phrases, and questions from nearby sentences. It then shows how a stranger may read the draft. You accept each change.</p>
+              <h1>Think it.<br />Write it.</h1>
+              <p>Byline does not complete your draft. It offers suggest levels, review feedback, paraphrases, phrase connections, and grounded library citations. You accept each change.</p>
 
               <form className="waitlist" onSubmit={join}>
                 <label className="sr-only" htmlFor="waitlist-email" />
@@ -147,6 +393,20 @@ export default function Landing() {
           </div>
         </section>
 
+        {/* ── MOCK DISPLAY ── */}
+        <section id="mock-display" className="lp-section lp-mock-display" aria-labelledby="mock-display-heading">
+          <h2 id="mock-display-heading" className="lp-section-title">Mock display</h2>
+          <p className="lp-section-sub">A live reading surface: underlines, margin notes, and reader comments you can inspect.</p>
+          <MockDisplay />
+        </section>
+
+        {/* ── MOCK WRITING ── */}
+        <section id="mock-writing" className="lp-section lp-mock-writing" aria-labelledby="mock-writing-heading">
+          <h2 id="mock-writing-heading" className="lp-section-title">Mock writing</h2>
+          <p className="lp-section-sub">A live composition surface: ghost text, levels, and options you can accept or dismiss.</p>
+          <MockWriting />
+        </section>
+
         {/* ── HOW IT WORKS ── */}
         <section id="how" className="lp-section lp-how" aria-labelledby="how-heading">
           <h2 id="how-heading" className="lp-section-title">How it works</h2>
@@ -165,7 +425,7 @@ export default function Landing() {
         {/* ── WHY BYLINE ── */}
         <section id="why" className="lp-section lp-why" aria-labelledby="why-heading">
           <h2 id="why-heading" className="lp-section-title">Why Byline</h2>
-          <p className="lp-section-sub">Most writing tools replace the writer. Byline keeps the writer in control.</p>
+          <p className="lp-section-sub">Most writing tools replace the writer with a paragraph. Byline keeps the next decision small.</p>
           <div className="lp-why-grid">
             {WHY_POINTS.map(w => (
               <div className="lp-why-card" key={w.title}>

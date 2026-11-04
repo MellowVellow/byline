@@ -101,6 +101,28 @@ class Settings:
             return 1_000_000
 
     @property
+    def ip_budget_usd(self) -> float:
+        """Per-IP spend cap. 0 disables the dollar check."""
+        try:
+            return max(0.0, float(os.getenv("IP_BUDGET_USD", "0.20")))
+        except ValueError:
+            return 0.20
+
+    @property
+    def suggest_rate_per_minute(self) -> int:
+        try:
+            return max(1, int(os.getenv("SUGGEST_RATE_PER_MINUTE", "30")))
+        except ValueError:
+            return 30
+
+    @property
+    def suggest_rate_per_day(self) -> int:
+        try:
+            return max(1, int(os.getenv("SUGGEST_RATE_PER_DAY", "500")))
+        except ValueError:
+            return 500
+
+    @property
     def ip_budget_window_hours(self) -> float:
         try:
             return max(0.1, float(os.getenv("IP_BUDGET_WINDOW_HOURS", "24")))

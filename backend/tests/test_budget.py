@@ -47,6 +47,19 @@ def test_budget_exceeded_and_release():
             budget.reserve("5.5.5.5", 101)
 
 
+def test_usd_budget_exceeded():
+    with patch.dict(os.environ, {"IP_BUDGET_USD": "0.01", "IP_TOKEN_BUDGET": "0"}):
+        rid = budget.reserve("7.7.7.7", 1000, "/api/complete", estimated_usd=0.005)
+        assert rid is not None
+        snap = budget.snapshot("7.7.7.7")
+        assert snap["used_usd"] == 0.005
+        assert snap["limit_usd"] == 0.01
+        assert snap["remaining_usd"] == 0.005
+        with pytest.raises(budget.BudgetExceeded) as exc:
+            budget.reserve("7.7.7.7", 1000, "/api/complete", estimated_usd=0.006)
+        assert exc.value.unit == "usd"
+
+
 def test_mock_settlement_is_free():
     rid = budget.reserve("6.6.6.6", 900)
     budget.settle(rid, {"total_tokens": 900}, "mock:model", "mock", mock=True)

@@ -312,6 +312,7 @@ async def chat(system: str, user: str, *, model: str | None = None, max_tokens: 
         budget.current_ip(),
         budget.estimate_prompt_tokens(system, user, max_tokens),
         budget.current_endpoint(),
+        budget.estimate_call_usd(system, user, max_tokens),
     )
     try:
         if pref == "baseten":
@@ -382,6 +383,7 @@ async def responses_call(input_data, *, instructions: str = "", tools=None, incl
         budget.current_ip(),
         budget.estimate_prompt_tokens(instructions or "", str(input_data), max_output_tokens),
         budget.current_endpoint(),
+        budget.estimate_call_usd(instructions or "", str(input_data), max_output_tokens),
     )
     if not settings.meta_api_key:
         if pref == "meta" or settings.env in ("prod", "production"):
