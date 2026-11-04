@@ -31,13 +31,35 @@ QUOTE_RULE = ('Every item needs "quote": exact text copied character-for-charact
 
 TARGET_RULE = QUOTE_RULE.replace('"quote"', '"target"').replace("quote", "target")
 
-def _lvl(level: str) -> str: return f"LEVEL: {level} - {LEVELS.get(level, LEVELS['General'])}"
+def _lvl(level: str, language: str = "en-US") -> str:
+    if not isinstance(level, str) or not level:
+        level = "General"
+    desc = LEVELS.get(level, LEVELS['General'])
+    if _is_id(language):
+        if level == "General":
+            desc = "neutral standard Bahasa Indonesia"
+        else:
+            desc = f"{desc} (apply the equivalent register in Bahasa Indonesia; ignore English-only examples)"
+    return f"LEVEL: {level} - {desc}"
 
-def complete_prompt(context, level, before, after, assist, facts=None, last_two="", avoid=None):
+
+def _is_id(language: str | None) -> bool:
+    return (language or "").strip().lower().startswith("id")
+
+
+def _lang(language: str | None) -> str:
+    if _is_id(language):
+        return ("LANGUAGE: Respond entirely in Bahasa Indonesia (never English, never mixed). "
+                "Use natural Indonesian grammar and spelling. "
+                "The LANGUAGE line overrides any English wording in LEVEL descriptions.")
+    return "LANGUAGE: Respond in English."
+
+def complete_prompt(context, level, before, after, assist, facts=None, last_two="", avoid=None, language="en-US"):
     system = (
         "You are Byline, a writing assistant that helps writers express their own thoughts.\n"
         "- Purpose: Continue the writer's text naturally without taking over their ideas.\n"
         f"- Level: Write at the configured {level} level ({LEVELS.get(level, LEVELS['General'])}).\n"
+        f"- {_lang(language)}\n"
         "- Context: Use the topic, surrounding text, and relevant library facts to make suggestions specific and coherent.\n"
         f"- Task: Follow the requested {assist} type and length exactly ({ASSIST.get(assist, ASSIST['Phrase'])}).\n"
         "- Quality: Prefer natural, specific, useful suggestions over generic, clichéd, or unnecessarily elaborate ones. Preserve the writer's intended meaning.\n"
@@ -48,20 +70,21 @@ def complete_prompt(context, level, before, after, assist, facts=None, last_two=
     lt = last_two if last_two and last_two not in (before or "") else ""
     lt_block = f"LAST TWO SENTENCES:\n{fence('LAST_TWO', lt)}\n" if lt else ""
     avoid_block = (f"ALREADY SHOWN (return 3 DIFFERENT alternatives — do not repeat or reword these):\n{fence('AVOID', chr(10).join(avoid))}\n" if avoid else "")
-    user = (f"CONTEXT (what the finished text is about): {context or '(infer from text)'}\n{_lvl(level)}\n"
+    user = (f"CONTEXT (what the finished text is about): {context or '(infer from text)'}\n{_lvl(level, language)}\n{_lang(language)}\n"
             f"ASSIST: {assist} - {ASSIST.get(assist, ASSIST['Phrase'])}\n"
             f"LIBRARY FACTS (use when relevant): {facts_txt}\n{lt_block}{avoid_block}"
             f"TEXT BEFORE CURSOR:\n{fence('BEFORE', before or '(empty)')}\nTEXT AFTER CURSOR:\n{fence('AFTER', after or '(empty)')}\n")
     return system, user
 
-def complete_levels_prompt(context, before, after, level, avoid=None, n=6):
+def complete_levels_prompt(context, before, after, level, avoid=None, n=6, language="en-US"):
     system = ("You are Byline, a writing assistant that helps writers express their own thoughts. "
               "JSON only. Prefer natural, specific, useful options over generic or cliched ones. "
+              f"{_lang(language)} "
               "Preserve the writer's intended meaning. Do not repeat existing text unnecessarily.")
     avoid_list = [(a or "")[:120] for a in (avoid or [])[:24]]
     avoid_list = [a for a in avoid_list if a.strip()]
     avoid_block = (f"ALREADY SHOWN (all {n} must differ from these — do not repeat or reword):\n{fence('AVOID', chr(10).join(avoid_list))}\n" if avoid_list else "")
-    user = (f"CONTEXT (what the finished text is about): {context or '(infer from text)'}\n{_lvl(level)}\nTEXT BEFORE CURSOR:\n{fence('BEFORE', before or '(empty)')}\n"
+    user = (f"CONTEXT (what the finished text is about): {context or '(infer from text)'}\n{_lvl(level, language)}\n{_lang(language)}\nTEXT BEFORE CURSOR:\n{fence('BEFORE', before or '(empty)')}\n"
             f"TEXT AFTER CURSOR:\n{fence('AFTER', after or '(empty)')}\n{avoid_block}"
             f'TASK: Return ONLY JSON {{"cue":[{n} strings],"question":[{n} strings],"fragment":[{n} strings],"sentence":[{n} strings]}}. '
             "cue = 2-4 word nudge; question = a short question that prompts the writer (each ends with '?'); "
@@ -69,9 +92,9 @@ def complete_levels_prompt(context, before, after, level, avoid=None, n=6):
             f"{n} DISTINCT alternatives per list (all {n} mutually different, not rewordings of each other), no quotes, no numbering.")
     return system, user
 
-def annotate_prompt(context, level, text, before="", after="", candidates=""):
-    system = f"Careful editor. JSON only. {QUOTE_RULE} Never flag grammar or spelling (handled elsewhere)."
-    user = (f"CONTEXT: {context or '(none)'}\n{_lvl(level)}\nPREV (context only): {before or '(none)'}\nNEXT (context only): {after or '(none)'}\n"
+def annotate_prompt(context, level, text, before="", after="", candidates="", language="en-US"):
+    system = f"Careful editor. JSON only. {QUOTE_RULE} Never flag grammar or spelling (handled elsewhere). {_lang(language)}"
+    user = (f"CONTEXT: {context or '(none)'}\n{_lvl(level, language)}\n{_lang(language)}\nPREV (context only): {before or '(none)'}\nNEXT (context only): {after or '(none)'}\n"
             f"TEXT:\n{fence('TEXT', text)}\n"
             f"CANDIDATES (from a word-frequency checker; only flag one if it truly doesn't fit the level): {candidates or '(none)'}\n"
             "TASK: Flag up to 6 problems: wrong word for the level, off-topic or abrupt jumps, unexplained jargon. "
@@ -80,12 +103,12 @@ def annotate_prompt(context, level, text, before="", after="", candidates=""):
             "Give up to 3 alternatives, best first; replacement is alternatives[0]. For relevance issues alternatives can be empty.")
     return system, user
 
-def reactions_prompt(context, level, text, persona="Skeptical reader", avoid=None):
-    system = f"Reader persona: {persona}. JSON only. {QUOTE_RULE}"
+def reactions_prompt(context, level, text, persona="Skeptical reader", avoid=None, language="en-US"):
+    system = f"Reader persona: {persona}. JSON only. {QUOTE_RULE} {_lang(language)}"
     avoid_list = [(a or "")[:160] for a in (avoid or [])[:24]]
     avoid_list = [a for a in avoid_list if a.strip()]
     avoid_block = (f"ALREADY SHOWN (all new options must differ from these — do not repeat or reword):\n{fence('AVOID', chr(10).join(avoid_list))}\n" if avoid_list else "")
-    user = (f"CONTEXT (author intent): {context or '(none)'}\n{_lvl(level)}\nTEXT:\n{fence('TEXT', text)}\n{avoid_block}"
+    user = (f"CONTEXT (author intent): {context or '(none)'}\n{_lvl(level, language)}\n{_lang(language)}\nTEXT:\n{fence('TEXT', text)}\n{avoid_block}"
             "TASK: Flag ONLY passages where a concrete rewrite fix is possible (repetition, contradictions, unclear jumps). "
             "Return an empty list when nothing is fixable: pure comments, compliments, or reactions with no fix are omitted, never returned. "
             "For each flagged passage give up to 3 replacement options, best first, each swapping into the sentence grammatically "
@@ -93,9 +116,9 @@ def reactions_prompt(context, level, text, persona="Skeptical reader", avoid=Non
             'JSON: {"reactions":[{"quote":"...","context":"...","kind":"critique|question","text":"...","options":["...","..."]}]}')
     return system, user
 
-def main_idea_prompt(context, level, text):
-    system = "Ordinary reader, no background. One plain sentence: the single main idea. Honest if unclear. No JSON."
-    user = f"CONTEXT: {context or '(none)'}\n{_lvl(level)}\nTEXT:\n{fence('TEXT', text)}\nTASK: One sentence only."
+def main_idea_prompt(context, level, text, language="en-US"):
+    system = f"Ordinary reader, no background. One plain sentence: the single main idea. Honest if unclear. No JSON. {_lang(language)}"
+    user = f"CONTEXT: {context or '(none)'}\n{_lvl(level, language)}\nTEXT:\n{fence('TEXT', text)}\nTASK: One sentence only."
     return system, user
 
 def outline_prompt(text):
@@ -104,10 +127,11 @@ def outline_prompt(text):
             'JSON: {"outline":[{"quote":"...","context":"...","label":"..."}]}')
     return system, user
 
-def synonyms_prompt(context, level, word, sentence):
+def synonyms_prompt(context, level, word, sentence, language="en-US"):
     system = ("Thesaurus. JSON only. Alternatives for the selected WORD that fit the sentence's meaning and grammar slot. "
-              "Alternatives can be single words or short phrases, each keeping the fragment's full meaning. Never include the original.")
-    user = (f"CONTEXT: {context or '(none)'}\n{_lvl(level)}\nSENTENCE: {sentence}\nWORD: {word}\n"
+              "Alternatives can be single words or short phrases, each keeping the fragment's full meaning. Never include the original. "
+              f"{_lang(language)}")
+    user = (f"CONTEXT: {context or '(none)'}\n{_lvl(level, language)}\n{_lang(language)}\nSENTENCE: {sentence}\nWORD: {word}\n"
             'TASK: Up to 6 per list, simple to advanced. JSON: {"Synonyms":["..."],"Paraphrase":["..."],"Tone":["..."]}. '
             "Synonyms = single-word or short replacements; Paraphrase = same meaning, different wording; "
             "Tone = replacements with a more casual or vivid tone. They must fit the context grammatically. "
@@ -237,10 +261,11 @@ def setup_questions_prompt(goal: str, context: str) -> tuple[str, str]:
     return system, user
 
 
-def connect_prompt(context: str, before: str, after: str, hint: str = "auto") -> tuple[str, str]:
+def connect_prompt(context: str, before: str, after: str, hint: str = "auto", language: str = "en-US") -> tuple[str, str]:
     system = (
         "You are Byline's Connect Engine, powered by Meta reasoning models.\n"
         "- Purpose: Synthesize logical bridges, transitions, and dialectical synthesis between two thoughts.\n"
+        f"- {_lang(language)}\n"
         "- Output: Return strictly valid JSON containing exactly 3 distinct connective bridge options.\n"
         'JSON format: {"options":[{"relation_type":"<Contrast|Cause-Effect|Concession|Evidence-Bridge|Elaboration>","bridge_text":"<synthesized sentence or clause>","rationale":"<one-line explanation of the rhetorical link>"}]}'
     )

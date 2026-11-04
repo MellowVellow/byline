@@ -27,10 +27,10 @@ def test_retry_hint_question():
 
 
 def test_levels_prompt_requests_prefetch_depth_with_avoid():
-    _, u = prompts.complete_levels_prompt("before text here", "", "General", ["shown one", "shown two"])
+    _, u = prompts.complete_levels_prompt("ctx", "before text here", "", "General", ["shown one", "shown two"])
     assert '"cue":[6 strings]' in u
     assert "ALREADY SHOWN" in u and "shown one" in u
-    _, u2 = prompts.complete_levels_prompt("before text here", "", "General")
+    _, u2 = prompts.complete_levels_prompt("ctx", "before text here", "", "General")
     assert "ALREADY SHOWN" not in u2
 
 

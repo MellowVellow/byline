@@ -4,6 +4,8 @@ import { Settings as SettingsIcon } from 'lucide-react'
 import { exportService, type ExportFormat } from '../services/export-service'
 import { blip } from '../lib/sfx'
 import { Logo, ThemeToggle } from './Brand'
+import { SUPPORTED_LANGUAGES, languageShort } from '../domain/writing-profile'
+import { t } from '../i18n'
 
 export interface TopNavigationProps {
   onOpenSettings: () => void
@@ -12,6 +14,8 @@ export interface TopNavigationProps {
   onToggleMobileDrawer?: () => void
   mobileDrawerOpen?: boolean
   findingsCount?: number
+  language?: string
+  onLanguageChange?: (code: string) => void
 
   onSuggest: () => void
   draftLoading: boolean
@@ -24,6 +28,8 @@ export default function TopNavigation({
   onToggleMobileDrawer,
   mobileDrawerOpen,
   findingsCount,
+  language = 'en-US',
+  onLanguageChange,
   onSuggest,
   draftLoading,
 }: TopNavigationProps) {
@@ -188,6 +194,23 @@ export default function TopNavigation({
 
           {/* Dark / Light mode toggle — Byline brand icons */}
           <ThemeToggle />
+          {/* Context language toggle — EN | ID abbreviation */}
+          {onLanguageChange && (
+            <button
+              type="button"
+              onClick={() => {
+                blip('select')
+                const idx = SUPPORTED_LANGUAGES.findIndex(l => l.code === language)
+                const next = SUPPORTED_LANGUAGES[(idx + 1 + SUPPORTED_LANGUAGES.length) % SUPPORTED_LANGUAGES.length]
+                onLanguageChange(next.code)
+              }}
+              title={t('contextLanguage')}
+              aria-label={t('contextLanguage')}
+              style={{ ...btnBase, fontWeight: 800, letterSpacing: '0.04em', minWidth: 38, justifyContent: 'center' }}
+            >
+              {languageShort(language)}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => { blip('open'); onOpenSettings() }}
@@ -242,6 +265,29 @@ export default function TopNavigation({
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>Theme</span>
                 <ThemeToggle />
               </div>
+              {onLanguageChange && (
+                <div style={{ padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13, color: 'var(--muted)' }}>{t('contextLanguage')}</span>
+                  <div style={{ display: 'inline-flex', gap: 4 }}>
+                    {SUPPORTED_LANGUAGES.map(l => (
+                      <button
+                        key={l.code}
+                        type="button"
+                        onClick={() => { blip('select'); setMobileMenuOpen(false); onLanguageChange(l.code) }}
+                        style={{
+                          padding: '4px 10px', fontSize: 12, fontWeight: l.code === language ? 800 : 500,
+                          borderRadius: 99,
+                          background: l.code === language ? 'var(--ink)' : 'transparent',
+                          color: l.code === language ? 'var(--bg)' : 'var(--muted)',
+                          border: '1px solid var(--border)',
+                        }}
+                      >
+                        {languageShort(l.code)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

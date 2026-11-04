@@ -25,8 +25,13 @@ export function ghostOption(groups: GhostGroups, lv: GhostLevel, idx: number): s
 export function visibleCells(grid: SelGrid, col: number, page: number): string[] {
   const a = grid[SEL_COLS[col]] || []
   if (!a.length) return []
-  const o = (page * 3) % a.length
-  return [0, 1, 2].filter(n => n < a.length).map(n => a[(o + n) % a.length])
+  return [a[((page % a.length) + a.length) % a.length]]
+}
+
+const SEL_LABELS: Record<SelCol, string> = {
+  Synonyms: 'synonym',
+  Paraphrase: 'paraphrase',
+  Tone: 'tone',
 }
 
 export interface CaretPopupProps {
@@ -117,7 +122,7 @@ export default function CaretPopup({
         left: position.x,
         zIndex: 150,
         minWidth: Math.min(170, maxWidth ?? 170),
-        maxWidth: maxWidth ?? 440,
+        maxWidth: Math.min(maxWidth ?? 320, 320),
         background: 'var(--paper)',
         border: '1px solid var(--border)',
         borderRadius: 8,
@@ -170,33 +175,35 @@ export default function CaretPopup({
           {message}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: '2px 12px' }}>
-          {SEL_COLS.map((c, ci) => (
-            <div key={c} style={{ minWidth: 0 }}>
-              <h4 style={{ margin: '0 0 2px', fontWeight: 400, fontSize: 12, color: 'var(--muted)' }}>{c}</h4>
-              {visibleCells(selGrid, ci, selPage).map((o, ri) => (
-                <div
-                  key={ri}
-                  role="option"
-                  aria-selected={ci === selCol && ri === selRow}
-                  onClick={() => onSelCell?.(ci, ri)}
-                  title={o}
-                  style={{
-                    display: 'flex',
-                    gap: 6,
-                    alignItems: 'baseline',
-                    padding: '1px 6px',
-                    borderRadius: 4,
-                    cursor: 'pointer',
-                    background: ci === selCol && ri === selRow ? 'color-mix(in srgb, var(--ai) 20%, transparent)' : 'transparent',
-                  }}
-                >
-                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ai)', flexShrink: 0 }}>{ci * 3 + ri + 1}</span>
-                  <span style={{ overflowWrap: 'anywhere' }}>{o}</span>
-                </div>
-              ))}
-            </div>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: '100%' }}>
+          {SEL_COLS.map((c, ci) => {
+            const cell = visibleCells(selGrid, ci, selPage)[0]
+            if (cell == null) return null
+            const active = ci === selCol
+            return (
+              <div
+                key={c}
+                role="option"
+                aria-selected={active}
+                onClick={() => onSelCell?.(ci, 0)}
+                title={`${SEL_LABELS[c]}: ${cell}`}
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'baseline',
+                  padding: '3px 6px',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  minWidth: 0,
+                  background: active ? 'color-mix(in srgb, var(--ai) 20%, transparent)' : 'transparent',
+                }}
+              >
+                <kbd style={{ fontFamily: 'inherit', fontSize: 11, fontWeight: 700, color: 'var(--ai)', border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', flexShrink: 0 }}>{ci + 1}</kbd>
+                <span style={{ fontSize: 12, color: 'var(--muted)', flexShrink: 0, minWidth: 62 }}>{SEL_LABELS[c]}</span>
+                <span style={{ overflowWrap: 'anywhere', minWidth: 0, flex: 1 }}>{cell}</span>
+              </div>
+            )
+          })}
         </div>
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4, padding: '2px 4px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 12 }}>

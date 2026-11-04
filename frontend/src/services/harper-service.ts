@@ -141,7 +141,7 @@ export class HarperService {
       return {
         findings: [],
         unsupportedLanguage: true,
-        error: `Harper language checking is currently available for English dialects (US, UK, CA, AU, IN). "${languageCode}" is unsupported.`,
+        error: `Grammar checks are English-only for now — skipped for "${languageCode}". Reader review still runs.`,
       }
     }
 
