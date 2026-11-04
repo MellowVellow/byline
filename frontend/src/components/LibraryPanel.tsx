@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { CiteType, LibraryCard, LibrarySource } from '../domain/library'
 import { CITE_LABELS, CITE_TYPES, authorShort, dots, relevanceScore, sourceYear } from '../domain/library'
 import { blip } from '../lib/sfx'
@@ -33,18 +33,22 @@ interface Props {
 export default function LibraryPanel(p: Props) {
   const [filter, setFilter] = useState<'all' | 'source' | 'ai'>('all')
   const [checking, setChecking] = useState(false)
-  const [cardCap, setCardCap] = useState(p.cardCap)
-  const [capText, setCapText] = useState(String(cardCap))
+  const [capText, setCapText] = useState(String(p.cardCap))
   const fileRef = useRef<HTMLInputElement>(null)
   const srcById = useMemo(() => new Map(p.sources.map(s => [s.id, s])), [p.sources])
 
+  useEffect(() => {
+    setCapText(String(p.cardCap))
+  }, [p.cardCap])
+
   const sorted = useMemo(() => {
+    const cap = Math.max(1, Math.min(100, Math.floor(p.cardCap) || 8))
     return p.cards
       .filter(c => filter === 'all' || c.kind === filter)
       .map(c => ({ c, n: relevanceScore(c, p.docText) }))
       .sort((a, b) => b.n - a.n || a.c.id.localeCompare(b.c.id))
-      .slice(0, cardCap)
-  }, [p.cards, filter, p.docText, cardCap])
+      .slice(0, cap)
+  }, [p.cards, filter, p.docText, p.cardCap])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -83,14 +87,15 @@ export default function LibraryPanel(p: Props) {
           id="card-cap"
           type="number"
           min="1"
+          max="100"
           value={capText}
           onChange={e => {
             const v = e.target.value
             setCapText(v)
-            const n = Math.max(1, parseInt(v, 10) || 1)
-            setCardCap(n)
+            const n = Math.max(1, Math.min(100, parseInt(v, 10) || 1))
             p.onCardCap(n)
           }}
+          onBlur={() => setCapText(String(Math.max(1, Math.min(100, Math.floor(p.cardCap) || 8))))}
           aria-label="Max cards to show"
           style={{ width: 70, fontSize: 11, padding: '2px 6px' }}
         />

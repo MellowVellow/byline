@@ -1914,7 +1914,8 @@ export default function EditorPage() {
         return
       }
       setLibStatus('Parsing cards…')
-      const parsed: any = await api.libraryParse({ text: (fetched.text || '').slice(0, 25000), url, kind: 'web' })
+      const cap = Math.max(1, Math.min(100, Math.floor(cardCap) || 8))
+      const parsed: any = await api.libraryParse({ text: (fetched.text || '').slice(0, 25000), url, kind: 'web', card_cap: cap })
       if (!parsed?.ok) {
         setLibStatus('Parse failed. Try again.')
         setLibAdding(false)
@@ -1942,7 +1943,8 @@ export default function EditorPage() {
       }
       if (up.needs_vision?.length) setLibStatus(`Page ${up.needs_vision[0]} is a figure: vision fallback available via Show in source. Parsing…`)
       else setLibStatus('Matching evidence sentences…')
-      const parsed: any = await api.libraryParse({ text: up.text || '', url: '', filename: f.name, kind: 'pdf' })
+      const cap = Math.max(1, Math.min(100, Math.floor(cardCap) || 8))
+      const parsed: any = await api.libraryParse({ text: up.text || '', url: '', filename: f.name, kind: 'pdf', card_cap: cap })
       if (!parsed?.ok) {
         setLibStatus('PDF parse failed.')
         setLibAdding(false)
@@ -2313,7 +2315,7 @@ export default function EditorPage() {
                         onAddPdf={f => void handleAddPdf(f)}
                         adding={libAdding}
                         cardCap={cardCap}
-                        onCardCap={setCardCap}
+                        onCardCap={n => setCardCap(Math.max(1, Math.min(100, Math.floor(n) || 8)))}
                         onCite={c => citeCardQuick(c)}
                         onShowSource={c => setSrcModal(c)}
                         onDelete={deleteCard}

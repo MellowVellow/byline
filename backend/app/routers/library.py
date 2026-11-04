@@ -151,10 +151,18 @@ async def library_fetch(body: LibraryFetchIn):
         return err(e)
 
 
-def _coerce_cards(data: dict, url: str, filename: str) -> tuple[list, dict]:
+def _normalize_cap(value: object, default: int = 8) -> int:
+    try:
+        cap = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return max(1, min(100, cap))
+
+
+def _coerce_cards(data: dict, url: str, filename: str, cap: int = 10) -> tuple[list, dict]:
     raw = data.get("cards", []) if isinstance(data, dict) else []
     cards = []
-    for i, c in enumerate(raw[:10]):
+    for i, c in enumerate(raw[:_normalize_cap(cap, default=10)]):
         if not isinstance(c, dict):
             continue
         t = str(c.get("type", "fact")).lower().strip()
@@ -236,12 +244,13 @@ async def library_parse(body: LibraryParseIn):
     text = (body.text or "").strip()
     if len(text) < 50:
         return fail(error="text_too_short")
+    cap = _normalize_cap(body.card_cap, default=8)
     try:
-        ck = cache.key("library:parse", (body.url or "")[:300], (body.filename or "")[:100], text[:2000])
+        ck = cache.key("library:parse", (body.url or "")[:300], (body.filename or "")[:100], text[:2000], cap)
         hit = cache.get(ck)
         if hit is not None and hit.get("cards"):
             return ok(**hit, cached=True)
-        s, u = prompts.library_parse_prompt(text, body.url, body.filename, body.card_cap or 8)
+        s, u = prompts.library_parse_prompt(text, body.url, body.filename, cap)
         t0 = time.perf_counter()
         try:
             data, usage, model = await llm.json_call(s, u, max_tokens=2200, temperature=0.3)
@@ -249,12 +258,12 @@ async def library_parse(body: LibraryParseIn):
             # Deterministic fallback: first sentences become fact cards so UI stays usable.
             data = {"cards": _fallback_card_dicts(text), "source": {}}
             usage, model = {}, "fallback:deterministic"
-        cards, source = _coerce_cards(data if isinstance(data, dict) else {}, body.url, body.filename)
+        cards, source = _coerce_cards(data if isinstance(data, dict) else {}, body.url, body.filename, cap)
         if not cards:
             # LLM returned valid JSON but zero usable cards: deterministic fallback, never "0 cards".
             src_block = data.get("source", {}) if isinstance(data, dict) else {}
             data = {"cards": _fallback_card_dicts(text), "source": src_block}
-            cards, source = _coerce_cards(data, body.url, body.filename)
+            cards, source = _coerce_cards(data, body.url, body.filename, cap)
             model = "fallback:empty-cards"
         if source["author"] == [{"literal": "Unknown"}] and len(text) > 500:
             # Second chance: metadata-only pass often succeeds where the big
