@@ -71,7 +71,33 @@ npm run build --prefix frontend
 
 ---
 
-## 5. Keyboard Shortcuts
+## 6. Inference Benchmarks (Latency & Token Speed)
+
+Measured 2026-11-04 with a fixed ghost-completion prompt
+(`Sentence` assist level, temperature 0.7, 3 sequential non-streaming
+`POST /chat/completions` trials per provider).
+Latency = wall-clock per request; token speed = `completion_tokens / wall-clock`
+(completion tokens include reasoning tokens on reasoning models).
+
+| Provider | Model | Mean latency | Mean token speed | Mean completion tokens | Notes |
+|---|---|---|---|---|---|
+| **Baseten** (dedicated) | `meta-models/muse-spark-open-1026` | 2.86 s | ~202 tok/s | ~582 | Reasoning-heavy (~400–700 reasoning tok/req); needs `max_tokens ≈ 1200` — at 600 budget 2/3 trials truncated (`finish=length`, no visible text) |
+| **Meta Model API** | `muse-spark-1.3` (`reasoning_effort=minimal`) | 2.05 s | ~55 tok/s | ~113 | Stable `finish=stop` at 600 budget; lowest latency, best for interactive ghost-text |
+| **OpenRouter** (free) | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` | 1.77 s | ~71 tok/s | ~129 | Reasoning-light (~50–170 reasoning tok/req); clean `finish=stop` + visible text on all 3 trials at 600 budget; fastest mean latency measured |
+| **OpenRouter** (paid, no `:free` variant exists) | `google/gemini-3.1-flash-lite` ($0.25/M in) | 3.55 s | ~9 tok/s | ~17 | High routing variance per trial: 1.13 / 2.38 / 7.15 s; terse outputs (~15–19 tok) so tok/s understates it — quality visible text (~80–100 chars) every trial |
+| **Internal Mock Engine** | Deterministic Meta simulation | ~0 s (no network) | n/a | fixed | Offline dev / tests only; zero external dependencies |
+
+Takeaway: Meta API → interactive path (lowest stable latency);
+Baseten → highest raw throughput once given reasoning headroom;
+Nemotron 3 Nano (`:free`) → fastest mean latency at $0;
+Gemini 3.1 Flash Lite → terse but high-variance routing, paid-only.
+Non-Meta rows are reference benchmarks only — the backend allowlist (§2)
+still rejects them at inference time. Free-tier caps: 20 req/min, 50 req/day
+(< $10 credits purchased).
+
+---
+
+## 7. Keyboard Shortcuts
 - `1`, `2`, `3`: Accept corresponding alternative when suggestion overlay or paraphrase popup is active.
 - `Tab`: Accept focused or primary suggestion.
 - `Alt` / visible button: Reroll alternative options for the current suggestion or finding.

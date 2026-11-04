@@ -3,13 +3,28 @@ import { loadCalls, clearCalls, loadUsageStats, type CallEvent, type UsageTeleme
 import { blip } from '../lib/sfx'
 import { api } from '../lib/api'
 
-type Tab = 'overview' | 'errors'
+type Tab = 'overview' | 'errors' | 'admin'
+
+function maskIp(ip: string) {
+  if (!ip) return '—'
+  const parts = ip.split('.')
+  if (parts.length === 4) return `${parts[0]}.${parts[1]}.x.x`
+  if (ip.includes(':')) return ip.slice(0, Math.min(6, ip.length)) + '…'
+  return ip.slice(0, 4) + '…'
+}
 
 export default function MetricsPopup({ onClose }: { summary?: string; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('overview')
   const [calls, setCalls] = useState<CallEvent[]>(loadCalls)
   const [usage, setUsage] = useState<UsageTelemetry>(loadUsageStats)
   const [serverUsage, setServerUsage] = useState<any>(null)
+  const [adminToken, setAdminToken] = useState<string>(() => { try { return sessionStorage.getItem('byline-admin-token') || '' } catch { return '' } })
+  const [adminData, setAdminData] = useState<any>(null)
+  const [adminError, setAdminError] = useState<string>('')
+  const [adminLoading, setAdminLoading] = useState(false)
+  const [adminWindow, setAdminWindow] = useState<number>(24)
+  const [ipFilter, setIpFilter] = useState('')
+  const [showFullIp, setShowFullIp] = useState(false)
 
   useEffect(() => {
     blip('open')
@@ -61,7 +76,19 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Usage & Acceptance' },
     { id: 'errors', label: `Errors (${errorRate}%)` },
+    { id: 'admin', label: 'Server Admin' },
   ]
+
+  const loadAdmin = async () => {
+    if (!adminToken.trim()) { setAdminError('Enter X-Admin-Token (ADMIN_TOKEN).'); return }
+    setAdminLoading(true); setAdminError('')
+    try { sessionStorage.setItem('byline-admin-token', adminToken.trim()) } catch {}
+    const d = await api.metricsUsage(adminToken.trim(), { window_hours: adminWindow, limit_ips: 50, limit_endpoints: 20 })
+    setAdminLoading(false)
+    if (!d) { setAdminError('Backend not reachable.'); return }
+    if (!d.ok) { setAdminError(d.error === 'unauthorized' ? 'Invalid token.' : d.error === 'not_found' ? 'Admin metrics disabled (ADMIN_TOKEN unset).' : (d.error || 'Load failed.')); setAdminData(null); return }
+    setAdminData(d)
+  }
 
   return (
     <div className="library-backdrop" onMouseDown={onClose}>
@@ -252,6 +279,11 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
                       <span>≈ <strong>${Number(serverUsage.est_usd || 0).toFixed(4)}</strong></span>
                       <span>{serverUsage.requests} requests</span>
                     </div>
+                    {(serverUsage.tokens_in != null || serverUsage.tokens_reasoning != null) && (
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
+                        in {(serverUsage.tokens_in ?? 0).toLocaleString()} · out {(serverUsage.tokens_out ?? 0).toLocaleString()} · reasoning {(serverUsage.tokens_reasoning ?? 0).toLocaleString()} (billable)
+                      </div>
+                    )}
                     <div style={{ height: 6, background: 'var(--hover)', borderRadius: 3, overflow: 'hidden' }}>
                       <div style={{ width: `${Math.min(100, serverUsage.limit_tokens ? (serverUsage.used_tokens / serverUsage.limit_tokens) * 100 : 0)}%`, height: '100%', background: 'var(--explore)' }} />
                     </div>
@@ -423,6 +455,107 @@ export default function MetricsPopup({ onClose }: { summary?: string; onClose: (
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ══════════════════════════════════════════════════
+              TAB 3: SERVER ADMIN (creator totals + per-IP)
+          ══════════════════════════════════════════════════ */}
+          {tab === 'admin' && (
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div style={{ background: 'var(--dock)', padding: '12px 16px', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, margin: '0 0 8px' }}>Creator totals — all IPs</h3>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <input
+                    type="password"
+                    value={adminToken}
+                    onChange={e => setAdminToken(e.target.value)}
+                    placeholder="X-Admin-Token"
+                    style={{ flex: '1 1 200px', fontSize: 12, padding: '6px 10px', borderRadius: 4, border: '1px solid var(--border)' }}
+                  />
+                  <select value={adminWindow} onChange={e => setAdminWindow(Number(e.target.value))} style={{ fontSize: 12, padding: '6px 8px', borderRadius: 4 }}>
+                    {[1, 24, 168, 720].map(h => <option key={h} value={h}>{h === 1 ? '1h' : h === 24 ? '24h' : h === 168 ? '7d' : '30d'}</option>)}
+                  </select>
+                  <button type="button" onClick={loadAdmin} disabled={adminLoading} style={{ fontSize: 12 }}>
+                    {adminLoading ? 'Loading…' : 'Load totals'}
+                  </button>
+                </div>
+                {adminError && <div style={{ fontSize: 12, color: 'var(--lt)' }}>{adminError}</div>}
+                {!adminData && !adminError && (
+                  <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>Token stays in sessionStorage only. Requires ADMIN_TOKEN on server.</div>
+                )}
+                {adminData?.ok && (
+                  <>
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, margin: '8px 0' }}>
+                      <span><strong>{(adminData.distinct_ips ?? 0).toLocaleString()}</strong> IPs</span>
+                      <span><strong>{(adminData.requests ?? 0).toLocaleString()}</strong> requests</span>
+                      <span><strong>{((adminData.tokens_total ?? ((adminData.tokens_in || 0) + (adminData.tokens_out || 0) + (adminData.tokens_reasoning || 0)))).toLocaleString()}</strong> tokens</span>
+                      <span>in {(adminData.tokens_in || 0).toLocaleString()} · out {(adminData.tokens_out || 0).toLocaleString()} · reasoning {(adminData.tokens_reasoning || 0).toLocaleString()}</span>
+                      <span>≈ <strong>${Number(adminData.est_usd || 0).toFixed(4)}</strong></span>
+                      <span style={{ color: 'var(--muted)' }}>window {adminData.window_hours}h</span>
+                    </div>
+                    {(adminData.by_provider?.length > 0) && (
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>
+                        {adminData.by_provider.map((p: any) => (
+                          <span key={p.provider} style={{ marginRight: 14 }}>{p.provider}: {(p.tokens ?? 0).toLocaleString()} tok / {p.requests} calls</span>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {adminData?.ok && (
+                <>
+                  {(adminData.by_endpoint?.length > 0) && (
+                    <div>
+                      <h3 style={{ fontSize: 13, fontWeight: 700, margin: '0 0 10px' }}>Traffic by endpoint</h3>
+                      <div className="metrics-table-wrap">
+                        <table className="metrics-table">
+                          <thead><tr><th>Endpoint</th><th>Calls</th><th>Tokens</th><th>In / Out / Reasoning</th></tr></thead>
+                          <tbody>
+                            {adminData.by_endpoint.map((e: any) => (
+                              <tr key={e.endpoint}>
+                                <td><code>{e.endpoint}</code></td>
+                                <td>{e.requests.toLocaleString()}</td>
+                                <td>{(e.tokens ?? 0).toLocaleString()}</td>
+                                <td style={{ color: 'var(--muted)' }}>{(e.tokens_in || 0).toLocaleString()} / {(e.tokens_out || 0).toLocaleString()} / {(e.tokens_reasoning || 0).toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '0 0 10px' }}>
+                      <h3 style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Per-IP usage</h3>
+                      <span className="spacer" />
+                      <input value={ipFilter} onChange={e => setIpFilter(e.target.value)} placeholder="Filter IP" style={{ fontSize: 12, padding: '4px 8px', borderRadius: 4, border: '1px solid var(--border)', width: 140 }} />
+                      <label style={{ fontSize: 11, color: 'var(--muted)', display: 'flex', gap: 4, alignItems: 'center' }}>
+                        <input type="checkbox" checked={showFullIp} onChange={e => setShowFullIp(e.target.checked)} /> full IP
+                      </label>
+                    </div>
+                    <div className="metrics-table-wrap">
+                      <table className="metrics-table">
+                        <thead><tr><th>IP</th><th>Calls</th><th>Tokens</th><th>In / Out / Reas.</th><th>Last seen</th></tr></thead>
+                        <tbody>
+                          {(adminData.top_ips || []).filter((r: any) => !ipFilter || String(r.ip).includes(ipFilter)).map((r: any) => (
+                            <tr key={r.ip}>
+                              <td><code>{showFullIp ? r.ip : maskIp(r.ip)}</code></td>
+                              <td>{r.requests.toLocaleString()}</td>
+                              <td>{(r.tokens ?? 0).toLocaleString()}</td>
+                              <td style={{ color: 'var(--muted)' }}>{(r.tokens_in || 0).toLocaleString()} / {(r.tokens_out || 0).toLocaleString()} / {(r.tokens_reasoning || 0).toLocaleString()}</td>
+                              <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>{r.last_seen ? new Date(r.last_seen * 1000).toLocaleString() : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 6 }}>IPs masked by default. Raw IP visible only with admin token; do not export.</div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

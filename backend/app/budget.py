@@ -65,6 +65,8 @@ def _con() -> sqlite3.Connection:
         """
     )
     con.execute("CREATE INDEX IF NOT EXISTS idx_usage_ip_ts ON usage(ip, ts)")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_usage_ts_settled ON usage(ts, settled)")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_usage_endpoint_ts ON usage(endpoint, ts)")
     con.commit()
     _CON = con
     return con
@@ -94,10 +96,11 @@ def estimate_prompt_tokens(system: str, user: str, max_tokens: int) -> int:
     return max(1, (len(system or "") + len(user or "")) // 4 + max(0, int(max_tokens)))
 
 
-def estimate_usd(tok_in: int, tok_out: int) -> float:
+def estimate_usd(tok_in: int, tok_out: int, tok_reasoning: int = 0) -> float:
+    """Placeholder pricing. Reasoning tokens bill at the output rate."""
     return round(
         (max(0, tok_in) / 1_000_000.0) * settings.price_in_per_m
-        + (max(0, tok_out) / 1_000_000.0) * settings.price_out_per_m,
+        + (max(0, tok_out + tok_reasoning) / 1_000_000.0) * settings.price_out_per_m,
         6,
     )
 
@@ -114,7 +117,7 @@ def _usage_tokens(usage: dict | None) -> tuple[int, int, int]:
 def _used_tokens(ip: str, now: float) -> int:
     cutoff = now - _window()
     row = _con().execute(
-        """SELECT COALESCE(SUM(CASE WHEN settled = 1 THEN tok_in + tok_out ELSE reserved END), 0)
+        """SELECT COALESCE(SUM(CASE WHEN settled = 1 THEN tok_in + tok_out + tok_reasoning ELSE reserved END), 0)
            FROM usage WHERE ip = ? AND ts >= ?""",
         (ip, cutoff),
     ).fetchone()
@@ -205,18 +208,29 @@ def snapshot(ip: str) -> dict:
         ).fetchone()[0]
         rows = con.execute(
             """SELECT COALESCE(NULLIF(provider, ''), 'unknown') AS p,
-                      COALESCE(SUM(tok_in + tok_out), 0) AS tokens,
+                      COALESCE(SUM(tok_in + tok_out + tok_reasoning), 0) AS tokens,
                       COALESCE(SUM(tok_in), 0) AS tin,
                       COALESCE(SUM(tok_out), 0) AS tout,
+                      COALESCE(SUM(tok_reasoning), 0) AS treason,
                       COUNT(*) AS n
                FROM usage WHERE ip = ? AND ts >= ? AND settled = 1
                GROUP BY p ORDER BY tokens DESC""",
             (ip, cutoff),
         ).fetchall()
     limit = settings.ip_token_budget
-    by_provider = {str(p): {"tokens": int(t), "requests": int(n)} for p, t, _, _, n in rows}
-    tokens_in = sum(int(i) for *_, i, _, _ in rows)
-    tokens_out = sum(int(o) for *_, o, _ in rows)
+    by_provider = {
+        str(p): {
+            "tokens": int(t),
+            "tokens_in": int(i),
+            "tokens_out": int(o),
+            "tokens_reasoning": int(r),
+            "requests": int(n),
+        }
+        for p, t, i, o, r, n in rows
+    }
+    tokens_in = sum(int(r[2]) for r in rows)
+    tokens_out = sum(int(r[3]) for r in rows)
+    tokens_reasoning = sum(int(r[4]) for r in rows)
     return {
         "enabled": settings.ip_budget_enabled,
         "limit_tokens": limit,
@@ -225,43 +239,109 @@ def snapshot(ip: str) -> dict:
         "window_hours": settings.ip_budget_window_hours,
         "reset_at": (float(oldest) + _window()) if oldest else (now + _window()),
         "requests": int(requests),
+        "tokens_in": int(tokens_in),
+        "tokens_out": int(tokens_out),
+        "tokens_reasoning": int(tokens_reasoning),
         "by_provider": by_provider,
-        "est_usd": estimate_usd(tokens_in, tokens_out),
+        "est_usd": estimate_usd(tokens_in, tokens_out, tokens_reasoning),
         "prices": {"in_per_m": settings.price_in_per_m, "out_per_m": settings.price_out_per_m},
     }
 
 
-def aggregate(limit_ips: int = 50) -> dict:
+def aggregate(
+    limit_ips: int = 50,
+    window_hours: float = 0,
+    limit_endpoints: int = 20,
+) -> dict:
+    """Global traffic totals for the creator dashboard.
+
+    window_hours > 0 overrides IP_BUDGET_WINDOW_HOURS for this call only.
+    Reasoning tokens are billable and included in all totals.
+    """
     now = time.time()
-    cutoff = now - _window()
+    eff_window = float(window_hours) if window_hours and float(window_hours) > 0 else _window() / 3600.0
+    eff_window = max(0.1, min(eff_window, 24 * 90))
+    cutoff = now - eff_window * 3600.0
+    limit_ips = max(1, min(int(limit_ips), 500))
+    limit_endpoints = max(1, min(int(limit_endpoints), 100))
     with _LOCK:
         con = _con()
         total = con.execute(
-            """SELECT COUNT(*), COALESCE(SUM(tok_in),0), COALESCE(SUM(tok_out),0)
+            """SELECT COUNT(*), COALESCE(SUM(tok_in),0), COALESCE(SUM(tok_out),0),
+                      COALESCE(SUM(tok_reasoning),0)
                FROM usage WHERE ts >= ? AND settled = 1""",
             (cutoff,),
         ).fetchone()
+        distinct = con.execute(
+            "SELECT COUNT(DISTINCT ip) FROM usage WHERE ts >= ? AND settled = 1",
+            (cutoff,),
+        ).fetchone()[0]
         providers = con.execute(
             """SELECT COALESCE(NULLIF(provider, ''), 'unknown'), COUNT(*),
-                      COALESCE(SUM(tok_in),0), COALESCE(SUM(tok_out),0)
+                      COALESCE(SUM(tok_in),0), COALESCE(SUM(tok_out),0),
+                      COALESCE(SUM(tok_reasoning),0)
                FROM usage WHERE ts >= ? AND settled = 1 GROUP BY 1 ORDER BY 2 DESC""",
             (cutoff,),
         ).fetchall()
+        endpoints = con.execute(
+            """SELECT COALESCE(NULLIF(endpoint, ''), 'unknown'), COUNT(*),
+                      COALESCE(SUM(tok_in + tok_out + tok_reasoning),0),
+                      COALESCE(SUM(tok_in),0), COALESCE(SUM(tok_out),0),
+                      COALESCE(SUM(tok_reasoning),0)
+               FROM usage WHERE ts >= ? AND settled = 1 GROUP BY 1 ORDER BY 2 DESC LIMIT ?""",
+            (cutoff, limit_endpoints),
+        ).fetchall()
         ips = con.execute(
-            """SELECT ip, COUNT(*), COALESCE(SUM(tok_in + tok_out),0)
+            """SELECT ip, COUNT(*), COALESCE(SUM(tok_in + tok_out + tok_reasoning),0),
+                      COALESCE(SUM(tok_in),0), COALESCE(SUM(tok_out),0),
+                      COALESCE(SUM(tok_reasoning),0), MAX(ts)
                FROM usage WHERE ts >= ? AND settled = 1 GROUP BY ip ORDER BY 3 DESC LIMIT ?""",
             (cutoff, limit_ips),
         ).fetchall()
+    tin, tout, treason = int(total[1] or 0), int(total[2] or 0), int(total[3] or 0)
     return {
         "requests": int(total[0] or 0),
-        "tokens_in": int(total[1] or 0),
-        "tokens_out": int(total[2] or 0),
-        "est_usd": estimate_usd(int(total[1] or 0), int(total[2] or 0)),
+        "distinct_ips": int(distinct or 0),
+        "tokens_in": tin,
+        "tokens_out": tout,
+        "tokens_reasoning": treason,
+        "tokens_total": tin + tout + treason,
+        "window_hours": eff_window,
+        "est_usd": estimate_usd(tin, tout, treason),
         "by_provider": [
-            {"provider": p, "requests": int(n), "tokens_in": int(i), "tokens_out": int(o)}
-            for p, n, i, o in providers
+            {
+                "provider": p,
+                "requests": int(n),
+                "tokens_in": int(i),
+                "tokens_out": int(o),
+                "tokens_reasoning": int(r),
+                "tokens": int(i) + int(o) + int(r),
+            }
+            for p, n, i, o, r in providers
         ],
-        "top_ips": [{"ip": ip, "requests": int(n), "tokens": int(t)} for ip, n, t in ips],
+        "by_endpoint": [
+            {
+                "endpoint": e,
+                "requests": int(n),
+                "tokens": int(t),
+                "tokens_in": int(i),
+                "tokens_out": int(o),
+                "tokens_reasoning": int(r),
+            }
+            for e, n, t, i, o, r in endpoints
+        ],
+        "top_ips": [
+            {
+                "ip": ip,
+                "requests": int(n),
+                "tokens": int(t),
+                "tokens_in": int(i),
+                "tokens_out": int(o),
+                "tokens_reasoning": int(r),
+                "last_seen": float(ls) if ls else 0,
+            }
+            for ip, n, t, i, o, r, ls in ips
+        ],
     }
 
 

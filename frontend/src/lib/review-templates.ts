@@ -40,6 +40,16 @@ export const REVIEW_TEMPLATES: ReviewTemplate[] = [
       'Never flag grammar or spelling (handled elsewhere).',
   },
   {
+    id: 'reader',
+    label: 'Reader',
+    text:
+      'Reader: read as a skeptical first-time reader with no background. ' +
+      'Flag ONLY passages a real reader could misread, stumble on, or interpret differently than intended — ' +
+      'ambiguity, unclear jumps, missing links, and unstated assumptions. ' +
+      'Each issue must include a grammatical replacement plus up to two alternatives. ' +
+      'Never flag grammar or spelling (handled elsewhere).',
+  },
+  {
     id: 'researcher',
     label: 'Researcher',
     text:

@@ -35,5 +35,5 @@ def meta(endpoint, system, user, usage, model, ms=0, temperature=0, max_tokens=0
     return {"endpoint": endpoint, "model": model or "", "provider": budget.last_provider(),
             "ms": int(ms or 0),
             "usage": {"in": tok_in, "out": tok_out, "reasoning": reasoning},
-            "est_usd": budget.estimate_usd(tok_in, tok_out),
+            "est_usd": budget.estimate_usd(tok_in, tok_out, reasoning),
             "params": {"temperature": temperature, "max_tokens": max_tokens, "reasoning_effort": "minimal"}}

@@ -127,13 +127,16 @@ async def usage():
 
 
 @router.get("/api/metrics/usage")
-async def usage_metrics(request: Request):
+async def usage_metrics(request: Request, window_hours: float = 0, limit_ips: int = 50, limit_endpoints: int = 20):
     """Aggregate server-side usage. Requires ADMIN_TOKEN via X-Admin-Token."""
     if not settings.admin_token:
         return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
     if not hmac.compare_digest(request.headers.get("x-admin-token", ""), settings.admin_token):
         return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
-    return ok(**budget.aggregate())
+    try:
+        return ok(**budget.aggregate(limit_ips=limit_ips, window_hours=window_hours, limit_endpoints=limit_endpoints))
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": "upstream_error", "detail": str(e)[:200]}, status_code=500)
 
 
 @router.get("/")

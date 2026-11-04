@@ -455,6 +455,11 @@ export default function SettingsMenu({
                       <span>≈ <strong>${Number(usage.est_usd || 0).toFixed(4)}</strong></span>
                       <span>{usage.requests} requests</span>
                     </div>
+                    {(usage.tokens_in != null || usage.tokens_reasoning != null) && (
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                        in {(usage.tokens_in ?? 0).toLocaleString()} · out {(usage.tokens_out ?? 0).toLocaleString()} · reasoning {(usage.tokens_reasoning ?? 0).toLocaleString()} (billable)
+                      </div>
+                    )}
                     <div style={{ marginTop: 8, height: 6, background: 'var(--hover)', borderRadius: 3, overflow: 'hidden', maxWidth: 440 }}>
                       <div style={{ width: `${Math.min(100, usage.limit_tokens ? (usage.used_tokens / usage.limit_tokens) * 100 : 0)}%`, height: '100%', background: 'var(--explore)' }} />
                     </div>

@@ -128,6 +128,64 @@ def test_metrics_endpoint_requires_admin_token():
         assert r.status_code == 200 and r.json()["ok"] is True
 
 
+def test_reasoning_tokens_are_billable():
+    rid = budget.reserve("9.9.9.9", 500, "/api/complete")
+    budget.settle(
+        rid,
+        {"prompt_tokens": 100, "completion_tokens": 40,
+         "completion_tokens_details": {"reasoning_tokens": 60}},
+        "muse", "baseten",
+    )
+    snap = budget.snapshot("9.9.9.9")
+    assert snap["used_tokens"] == 200
+    assert snap["tokens_in"] == 100
+    assert snap["tokens_out"] == 40
+    assert snap["tokens_reasoning"] == 60
+    assert snap["by_provider"]["baseten"]["tokens"] == 200
+    assert snap["by_provider"]["baseten"]["tokens_reasoning"] == 60
+    # Reasoning bills at output rate.
+    assert snap["est_usd"] == budget.estimate_usd(100, 40, 60)
+
+
+def test_aggregate_has_totals_endpoints_and_distinct_ips():
+    r1 = budget.reserve("10.0.0.1", 10, "/api/complete")
+    budget.settle(r1, {"prompt_tokens": 10, "completion_tokens": 5,
+                       "completion_tokens_details": {"reasoning_tokens": 2}},
+                  "m", "baseten")
+    r2 = budget.reserve("10.0.0.2", 10, "/api/research")
+    budget.settle(r2, {"prompt_tokens": 20, "completion_tokens": 10}, "m", "meta")
+    agg = budget.aggregate()
+    assert agg["distinct_ips"] == 2
+    assert agg["requests"] == 2
+    assert agg["tokens_in"] == 30
+    assert agg["tokens_out"] == 15
+    assert agg["tokens_reasoning"] == 2
+    assert agg["tokens_total"] == 47
+    assert agg["window_hours"] > 0
+    eps = {e["endpoint"]: e for e in agg["by_endpoint"]}
+    assert eps["/api/complete"]["requests"] == 1
+    assert eps["/api/research"]["requests"] == 1
+    assert eps["/api/complete"]["tokens"] == 17
+    ips = {r["ip"]: r for r in agg["top_ips"]}
+    assert ips["10.0.0.1"]["tokens"] == 17
+    assert ips["10.0.0.1"]["tokens_reasoning"] == 2
+    assert ips["10.0.0.1"]["last_seen"] > 0
+
+
+def test_metrics_usage_accepts_window_params():
+    with patch.dict(os.environ, {"ADMIN_TOKEN": "secret"}):
+        r = client.get(
+            "/api/metrics/usage?window_hours=1&limit_ips=5&limit_endpoints=5",
+            headers={"X-Admin-Token": "secret"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True
+        assert body["window_hours"] == 1
+        assert "distinct_ips" in body and "by_endpoint" in body
+        assert "tokens_reasoning" in body and "tokens_total" in body
+
+
 def test_prod_chat_fails_closed_without_keys():
     env = {"ENV": "prod", "BASETEN_API_KEY": "", "META_API_KEY": "",
            "OPENROUTER_API_KEY": "", "LOCAL_BASE_URL": "", "LOCAL_PREFER": ""}

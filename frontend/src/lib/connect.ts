@@ -52,6 +52,12 @@ export function hasConnectSelection(text: string): boolean {
   return sentenceCount(text) >= 2
 }
 
+export const CONNECT_CHAR_THRESHOLD = 120
+
+export function isLongSelection(text: string): boolean {
+  return (text || '').trim().length >= CONNECT_CHAR_THRESHOLD
+}
+
 export function guessConnectRelation(previous: string, next: string): number {
   if (/\b(not|no|little|never)\b|n['’]t/i.test(previous) || /\b(but|however|although|yet|though)\b/i.test(next)) return 0
   if (/^(for example|such as)/i.test(next)) return 3

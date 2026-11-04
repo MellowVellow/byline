@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { popupMaxHeight } from '../lib/popupViewport'
 import type { Finding, Suggestion } from '../domain/finding'
 import { noteKey } from '../domain/finding'
 import type { Editor } from '@tiptap/react'
@@ -207,6 +208,8 @@ export default function InlineReviewPopup({
     border: 'var(--border)',
     bg: 'var(--paper)',
   }
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+  const shellMaxH = sheet ? undefined : popupMaxHeight(position.y, vh, 400)
 
   return (
     <div
@@ -217,7 +220,7 @@ export default function InlineReviewPopup({
       data-popup="review"
       role="listbox"
       aria-label="Fixes"
-      className="caret-pop fade"
+      className="caret-pop fade popup-shell"
       onMouseDown={e => e.preventDefault()}
       style={sheet ? {
         position: 'static',
@@ -236,6 +239,10 @@ export default function InlineReviewPopup({
         top: position.y,
         left: position.x,
         width: position.w ? `${position.w}px` : 'min(320px, calc(100vw - 32px))',
+        maxWidth: 'calc(100vw - 16px)',
+        maxHeight: shellMaxH,
+        overflowY: 'auto',
+        overscrollBehavior: 'contain',
         background: 'var(--paper)',
         border: `1px solid ${activeMeta.color}`,
         borderRadius: 8,
@@ -291,7 +298,7 @@ export default function InlineReviewPopup({
             : `“${activeFinding.anchor.quotedText}”`}
         </div>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 3, padding: '2px 4px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 12 }}>
+      <div className="popup-foot" style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 3, padding: '2px 4px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 12 }}>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           {sugCount > 1 && (
             <button
