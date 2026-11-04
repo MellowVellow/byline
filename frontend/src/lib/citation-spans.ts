@@ -4,7 +4,7 @@ export interface SpanRange {
 }
 
 /**
- * APA parenthetical citation ranges: (Author, 2025), (Octaberlina, 2024, p. 1),
+ * APA citation ranges: (Author, 2025), (Octaberlina, 2024, p. 1),
  * bare years (2024). Findings fully inside these ranges are citation text,
  * not prose — Harper must not lint them.
  */

@@ -6,7 +6,7 @@ export function apaInline(source: LibrarySource, ctype: CiteType, page = 0): str
   const first = authorShort(source)
   const year = sourceYear(source)
   if (ctype === 'narr') return `${first} (${year})`
-  const loc = page && (ctype === 'paren' || ctype === 'direct' || ctype === 'intext') ? `, p. ${page}` : ''
+  const loc = page && (ctype === 'direct' || ctype === 'intext' || (ctype as string) === 'paren') ? `, p. ${page}` : ''
   return `(${first}, ${year}${loc})`
 }
 

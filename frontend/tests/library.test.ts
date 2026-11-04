@@ -84,6 +84,34 @@ describe('library helpers', () => {
     expect(hits[0]?.sourceId).toBe('s1')
     expect(hits[0]?.score).toBeGreaterThanOrEqual(2)
   })
+  it('uses et al for three or more authors', () => {
+    const s: LibrarySource = {
+      ...src(),
+      author: [
+        { family: 'Zhumagaliyeva', given: 'Guldana' },
+        { family: 'Tleshova', given: 'Zhibek' },
+        { family: 'Amanzhol', given: 'Moldir' },
+        { family: 'Smagulova', given: 'Moldir' },
+      ],
+    }
+    expect(apaInline(s, 'paren')).toBe('(Zhumagaliyeva et al., 2025)')
+    expect(apaInline(s, 'narr')).toBe('Zhumagaliyeva et al. (2025)')
+  })
+  it('joins two authors with &', () => {
+    const s: LibrarySource = {
+      ...src(),
+      author: [
+        { family: 'Alvarez', given: 'Rosa' },
+        { family: 'Reyes', given: 'Mara' },
+      ],
+    }
+    expect(apaInline(s, 'paren')).toBe('(Alvarez & Reyes, 2025)')
+  })
+  it('preserves a literal et al author', () => {
+    const s: LibrarySource = { ...src(), author: [{ literal: 'Octaberlina et al.' }] }
+    expect(apaInline(s, 'paren')).toBe('(Octaberlina et al., 2025)')
+    expect(apaInline(s, 'narr')).toBe('Octaberlina et al. (2025)')
+  })
   it('strips citation noise before matching', () => {
     expect(stripCitationNoise('AI threatens thinking (Octaberlina, 2024, p. 1). ● card:nmw1zpyq4'))
       .toBe('AI threatens thinking .')

@@ -21,6 +21,8 @@ interface Props {
   onAddLink: () => void
   onAddPdf: (f: File) => void
   adding: boolean
+  cardCap: number
+  onCardCap: (n: number) => void
   onCite: (card: LibraryCard) => void
   onShowSource: (card: LibraryCard) => void
   onDelete: (card: LibraryCard) => void
@@ -31,6 +33,8 @@ interface Props {
 export default function LibraryPanel(p: Props) {
   const [filter, setFilter] = useState<'all' | 'source' | 'ai'>('all')
   const [checking, setChecking] = useState(false)
+  const [cardCap, setCardCap] = useState(p.cardCap)
+  const [capText, setCapText] = useState(String(cardCap))
   const fileRef = useRef<HTMLInputElement>(null)
   const srcById = useMemo(() => new Map(p.sources.map(s => [s.id, s])), [p.sources])
 
@@ -39,7 +43,8 @@ export default function LibraryPanel(p: Props) {
       .filter(c => filter === 'all' || c.kind === filter)
       .map(c => ({ c, n: relevanceScore(c, p.docText) }))
       .sort((a, b) => b.n - a.n || a.c.id.localeCompare(b.c.id))
-  }, [p.cards, filter, p.docText])
+      .slice(0, cardCap)
+  }, [p.cards, filter, p.docText, cardCap])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -71,6 +76,25 @@ export default function LibraryPanel(p: Props) {
       </div>
       <div style={{ fontSize: 11, color: 'var(--muted)' }}>
         {p.status || ''}
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <label style={{ margin: 0, fontSize: 11, color: 'var(--muted)' }} htmlFor="card-cap">Card cap</label>
+        <input
+          id="card-cap"
+          type="number"
+          min="1"
+          value={capText}
+          onChange={e => {
+            const v = e.target.value
+            setCapText(v)
+            const n = Math.max(1, parseInt(v, 10) || 1)
+            setCardCap(n)
+            p.onCardCap(n)
+          }}
+          aria-label="Max cards to show"
+          style={{ width: 70, fontSize: 11, padding: '2px 6px' }}
+        />
+        <span style={{ flex: 1 }} />
       </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <label style={{ margin: 0 }} htmlFor="cite-type">type</label>
@@ -167,7 +191,7 @@ export default function LibraryPanel(p: Props) {
               </div>
               <div style={{ fontSize: 13, lineHeight: 1.45 }}>{c.finding}</div>
               <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                {s ? `${authorShort(s)} ${sourceYear(s)} · ${s.kind || (s.type === 'webpage' ? 'Web' : 'PDF')}${s.kind === 'PDF' || s.type !== 'webpage' ? ` · p. ${c.page || 1}` : ''}` : 'Derived from your sources, no citation'}
+                {s ? `${authorShort(s)} ${sourceYear(s)} · ${s.kind || (s.type === 'webpage' ? 'Web' : 'PDF')}${c.page ? ` · p. ${c.page}` : ''}` : 'Derived from your sources, no citation'}
                 {inferred.length > 0 && c.passage ? ` · ⚠ inferred: ${inferred.join(', ')}` : ''}
               </div>
               {c.kind === 'source' && (

@@ -1,10 +1,11 @@
 """Library: fetch (jina/tavily) -> parse-once -> rank -> cite-variants. No scraper."""
 from __future__ import annotations
-import io
 import json
 import re
+import tempfile
 import time
 from datetime import date
+from pathlib import Path
 from fastapi import APIRouter, UploadFile, File
 import httpx
 from .. import llm, prompts, citations, cache, budget
@@ -240,7 +241,7 @@ async def library_parse(body: LibraryParseIn):
         hit = cache.get(ck)
         if hit is not None and hit.get("cards"):
             return ok(**hit, cached=True)
-        s, u = prompts.library_parse_prompt(text, body.url, body.filename)
+        s, u = prompts.library_parse_prompt(text, body.url, body.filename, body.card_cap or 8)
         t0 = time.perf_counter()
         try:
             data, usage, model = await llm.json_call(s, u, max_tokens=2200, temperature=0.3)
@@ -250,13 +251,11 @@ async def library_parse(body: LibraryParseIn):
             usage, model = {}, "fallback:deterministic"
         cards, source = _coerce_cards(data if isinstance(data, dict) else {}, body.url, body.filename)
         if not cards:
-            # LLM returned valid JSON but zero usable cards (e.g. transient
-            # empty output): same deterministic fallback, never "0 cards".
+            # LLM returned valid JSON but zero usable cards: deterministic fallback, never "0 cards".
             src_block = data.get("source", {}) if isinstance(data, dict) else {}
             data = {"cards": _fallback_card_dicts(text), "source": src_block}
             cards, source = _coerce_cards(data, body.url, body.filename)
             model = "fallback:empty-cards"
-        cards, source = _coerce_cards(data, body.url, body.filename)
         if source["author"] == [{"literal": "Unknown"}] and len(text) > 500:
             # Second chance: metadata-only pass often succeeds where the big
             # parse returns an empty source block.
@@ -305,29 +304,49 @@ async def library_pdf(file: UploadFile = File(...)):
         name = (file.filename or "upload.pdf").lower()
         if not name.endswith(".pdf"):
             return fail(error="not_a_pdf")
-        from pypdf import PdfReader
-        reader = PdfReader(io.BytesIO(content))
-        pages = []
-        raw_full = []
-        needs_vision = []
-        for i, pg in enumerate(reader.pages[:30]):
+        from pdf_oxide import PdfDocument
+
+        pages: list[dict] = []
+        raw_full: list[str] = []
+        needs_vision: list[int] = []
+        page_count = 0
+        char_total = 0
+        CHAR_CAP = 1_000_000
+        PAGE_LIMIT = 50
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        try:
+            with PdfDocument(tmp_path) as doc:
+                page_count = len(doc)
+                for i in range(min(page_count, PAGE_LIMIT)):
+                    page = doc[i]
+                    t = (page.text or "").strip()
+                    if char_total + len(t) > CHAR_CAP:
+                        t = t[: max(0, CHAR_CAP - char_total)]
+                    pages.append({"page": i + 1, "chars": len(t), "text": t})
+                    raw_full.append(t)
+                    char_total += len(t)
+                    if len(t) < 200:
+                        needs_vision.append(i + 1)
+                    if char_total >= CHAR_CAP:
+                        break
+        finally:
             try:
-                t = pg.extract_text() or ""
-            except Exception:
-                t = ""
-            t = t.strip()[:8000]
-            pages.append({"page": i + 1, "chars": len(t), "text": t[:8000]})
-            raw_full.append(t)
-            if len(t) < 200:
-                needs_vision.append(i + 1)
+                Path(tmp_path).unlink()
+            except OSError:
+                pass
+
         raw_text = "\n\n".join(raw_full)
         cleaned = clean_pdf_text(raw_full)
         ver = extract_pdf_meta(raw_text)
         if ver["doi"] or ver["year"]:
             cleaned = (f"[VERIFIED: DOI={ver['doi'] or '?'}; YEAR={ver['year'] or '?'}]\n\n" + cleaned)
-        return ok(pages=pages, text=cleaned[:25000], raw_text=raw_text[:25000],
+
+        return ok(pages=pages, text=cleaned[:CHAR_CAP], raw_text=raw_text[:CHAR_CAP],
                   verified=ver,
-                  needs_vision=needs_vision, page_count=len(reader.pages),
+                  needs_vision=needs_vision, page_count=page_count,
                   filename=file.filename or "upload.pdf")
     except Exception as e:
         return err(e)

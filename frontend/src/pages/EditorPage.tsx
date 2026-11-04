@@ -258,7 +258,8 @@ export default function EditorPage() {
   const [libUrl, setLibUrl] = useState('')
   const [libStatus, setLibStatus] = useState('')
   const [libAdding, setLibAdding] = useState(false)
-  const [citeType, setCiteType] = useState<CiteType>('paren')
+  const [cardCap, setCardCap] = useState(50)
+  const [citeType, setCiteType] = useState<CiteType>('intext')
   const [claimHits, setClaimHits] = useState<ClaimHit[]>([])
   const [pageTexts, setPageTexts] = useState<Record<string, string>>({})
   const [srcModal, setSrcModal] = useState<LibraryCard | null>(null)
@@ -269,7 +270,7 @@ export default function EditorPage() {
   const [citeFilterSel, setCiteFilterSel] = useState(0)
   const [citeCard, setCiteCard] = useState<LibraryCard | null>(null)
   // Active citation type for the single-view levels stage (1-5 select, reroll cycles).
-  const [levelType, setLevelType] = useState<CiteType>('paren')
+  const [levelType, setLevelType] = useState<CiteType>('intext')
   const [citePos, setCitePos] = useState({ x: 200, y: 300, w: 340 })
 
   const [docRevision, setDocRevision] = useState(1)
@@ -892,7 +893,7 @@ export default function EditorPage() {
   const citeQueryRef = useRef('')
   citeQueryRef.current = citeQuery
   const citeRowCountRef = useRef(1)
-  const levelTypeRef = useRef<CiteType>('paren')
+  const levelTypeRef = useRef<CiteType>('intext')
   levelTypeRef.current = levelType
   const closeCiteRef = useRef(() => {})
   const pickFilteredRef = useRef(() => {})
@@ -1882,7 +1883,7 @@ export default function EditorPage() {
       id: `n${Date.now().toString(36)}${i}`,
       kind: (c.kind === 'ai' || ['idea', 'question', 'premise', 'term', 'visual'].includes(c.type)) ? 'ai' : 'source',
       type: c.type, finding: c.finding || '', passage: c.passage || '',
-      why_useful: c.why_useful || '', page: c.page || 1,
+      why_useful: c.why_useful || '', page: c.page,
       vision: !!c.vision, sourceId: sid, status: c.status || 'found',
       keywords: keywordsOf(c.finding || '', c.type || ''),
     }))
@@ -1941,14 +1942,14 @@ export default function EditorPage() {
       }
       if (up.needs_vision?.length) setLibStatus(`Page ${up.needs_vision[0]} is a figure: vision fallback available via Show in source. Parsing…`)
       else setLibStatus('Matching evidence sentences…')
-      const parsed: any = await api.libraryParse({ text: (up.text || '').slice(0, 25000), url: '', filename: f.name, kind: 'pdf' })
+      const parsed: any = await api.libraryParse({ text: up.text || '', url: '', filename: f.name, kind: 'pdf' })
       if (!parsed?.ok) {
         setLibStatus('PDF parse failed.')
         setLibAdding(false)
         return
       }
       // Cleaned text feeds parse/quotecheck; raw text feeds Show-in-source + saved full text.
-      ingestParsed(parsed.cards || [], parsed.source, (up.raw_text || up.text || '').slice(0, 25000))
+      ingestParsed(parsed.cards || [], parsed.source, up.raw_text || up.text || '')
     } catch {
       setLibStatus('Add PDF failed.')
     } finally {
@@ -2054,7 +2055,7 @@ export default function EditorPage() {
   const pickCiteCard = (card: LibraryCard) => {
     setCiteCard(card)
     // Start from the panel's citation type; 1-5 / reroll switch between all 5.
-    setLevelType(CITE_TYPES.includes(citeType) ? citeType : 'paren')
+    setLevelType(CITE_TYPES.includes(citeType) ? citeType : 'intext')
     setCiteStage('levels')
     blip('done')
   }
@@ -2311,6 +2312,8 @@ export default function EditorPage() {
                         onAddLink={() => void handleAddLink()}
                         onAddPdf={f => void handleAddPdf(f)}
                         adding={libAdding}
+                        cardCap={cardCap}
+                        onCardCap={setCardCap}
                         onCite={c => citeCardQuick(c)}
                         onShowSource={c => setSrcModal(c)}
                         onDelete={deleteCard}

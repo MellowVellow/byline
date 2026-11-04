@@ -187,10 +187,10 @@ export default function CitePopup(p: Props) {
             <button
               type="button"
               onClick={p.onRerollType}
-              title="Redo: next citation type"
+              title="next: next citation type"
               style={footBtn}
             >
-              Redo<kbd style={kbd}>alt+0</kbd>
+              Next<kbd style={kbd}>alt+0</kbd>
             </button>
             <button
               type="button"

@@ -167,4 +167,27 @@ def test_coerce_authors_alias_and_et_al():
     assert src2["DOI"] == "10.1/x"
 
 
+def test_coerce_preserves_all_authors_and_inline_uses_et_al():
+    from app.routers.library import _coerce_cards
+    authors = [
+        {"family": "Zhumagaliyeva", "given": "Guldana"},
+        {"family": "Tleshova", "given": "Zhibek"},
+        {"family": "Amanzhol", "given": "Moldir"},
+        {"family": "Smagulova", "given": "Moldir"},
+    ]
+    _, src = _coerce_cards(
+        {"cards": [], "source": {"title": "AI writing", "author": authors,
+                                 "issued": {"date-parts": [[2025]]}}},
+        "https://www.highedujournal.kz/index.php/1/article/view/419", "")
+    assert src["author"] == authors
+    assert format_apa_inline(src, "paren") == "(Zhumagaliyeva et al., 2025)"
+
+
+def test_apa_inline_preserves_literal_et_al():
+    s = _src(author=[{"literal": "Octaberlina et al."}])
+    assert format_apa_inline(s, "paren") == "(Octaberlina et al., 2025)"
+    assert format_apa_inline(s, "narr") == "Octaberlina et al. (2025)"
+
+
+
 

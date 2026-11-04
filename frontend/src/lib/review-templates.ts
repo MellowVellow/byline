@@ -69,7 +69,7 @@ export const REVIEW_TEMPLATES: ReviewTemplate[] = [
   },
   {
     id: 'michelin_critic',
-    label: 'Pretentious Food Critic',
+    label: 'Food Critic',
     text:
       'Pretentious Food Critic: review prose structure like an elite Michelin critic evaluating an under-seasoned dish. ' +
       'Flag bland tone, heavy-handed phrasing, bad structural texture, uninspired transitions, and lack of stylistic depth. ' +

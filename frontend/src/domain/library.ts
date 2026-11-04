@@ -2,20 +2,18 @@ export type CardKind = 'source' | 'ai'
 export type CardType =
   | 'fact' | 'stat' | 'quote'
   | 'idea' | 'question' | 'premise' | 'term' | 'visual'
-export type CiteType = 'intext' | 'narr' | 'paren' | 'direct' | 'para'
+export type CiteType = 'intext' | 'narr' | 'direct' | 'para'
 
-export const CITE_TYPES: CiteType[] = ['intext', 'narr', 'paren', 'direct', 'para']
+export const CITE_TYPES: CiteType[] = ['intext', 'narr', 'direct', 'para']
 export const CITE_LABELS: Record<CiteType, string> = {
   intext: 'In-text citation',
   narr: 'Narrative citation',
-  paren: 'Parenthetical citation',
   direct: 'Direct quotation citation',
   para: 'Paraphrase citation',
 }
 export const CITE_SHORT: Record<CiteType, string> = {
   intext: 'In-text',
   narr: 'Narrative',
-  paren: 'Parenthetical',
   direct: 'Direct quotation',
   para: 'Paraphrase',
 }
@@ -59,7 +57,7 @@ export interface LibrarySource extends SourceCSL {
 }
 
 export type CiteGrid = Record<CiteType, string[]>
-export const EMPTY_CITE_GRID: CiteGrid = { intext: [], narr: [], paren: [], direct: [], para: [] }
+export const EMPTY_CITE_GRID: CiteGrid = { intext: [], narr: [], direct: [], para: [] }
 
 export function normalizeText(t: string): string {
   return (t || '')
@@ -117,8 +115,28 @@ export function titleShort(title: string, n = 4): string {
 export function authorShort(source: SourceCSL): string {
   if (isUnknownAuthor(source.author)) return `"${titleShort(source.title)}"`
   const a = source.author![0]
-  if (a.literal) return a.literal.split(/\s+/)[0]
-  return a.family || 'Anon'
+  if (a.literal) {
+    const lit = a.literal.trim()
+    if (/\bet al/i.test(lit)) return lit // preserve "et al." in inline cites
+    const first = lit.split(/\s+/)[0] || 'Anon'
+    if (source.author!.length >= 3) return `${first} et al.`
+    if (source.author!.length === 2) {
+      const b = source.author![1]
+      const raw = (b.literal || b.family || '').trim()
+      const second = raw ? raw.split(/\s+/)[0] : ''
+      if (second) return `${first} & ${second}`
+    }
+    return first
+  }
+  const first = a.family || 'Anon'
+  if (source.author!.length >= 3 && !/\bet al/i.test(first)) return `${first} et al.`
+  if (source.author!.length === 2) {
+    const b = source.author![1]
+    const raw = (b.literal || b.family || '').trim()
+    const second = raw ? raw.split(/\s+/)[0] : ''
+    if (second) return `${first} & ${second}`
+  }
+  return first
 }
 
 export function sourceYear(source: SourceCSL): string {

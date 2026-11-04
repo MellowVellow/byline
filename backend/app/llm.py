@@ -224,7 +224,6 @@ async def _baseten_attempt(system: str, user: str, max_tokens: int, temperature:
     candidate_urls = [
         f"{settings.baseten_base_url}/chat/completions",
         "https://inference.baseten.co/v1/chat/completions",
-        "https://bridge.baseten.co/v1/chat/completions",
     ]
     seen: set[str] = set()
     endpoints = [u for u in candidate_urls if not (u in seen or seen.add(u))]

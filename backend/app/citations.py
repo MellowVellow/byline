@@ -115,6 +115,18 @@ def _apa_year(source: dict) -> str:
         return "n.d."
 
 
+def _second_author_surname(a) -> str:
+    if isinstance(a, dict):
+        if a.get("literal"):
+            parts = a["literal"].split()
+            return parts[0].rstrip(",.;") if parts else ""
+        return a.get("family") or ""
+    if isinstance(a, str):
+        parts = a.strip().split()
+        return parts[0].rstrip(",.;") if parts else ""
+    return ""
+
+
 def _apa_first_cite(source: dict) -> str:
     authors = (source or {}).get("author") or []
     title = ((source or {}).get("title") or "").strip()
@@ -125,12 +137,25 @@ def _apa_first_cite(source: dict) -> str:
     if authors and isinstance(authors[0], dict):
         a0 = authors[0]
         if a0.get("literal"):
-            return a0["literal"].split()[0] if a0["literal"].split() else "Anon"
-        return a0.get("family") or "Anon"
-    if authors and isinstance(authors[0], str):
-        return authors[0].split()[0]
-    t = (title or "Anon").strip()
-    return t.split()[0] if t.split() else "Anon"
+            lit = (a0.get("literal") or "").strip()
+            if re.search(r"\bet al\b", lit, re.I):
+                first = lit
+            else:
+                first = lit.split()[0] if lit.split() else "Anon"
+        else:
+            first = a0.get("family") or "Anon"
+    elif authors and isinstance(authors[0], str):
+        first = authors[0].split()[0]
+    else:
+        t = (title or "Anon").strip()
+        return t.split()[0] if t.split() else "Anon"
+    if len(authors) >= 3 and "et al" not in first.lower():
+        first += " et al."
+    elif len(authors) == 2:
+        second = _second_author_surname(authors[1])
+        if second:
+            first = f"{first} & {second}"
+    return first
 
 
 def format_apa_inline(source: dict, ctype: str = "paren", page: int = 0) -> str:

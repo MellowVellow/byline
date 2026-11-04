@@ -236,11 +236,11 @@ export default function CaretPopup({
         {onNext && (
           <button
             type="button"
-            onClick={onNext}
-            title={mode === 'sel' ? 'Next page' : 'Next option'}
+            onClick={onReroll}
+            title="Reprompt: fetch fresh options"
             style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
           >
-            Next<kbd style={{ font: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>`</kbd>
+            Reprompt<kbd style={{ font: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>&#96;</kbd>
           </button>
         )}
         {onPrev && (
@@ -253,14 +253,6 @@ export default function CaretPopup({
             Prev<kbd style={{ font: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>alt+`</kbd>
           </button>
         )}
-        <button
-          type="button"
-          onClick={onReroll}
-          title="Redo: fetch fresh options"
-          style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
-        >
-          Redo<kbd style={{ font: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>alt+0</kbd>
-        </button>
         {mode === 'sel' && showConnect && onConnect ? (
           <button
             type="button"

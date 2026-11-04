@@ -85,8 +85,11 @@ class LibraryFetchIn(BaseModel):
     url: str = S(2000); question: str = Field(default="", max_length=1000)
 
 class LibraryParseIn(BaseModel):
-    text: str = S(30000); url: str = S(2000); filename: str = S(500)
+    text: str | None = None
+    url: str = S(2000)
+    filename: str = S(500)
     kind: str = Field(default="web", max_length=20)
+    card_cap: int | None = Field(default=None, ge=1, le=100)
 
 class LibraryRankIn(BaseModel):
     paragraph: str = S(6000); cards: list[dict] = Field(default_factory=list, max_length=50)

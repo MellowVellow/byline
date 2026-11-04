@@ -53,7 +53,7 @@ export default function SourceModal({ card, source, pageText, onClose }: Props) 
     >
       <div className="fade" style={{ background: 'var(--paper)', width: 'min(560px, calc(100vw - 32px))', maxWidth: 560, margin: 16, padding: 20, borderRadius: 10, fontSize: 14, maxHeight: '80vh', overflowY: 'auto', overscrollBehavior: 'contain', boxSizing: 'border-box' }}>
         <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          {source?.title || 'Source'} · {source?.type === 'webpage' ? 'page snapshot' : `page ${card.page || 1}`}{card.vision ? ' · found by vision model' : ''}
+          {source?.title || 'Source'} · {source?.type === 'webpage' ? 'page snapshot' : card.page ? `page ${card.page}` : ''}{card.vision ? ' · found by vision model' : ''}
         </div>
         <div style={{ margin: '8px 0', lineHeight: 1.6 }}>{marked as React.ReactNode}</div>
         <div style={{ fontSize: 11, color: 'var(--muted)' }}>

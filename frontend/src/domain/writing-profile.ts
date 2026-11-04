@@ -60,7 +60,7 @@ export const THEME_DEFINITIONS: Record<ThemeId, ThemeDefinition> = {
   },
   'dialogue': {
   id: 'dialogue',
-  name: 'Natural Dialogue',
+  name: 'Dialog',
   tagline: 'Conversational, subtextual, and character-driven',
   description: 'realistic speech cadence, unsaid subtext, distinct vocal tones, and natural turn-taking',
   systemPromptModifier: 'Write authentic spoken dialogue. Include subtle interruptions, natural contractions, character-driven vocabulary, and unspoken subtext behind every exchange.',
