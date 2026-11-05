@@ -1,14 +1,7 @@
-import React from 'react'
-import ConnectPanel, { type ConnectSession } from './ConnectPanel'
+import ConnectPanel, { type ConnectPanelProps } from './ConnectPanel'
 
-export interface ConnectPanelContainerProps {
-  session: ConnectSession
-  onToggleSeam: (id: string) => void
-  onCycleAlt: (id: string, dir: 1 | -1) => void
-  onCycleRelation: (id: string, dir: 1 | -1) => void
-  focus?: { sentenceId: string; seamId?: string } | null
-}
+export type ConnectPanelContainerProps = ConnectPanelProps
 
-export default function ConnectPanelContainer(props: ConnectPanelContainerProps) {
+export default function ConnectPanelContainer(props: ConnectPanelProps) {
   return <ConnectPanel {...props} />
 }

@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import type { GhostGroups, GhostLevel } from '../components/GhostPopup'
+import type { GhostGroups, GhostLevel } from '../components/CaretPopup'
 
 export const EMPTY_GHOST: GhostGroups = { cue: [], question: [], fragment: [], sentence: [] }
 
