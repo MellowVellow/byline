@@ -3,11 +3,11 @@ import { api } from '../lib/api'
 import { Logo, ThemeToggle } from '../components/Brand'
 
 const FEATURES = [
-  { color: '#6D3BE0', label: 'Suggest', sub: 'assist levels at the cursor' },
+  { color: '#B094E9', label: 'Suggest', sub: 'assist levels at the cursor' },
   { color: '#626A75', label: 'Review', sub: 'feedback on passages' },
-  { color: '#8A5F00', label: 'Paraphrase', sub: 'options for selected text' },
-  { color: '#C0281F', label: 'Connect', sub: 'links between sentences' },
-  { color: '#2E7D32', label: 'Library', sub: 'grounded citations' },
+  { color: '#FEE180', label: 'Paraphrase', sub: 'options for selected text' },
+  { color: '#D83343', label: 'Connect', sub: 'links between sentences' },
+  { color: '#6FBDEC', label: 'Library', sub: 'grounded citations' },
 ]
 
 const HOW_STEPS = [
@@ -355,41 +355,7 @@ export default function Landing() {
               </div>
             </div>
 
-            {/* Demo pane — sample marked draft */}
-            <div className="proof-sheet" aria-label="Sample marked draft">
-              <h2>The case for careful writing</h2>
-              <div className="proof-cols">
-                <div>
-                  <p>
-                    <span style={{ textDecoration: 'underline wavy var(--lt) 1.5px', textUnderlineOffset: 4, textDecorationSkipInk: 'none' }}>Studies show writers who revise less produces better work.</span>{' '}
-                    <span style={{ borderBottom: '2px solid var(--ai)', paddingBottom: 1 }}>This is clearly obvious to anyone who has tried.</span>{' '}
-                    <span style={{ color: 'var(--grey)', fontStyle: 'italic' }}>One approach is to treat each draft as a conversation|</span>
-                  </p>
-                </div>
-                <aside className="proof-margin" aria-label="Margin notes">
-                  <div className="mq">mq — “produces” fixed to “produce”. <span style={{ color: 'var(--muted)' }}>Grammar</span></div>
-                  <div className="mq">mq — “clearly obvious” repeats one meaning. <span style={{ color: 'var(--muted)' }}>Reader</span></div>
-                </aside>
-              </div>
-              <div className="proof-popup">
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                  <span className="chip" style={{ background: 'var(--grey)', color: '#fff', fontSize: 11, padding: '2px 7px' }}>Options</span>
-                  <span style={{ fontFamily: 'var(--editor-font, "Source Serif 4", Georgia, serif)', fontSize: 15, color: 'var(--muted)' }}>Options at cursor…</span>
-                </div>
-                <div className="lp-ghost-rows">
-                  <div className="lp-ghost-row"><span className="lp-ghost-n">1</span>to treat each draft as a dialogue with a future reader.</div>
-                  <div className="lp-ghost-row"><span className="lp-ghost-n">2</span>to slow down and notice what you actually meant to say.</div>
-                  <div className="lp-ghost-row"><span className="lp-ghost-n">3</span>to separate generating from judging — two different modes.</div>
-                </div>
-                <div className="pp-hint" style={{ marginTop: 8 }}>
-                  <kbd style={{ border: '1px solid var(--border)', borderRadius: 3, padding: '1px 5px', fontSize: 11 }}>1</kbd>{' '}
-                  <kbd style={{ border: '1px solid var(--border)', borderRadius: 3, padding: '1px 5px', fontSize: 11 }}>2</kbd>{' '}
-                  <kbd style={{ border: '1px solid var(--border)', borderRadius: 3, padding: '1px 5px', fontSize: 11 }}>3</kbd>{' '}
-                  accept · <kbd style={{ border: '1px solid var(--border)', borderRadius: 3, padding: '1px 5px', fontSize: 11 }}>Tab</kbd> accepts top · typing dismisses
-                  &nbsp;&nbsp;<a className="btn" href="/demo" style={{ minHeight: 28, padding: '2px 10px', fontSize: 12 }}>Open demo →</a>
-                </div>
-              </div>
-            </div>
+
           </div>
         </section>
 

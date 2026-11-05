@@ -233,10 +233,19 @@ def _coerce_cards(
             page = int(c.get("page", 0) or 0)
         except Exception:
             page = 0
+        raw_neg = c.get("negPhrases", c.get("neg_phrases", []))
+        if isinstance(raw_neg, str):
+            raw_neg = [raw_neg]
+        neg = []
+        if isinstance(raw_neg, list):
+            for x in raw_neg:
+                sx = str(x).strip()
+                if sx and sx not in neg:
+                    neg.append(sx[:120])
         cards.append({
             "type": t, "kind": kind, "finding": finding, "passage": passage,
             "why_useful": str(c.get("why_useful", ""))[:200],
-            "page": page, "vision": False,
+            "page": page, "vision": False, "negPhrases": neg,
         })
     src = data.get("source", {}) if isinstance(data, dict) else {}
     if not isinstance(src, dict):
@@ -440,11 +449,6 @@ async def library_vision(body: LibraryVisionIn):
                 {"type": "input_image", "image_url": body.image_data_url[:500000]}]}],
             instructions=prompts.LIBRARY_PARSE_SYSTEM,
             max_output_tokens=1200)
-        if r.get("mock"):
-            return ok(cards=[{"type": "visual", "kind": "ai", "finding": "Figure shows trend (offline mock).",
-                              "passage": "", "why_useful": "mock", "page": body.page,
-                              "vision": True, "status": "vision"}],
-                      model=r.get("model", ""), mock=True)
         data = llm.extract_json(r.get("text") or "{}")
         cards, _ = _coerce_cards(data, "", body.source_title)
         for c in cards:

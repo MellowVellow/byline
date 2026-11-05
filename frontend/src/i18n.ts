@@ -14,7 +14,6 @@ const id: typeof en = {
 }
 
 export type I18nKey = keyof typeof en
-export const locales = { en, id } as const
 
 /** v1: always English chrome. `locale` param reserved for future full-i18n switch. */
 export function t(key: I18nKey, _locale = 'en'): string {

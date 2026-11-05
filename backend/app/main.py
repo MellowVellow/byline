@@ -30,7 +30,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_list() or ["http://localhost:5173"],
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "X-Byline-Provider", "X-Admin-Token"],
+    allow_headers=["Content-Type", "X-Byline-Provider", "X-API-Key", "Authorization", "X-Admin-Token"],
 )
 
 _BUDGET_EXEMPT = {"/api/health", "/api/models", "/api/usage", "/api/metrics/usage"}

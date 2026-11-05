@@ -30,7 +30,7 @@ const PERSONA_FIELDS: { key: 'ai' | 'grammar' | 'fix' | 'suggest' | 'uiBg' | 'ui
   { key: 'paper',      label: 'Writing space', hint: 'Paper background',          defaultColor: '#FFFFFF' },
   { key: 'paperLine',  label: 'Margin line',   hint: 'Vertical line in writing space',    defaultColor: '#D83343' },
   { key: 'caret',      label: 'Caret', hint: 'Cursor + writing accent',  defaultColor: '#B094E9' },
-  { key: 'btnBg',      label: 'Button', hint: 'Primary button background',  defaultColor: '#6D3BE0' },
+  { key: 'btnBg',      label: 'Button', hint: 'Primary button background',  defaultColor: '#B094E9' },
   { key: 'btnInk',     label: 'Button text', hint: 'Primary button text',  defaultColor: '#FFFFFF' },
 ]
 
@@ -619,6 +619,22 @@ export default function SettingsMenu({
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
                   Wide uses the full center area.
                 </div>
+              </div>
+
+              {/* Citation style */}
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', margin: 0 }}>
+                  Citation Style
+                </label>
+                <select
+                  value={settings.citationStyle}
+                  onChange={e => set({ citationStyle: e.target.value as any })}
+                  style={{ marginLeft: 8, fontSize: 12 }}
+                >
+                  <option value="apa">APA</option>
+                  <option value="mla">MLA</option>
+                  <option value="chicago">Chicago</option>
+                </select>
               </div>
 
               {/* Spellcheck toggle (grammar corrections stay on) */}

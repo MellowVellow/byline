@@ -168,6 +168,13 @@ export default function InlineReviewPopup({
         return
       }
 
+      // Delete dismisses the active finding (Backspace does not).
+      if (e.key === 'Delete' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        e.preventDefault()
+        dismissActive()
+        return
+      }
+
       // "|" is a legacy alias for continue.
       if (e.key === '|' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault()
@@ -300,6 +307,7 @@ export default function InlineReviewPopup({
       )}
       <div className="popup-foot" style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 3, padding: '2px 4px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 12 }}>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span aria-hidden="true" style={{ opacity: 0.5 }}>|</span>
           {sugCount > 1 && (
             <button
               type="button"

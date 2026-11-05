@@ -47,7 +47,7 @@ import SourceModal from '../components/SourceModal'
 import type { CiteType, LibraryCard, LibrarySource } from '../domain/library'
 import { CITE_TYPES, dedupeCardsBySource, isUrlLikeTitle, keywordsOf, loadLibrary, normalizeSourceTitles, normalizeText, normalizeUrl, saveLibrary, saveSourceText } from '../domain/library'
 import { claimScore, stripCitationNoise } from '../lib/provenance'
-import { apaReference, fallbackSentence, quickCite } from '../lib/cite'
+import { apaReference, fallbackSentence, quickCite, referenceForStyle } from '../lib/cite'
 import { CONNECT_RELATIONS, type ConnectSession, createConnectSession, firstAltOfRel, hasConnectSelection, isLongSelection, rerenderConnectSession } from '../lib/connect'
 import { hashKey, cacheGet, cacheSet, saveLastGhost, loadLastGhost } from '../lib/ai-cache'
 import { cascadePopupRects, type PopupBox, type PopupId } from '../lib/popupLayout'
@@ -1888,6 +1888,7 @@ export default function EditorPage() {
       why_useful: c.why_useful || '', page: c.page,
       vision: !!c.vision, sourceId: sid, status: c.status || 'found',
       keywords: keywordsOf(c.finding || '', c.type || ''),
+      negPhrases: Array.isArray(c.negPhrases) ? c.negPhrases : [],
     }))
     if (!existing && ncards.length > 0) {
       const ns: LibrarySource = {
@@ -2005,10 +2006,10 @@ export default function EditorPage() {
       sfxAccept()
       return
     }
-    const text = sentence ?? quickCite(card, src, citeType)
+    const text = sentence ?? quickCite(card, src, citeType, appSettings.citationStyle)
     const before = docTextAll().slice(Math.max(0, editor!.state.selection.from - 1), editor!.state.selection.from)
     insertAtCursor((before && !/\s/.test(before) ? ' ' : '') + text + ' ')
-    appendReference(`<p>${apaReference(src)}</p>`)
+    appendReference(`<p>${referenceForStyle(appSettings.citationStyle, src)}</p>`)
     sfxAccept()
   }
 
@@ -2075,7 +2076,7 @@ export default function EditorPage() {
   const composeCite = (card: LibraryCard, t: CiteType): { text: string; cited: boolean } => {
     const src = sources.find(s => s.id === card.sourceId)
     if (card.kind === 'ai' || !card.passage || !src) return { text: card.finding, cited: false }
-    return { text: fallbackSentence(card, src, t), cited: true }
+    return { text: fallbackSentence(card, src, t, appSettings.citationStyle), cited: true }
   }
 
   const pickCiteCard = (card: LibraryCard) => {
@@ -2104,7 +2105,7 @@ export default function EditorPage() {
     insertAtCursor((needsSpace ? ' ' : '') + text)
     if (cited) {
       const src = sources.find(s => s.id === citeCard.sourceId)
-      if (src) appendReference(`<p>${apaReference(src)}</p>`)
+      if (src) appendReference(`<p>${referenceForStyle(appSettings.citationStyle, src)}</p>`)
     }
     sfxAccept()
     recordSuggestionAccepted()
@@ -2175,7 +2176,7 @@ export default function EditorPage() {
         }
       } catch { try { editor.chain().focus().run() } catch {} }
       const src = sources.find(s => s.id === card.sourceId)
-      citeCardQuick(card, card.kind === 'ai' || !src ? card.finding : fallbackSentence(card, src, citeType))
+      citeCardQuick(card, card.kind === 'ai' || !src ? card.finding : fallbackSentence(card, src, citeType, appSettings.citationStyle))
     }
     document.addEventListener('drop', onDrop, true)
     return () => document.removeEventListener('drop', onDrop, true)
@@ -2477,7 +2478,7 @@ export default function EditorPage() {
                     }
                   } catch { /* keep cursor */ }
                   const src = sources.find(s => s.id === card.sourceId)
-                  const sent = card.kind === 'ai' || !src ? card.finding : fallbackSentence(card, src, citeType)
+                  const sent = card.kind === 'ai' || !src ? card.finding : fallbackSentence(card, src, citeType, appSettings.citationStyle)
                   citeCardQuick(card, sent)
                 }}
                 style={{

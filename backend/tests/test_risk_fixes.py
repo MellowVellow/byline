@@ -78,9 +78,12 @@ def test_mock_responses_tagged_and_filtered():
     from app import llm
     async def run():
         with patch.dict(os.environ, {"META_API_KEY": ""}, clear=False):
-            r = await llm.responses_call("test")
-            assert r.get("mock") is True
-            assert "mock.local" in r["search_results"][0]["url"]
+            try:
+                await llm.responses_call("test")
+            except llm.ProviderUnavailable:
+                pass
+            else:
+                raise AssertionError("expected ProviderUnavailable")
     asyncio.run(run())
 
     # /api/readings with mock responses_call must not leak mock.local citations

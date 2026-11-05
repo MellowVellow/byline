@@ -205,19 +205,20 @@ class Settings:
         return (os.getenv("JINA_BASE_URL") or "https://localhost:8000").strip().rstrip("/")
 
     @property
-    def usage_backend(self) -> str:
-        """Hot-path usage store: sqlite (default) | supabase.
-
-        sqlite = single-instance disk DB. supabase = Postgres rollup tables
-        (usage_hourly / usage_daily) as system of record for multi-instance.
-        Sync script mirrors sqlite -> supabase; API reads sqlite unless set.
-        """
-        v = os.getenv("USAGE_BACKEND", "sqlite").strip().lower()
-        return v if v in ("sqlite", "supabase") else "sqlite"
-
-    @property
     def usage_sync_cursor_path(self) -> Path:
         return Path(os.getenv("USAGE_SYNC_CURSOR", str(ROOT / "data" / ".usage_sync"))).expanduser()
+
+    @property
+    def redis_url(self) -> str:
+        return os.getenv("REDIS_URL", "").strip()
+
+    @property
+    def cache_backend(self) -> str:
+        return os.getenv("CACHE_BACKEND", "auto").strip().lower()
+
+    @property
+    def rate_backend(self) -> str:
+        return os.getenv("RATE_BACKEND", "auto").strip().lower()
 
 
 settings = Settings()

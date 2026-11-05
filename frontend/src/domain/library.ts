@@ -56,8 +56,6 @@ export interface LibrarySource extends SourceCSL {
   id: string
 }
 
-export type CiteGrid = Record<CiteType, string[]>
-export const EMPTY_CITE_GRID: CiteGrid = { intext: [], narr: [], direct: [], para: [] }
 
 export function normalizeText(t: string): string {
   return (t || '')
@@ -256,14 +254,3 @@ export async function saveSourceText(id: string, text: string): Promise<void> {
   await idbSetSourceText(id, (text || '').slice(0, SOURCE_TEXT_CAP))
 }
 
-export async function loadSourceText(id: string): Promise<string | null> {
-  const { idbGetSourceText } = await import('../lib/storage')
-  return idbGetSourceText(id)
-}
-
-/** Synthesized suggestion: sentence grounded in one card+passage. */
-export interface SynthSuggestion {
-  sentence: string
-  sourceId: string
-  card: { type: string; finding: string; passage: string; why_useful: string; page: number }
-}

@@ -224,10 +224,10 @@ button:disabled{opacity:.4;cursor:default}
 .footnotes hr{border:none;border-top:1px solid var(--border);width:38%;margin:0 0 8px}
 /* Pre-fix hold: red text + red wavy squiggly — "this text is about to be fixed" */
 .grammar-hold-mark {
-  color: var(--lt, #C0281F) !important;
+  color: var(--lt, #D83343) !important;
   text-decoration-line: underline !important;
   text-decoration-style: wavy !important;
-  text-decoration-color: var(--lt, #C0281F) !important;
+  text-decoration-color: var(--lt, #D83343) !important;
   text-decoration-thickness: 1.5px !important;
   text-underline-offset: 4px !important;
   text-decoration-skip-ink: none !important;

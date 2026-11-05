@@ -2,16 +2,56 @@
 from __future__ import annotations
 import ipaddress, socket, threading, time
 from urllib.parse import urlparse
+from .config import settings
 
 _BUCKETS: dict[str, list[float]] = {}
 _BUCKET_LOCK = threading.Lock()
+
+_RATE_REDIS_STATE = {'url': None, 'client': None, 'tried': False}
+
+def _rate_redis_client():
+    url = (settings.redis_url or '').strip()
+    if url != _RATE_REDIS_STATE['url']:
+        _RATE_REDIS_STATE['url'] = url
+        _RATE_REDIS_STATE['client'] = None
+        _RATE_REDIS_STATE['tried'] = False
+    if _RATE_REDIS_STATE['tried']:
+        return _RATE_REDIS_STATE['client']
+    _RATE_REDIS_STATE['tried'] = True
+    if not url:
+        return None
+    try:
+        import redis  # type: ignore
+        c = redis.Redis.from_url(url, decode_responses=False, socket_connect_timeout=1, socket_timeout=1)
+        c.ping()
+        _RATE_REDIS_STATE['client'] = c
+    except Exception:  # noqa: BLE001
+        _RATE_REDIS_STATE['client'] = None
+    return _RATE_REDIS_STATE['client']
 
 def reset_for_tests() -> None:
     """Clear all rate-limit buckets. Tests only."""
     with _BUCKET_LOCK:
         _BUCKETS.clear()
+    _RATE_REDIS_STATE['url'] = None
+    _RATE_REDIS_STATE['client'] = None
+    _RATE_REDIS_STATE['tried'] = False
 
 def rate_ok(key: str, limit: int = 60, window: float = 60.0) -> bool:
+    c = _rate_redis_client()
+    if c is not None:
+        try:
+            now = time.time()
+            rkey = f"byline:rate:{key}"
+            c.zremrangebyscore(rkey, 0, now - window)
+            cnt = c.zcard(rkey)
+            if cnt >= limit:
+                return False
+            c.zadd(rkey, {str(now): now})
+            c.expire(rkey, max(1, int(window) + 1))
+            return True
+        except Exception:  # noqa: BLE001
+            pass
     now = time.time()
     with _BUCKET_LOCK:
         if len(_BUCKETS) > 4096:

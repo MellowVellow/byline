@@ -257,3 +257,26 @@ def test_parse_route_uses_page_title_and_dedupes_cards():
     assert d.get("ok") is True, d
     assert len(d.get("cards", [])) == 1
     assert d["source"]["title"] == "AI Usage Statistics 2026"
+
+
+def test_coerce_cards_negphrases_populated_and_optional():
+    data = {"cards": [
+        {"type": "stat", "finding": "AI adoption rises.", "passage": "AI adoption rises.",
+         "negPhrases": ["AI adoption falls", "adoption declines"]},
+        {"type": "idea", "finding": "Consider second-order effects.", "passage": ""},
+    ], "source": {"title": "T", "author": [{"family": "A", "given": "B"}]}}
+    cards, _ = _coerce_cards(data, "https://example.com", "")
+    assert cards[0]["negPhrases"] == ["AI adoption falls", "adoption declines"]
+    assert cards[1]["negPhrases"] == []
+
+
+def test_coerce_cards_negphrases_accepts_string_and_dedupes():
+    data = {"cards": [
+        {"type": "stat", "finding": "X grows.", "passage": "X grows.",
+         "negPhrases": "X shrinks"},
+        {"type": "stat", "finding": "Y grows.", "passage": "Y grows.",
+         "negPhrases": ["Y shrinks", "Y shrinks", "  "]},
+    ], "source": {"title": "T"}}
+    cards, _ = _coerce_cards(data, "", "t.pdf")
+    assert cards[0]["negPhrases"] == ["X shrinks"]
+    assert cards[1]["negPhrases"] == ["Y shrinks"]

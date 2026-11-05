@@ -274,7 +274,7 @@ LIBRARY_PARSE_SYSTEM = (
     "Infer remaining source metadata (title, author, date) from PAGE; mark provenance verified|inferred. "
     'JSON: {"cards":[{"type":"fact|stat|quote|term|idea|question|premise|visual",'
     '"finding":"one sentence plain words","passage":"exact source sentence or empty for AI cards",'
-    '"why_useful":"one short line","page":0}],'
+    '"why_useful":"one short line","page":0,"negPhrases":["short phrase whose presence contradicts this finding"]}],'
     '"source":{"type":"article-journal|webpage|report|post","title":"","author":[{"family":"","given":""}],'
     '"container-title":"","issued":{"date-parts":[[2025]]},"DOI":"","URL":"","accessed":{"date-parts":[[2026,11,4]]},'
     '"provenance":{"author":"verified|inferred","issued":"verified|inferred"}}}'

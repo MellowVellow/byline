@@ -39,7 +39,7 @@ export const THEME_DEFINITIONS: Record<ThemeId, ThemeDefinition> = {
     name: 'Corporate Jargon',
     tagline: 'High-level, cross-functional, and hyper-synergistic',
     description: 'dense corporate buzzwords, strategic business jargon, and enterprise-grade fluff',
-    systemPromptModifier: 'Leverage hyper-specialized enterprise nomenclature, market-facing buzzwords, and strategic paradigms. Drive alignment across multi-stakeholder ecosystems using dynamic business phrasing.',
+    systemPromptModifier: 'Leverage hyper-specialized enterprise nomenclature, executive market-facing buzzwords, and strategic paradigms. Drive alignment across multi-stakeholder ecosystems using dynamic business phrasing.',
     sampleTone: 'Let us circle back to operationalize core synergies, optimize mission-critical bandwidth, and deliver high-leverage paradigms end-to-end.'
   },
   'unhinged-marketer': {

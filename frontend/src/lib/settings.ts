@@ -4,6 +4,7 @@ export type ThemeMode = 'light' | 'dark' | 'system'
 export type EditorFont = 'serif' | 'sans' | 'mono'
 export type PaperWidth = 'narrow' | 'normal' | 'wide' | 'full'
 export type Density = 'comfortable' | 'compact'
+export type CitationStyle = 'apa' | 'mla' | 'chicago'
 
 export interface AppSettings {
   theme: ThemeMode
@@ -40,6 +41,7 @@ export interface AppSettings {
   reasoningEffort: 'minimal' | 'low' | 'medium'
   writingTheme: 'neutral' | 'academic' | 'gen-z' | 'buzzword'
   language: string
+  citationStyle: CitationStyle
   slowMs: number
 }
 
@@ -62,6 +64,7 @@ const SettingsSchema = z.object({
   showMetrics: z.boolean(),
   writingTheme: z.enum(['neutral', 'academic', 'gen-z', 'buzzword']),
   language: z.string().max(20),
+  citationStyle: z.enum(['apa', 'mla', 'chicago']),
   slowMs: z.number().min(100).max(3000),
   metaModel: z.string().max(200),
   ai: z.string().max(30),
@@ -118,7 +121,7 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     paperLine: '#D83343',
     verticalRule: '#E2E4E8',
     caret: '#B094E9',
-    btnBg: '#6D3BE0',
+    btnBg: '#B094E9',
     btnInk: '#FFFFFF',
   },
   oxford: {
@@ -243,6 +246,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   reasoningEffort: 'minimal',
   writingTheme: 'neutral',
   language: 'en-US',
+  citationStyle: 'apa',
   slowMs: 350,
 }
 

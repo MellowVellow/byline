@@ -112,105 +112,6 @@ async def _call(url: str, key: str, model: str, system: str, user: str, max_toke
             await asyncio.sleep(min(2 ** attempt + random.random(), 8))
     raise last_exc or LLMError("llm call failed")
 
-def _mock_meta_response(system: str, user: str) -> tuple[str, dict, str]:
-    """Deterministic development/offline mock engine simulating Meta Llama 3.3 / Muse outputs."""
-    low_sys = system.lower()
-    low_usr = user.lower()
-
-    if "connect" in low_sys or "connect" in low_usr or "connective bridge" in low_sys:
-        mock_data = {
-            "options": [
-                {
-                    "relation_type": "Dialectical Concession",
-                    "bridge_text": "While initial constraints present undeniable friction, addressing them compounds long-term authorial clarity.",
-                    "rationale": "Concedes the immediate challenge before reinforcing the core thesis."
-                },
-                {
-                    "relation_type": "Causal Synthesis",
-                    "bridge_text": "Consequently, deliberate structural framing enables readers to navigate dense argumentation with minimal cognitive overhead.",
-                    "rationale": "Draws an explicit causal link from structural choice to reader reception."
-                },
-                {
-                    "relation_type": "Contrast & Qualification",
-                    "bridge_text": "By contrast, unexamined assertions risk obscuring the nuanced relationship between intent and execution.",
-                    "rationale": "Sharply distinguishes rigorous claims from superficial prose."
-                }
-            ]
-        }
-        return json.dumps(mock_data), {"total_tokens": 120}, "mock:meta-llama-3.3-70b-instruct"
-
-    if "annotate" in low_sys or "issues" in low_sys:
-        mock_data = {
-            "issues": [
-                {
-                    "quote": "plethora",
-                    "context": "A plethora of reasons exist",
-                    "type": "vocabulary",
-                    "reason": "Overly inflated register for general audience.",
-                    "replacement": "wide variety"
-                }
-            ]
-        }
-        return json.dumps(mock_data), {"total_tokens": 90}, "mock:meta-llama-3.3-70b-instruct"
-
-    if "reaction" in low_sys or "reader" in low_sys:
-        mock_data = {
-            "reactions": [
-                {
-                    "quote": "clearly the better",
-                    "context": "so they are clearly the better long-term choice",
-                    "kind": "critique",
-                    "text": "A skeptical reader may view this conclusion as premature without comparative lifespan data."
-                }
-            ]
-        }
-        return json.dumps(mock_data), {"total_tokens": 110}, "mock:meta-llama-3.3-70b-instruct"
-
-    if "synonym" in low_sys or "paraphrase" in low_sys or "alternative" in low_sys:
-        mock_grid = {
-            "Synonyms": ["clearly better", "plainly finer", "notably stronger", "decidedly greater", "visibly sharper", "truly higher"],
-            "Paraphrase": ["a clear step up", "well ahead of the rest", "better in every way", "stronger on each point", "ahead by a wide margin", "improved across the board"],
-            "Tone": ["way better, honestly", "seriously top-notch", "a real game-changer", "flat-out excellent", "vividly out in front", "boldly raising the bar"],
-        }
-        mock_data = {
-            "Synonyms": mock_grid["Synonyms"],
-            "Paraphrase": mock_grid["Paraphrase"],
-            "Tone": mock_grid["Tone"],
-            "synonyms": (mock_grid["Synonyms"] + mock_grid["Paraphrase"] + mock_grid["Tone"])[:8],
-        }
-        return json.dumps(mock_data), {"total_tokens": 65}, "mock:meta-llama-3.3-70b-instruct"
-
-    if "complete" in low_sys or "ghost" in low_sys or "suggest" in low_sys:
-        content = "demonstrates verifiable improvements across all evaluation benchmarks.\nreveals unexpected nuances upon closer inspection.\nestablishes a firmer foundation for subsequent analysis."
-        return content, {"total_tokens": 50}, "mock:meta-llama-3.3-70b-instruct"
-
-    if "setup interviewer" in low_sys or "setup_questions" in low_sys:
-        mock_data = {
-            "questions": [
-                {"id": "q1", "question": "What is the primary scope of this piece?", "maps_to": "outline_focus", "options": ["Concise analytical brief", "Comprehensive essay", "Technical report"]},
-                {"id": "q2", "question": "What tone best conveys your argument?", "maps_to": "tone", "options": ["Authoritative & Measured", "Direct & Accessible", "Academic & Rigorous"]}
-            ]
-        }
-        return json.dumps(mock_data), {"total_tokens": 85}, "mock:meta-llama-3.3-70b-instruct"
-
-    if "query planner" in low_sys or "search queries" in low_sys:
-        return json.dumps({"queries": ["definition and key terms", "supporting evidence and studies", "counterarguments and limits"]}), {"total_tokens": 40}, "mock:meta-llama-3.3-70b-instruct"
-
-    if "research planner" in low_sys or "exploration angles" in low_sys:
-        mock_data = {
-            "angles": [
-                {"type": "Question", "text": "What is the strongest evidence on either side?", "why": "Frames the core debate."},
-                {"type": "Terminology", "text": "Define the key terms before arguing.", "why": "Prevents equivocation."},
-                {"type": "Idea", "text": "Consider second-order effects beyond the immediate claim.", "why": "Adds depth."}
-            ]
-        }
-        return json.dumps(mock_data), {"total_tokens": 80}, "mock:meta-llama-3.3-70b-instruct"
-
-    if "json" in low_sys:
-        return '{"result": "ok"}', {"total_tokens": 20}, "mock:meta-llama-3.3-70b-instruct"
-
-    return "deliberate writing assistance, keeping the writer in control.", {"total_tokens": 30}, "mock:meta-llama-3.3-70b-instruct"
-
 class ProviderUnavailable(LLMError):
     """Raised when an explicitly requested provider cannot serve the call."""
 
@@ -331,15 +232,9 @@ async def chat(system: str, user: str, *, model: str | None = None, max_tokens: 
             )
 
         if res is None:
-            if settings.env in ("prod", "production"):
-                raise ProviderUnavailable(
-                    "LLM unavailable in prod (no mock fallback): "
-                    + ("; ".join(errors) or "no keys"))
-            log.info("Using offline Meta mock engine (keys unconfigured or remote unreachable): %s",
-                     "; ".join(errors) or "no keys")
-            c, u, m = _mock_meta_response(system, user)
-            budget.settle(rid, u, m, "mock", mock=True)
-            return c, u, m
+            budget.release(rid)
+            raise ProviderUnavailable(
+                "LLM unavailable: " + ("; ".join(errors) or "no keys"))
 
         c, u, m, provider = res
         budget.settle(rid, u, m, provider)
@@ -386,18 +281,8 @@ async def responses_call(input_data, *, instructions: str = "", tools=None, incl
         budget.estimate_call_usd(instructions or "", str(input_data), max_output_tokens),
     )
     if not settings.meta_api_key:
-        if pref == "meta" or settings.env in ("prod", "production"):
-            budget.release(rid)
-            raise ProviderUnavailable("meta unavailable: META_API_KEY not configured")
-        budget.settle(rid, {"total_tokens": 150}, "mock:muse-spark-open-1026", "mock", mock=True)
-        return {
-            "text": "Evidence qualifies the claim: while preliminary analyses indicate positive correlation, long-term confounding variables require structured moderation.",
-            "annotations": [{"title": "Mock evidence (offline, unverified)", "url": "https://mock.local/offline-evidence"}],
-            "search_results": [{"title": "Mock evidence (offline, unverified)", "url": "https://mock.local/offline-evidence"}],
-            "usage": {"total_tokens": 150},
-            "model": "mock:muse-spark-open-1026",
-            "mock": True,
-        }
+        budget.release(rid)
+        raise ProviderUnavailable("meta unavailable: META_API_KEY not configured")
     resp_model = validate_meta_model(settings.meta_model)
     body: dict = {
         "model": resp_model,
@@ -418,19 +303,8 @@ async def responses_call(input_data, *, instructions: str = "", tools=None, incl
         r.raise_for_status()
         d = r.json()
     except Exception as e:
-        if pref == "meta" or settings.env in ("prod", "production"):
-            budget.release(rid)
-            raise ProviderUnavailable(f"meta responses call failed: {e}") from e
-        log.warning("Meta Responses API call failed (%s), returning grounded mock response", e)
-        budget.settle(rid, {"total_tokens": 150}, "mock:muse-spark-open-1026", "mock", mock=True)
-        return {
-            "text": "Evidence qualifies the claim: while preliminary analyses indicate positive correlation, long-term confounding variables require structured moderation.",
-            "annotations": [{"title": "Mock evidence (offline, unverified)", "url": "https://mock.local/offline-evidence"}],
-            "search_results": [{"title": "Mock evidence (offline, unverified)", "url": "https://mock.local/offline-evidence"}],
-            "usage": {"total_tokens": 150},
-            "model": "mock:muse-spark-open-1026",
-            "mock": True,
-        }
+        budget.release(rid)
+        raise ProviderUnavailable(f"meta responses call failed: {e}") from e
     texts, annotations, results = [], [], []
     for item in d.get("output", []) or []:
         if item.get("type") == "message":

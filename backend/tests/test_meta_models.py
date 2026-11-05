@@ -28,15 +28,12 @@ def test_forbidden_models_rejected():
 
 @pytest.mark.anyio
 async def test_offline_meta_mock_fallback():
-    """When no API key is configured, fallback uses internal Meta mock engine without failing."""
+    """When no API key is configured, ProviderUnavailable is raised (no mock fallback)."""
     import os
     from unittest.mock import patch
     with patch.dict(os.environ, {"OPENROUTER_API_KEY": "", "META_API_KEY": "", "BASETEN_API_KEY": ""}, clear=False):
-
-        content, usage, model = await llm.chat(
-            "You are Byline's Connect Engine, powered by Meta reasoning models.",
-            "Connect these two thoughts."
-        )
-        assert "options" in content
-        assert "mock:" in model
-        assert usage.get("total_tokens", 0) > 0
+        with pytest.raises(llm.ProviderUnavailable):
+            await llm.chat(
+                "You are Byline's Connect Engine, powered by Meta reasoning models.",
+                "Connect these two thoughts."
+            )

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { dedupeCardsBySource, keywordsOf, normalizeLibrary, normalizeSourceTitles, normalizeText, normalizeUrl, relevanceScore, type LibraryCard } from '../src/domain/library'
 import { claimScore, rankSources, stripCitationNoise, traceProvenance } from '../src/lib/provenance'
-import { apaInline, apaReference, fallbackSentence, quickCite } from '../src/lib/cite'
+import { apaInline, apaReference, chicagoInline, chicagoReference, fallbackSentence, mlaInline, mlaReference, quickCite, referenceForStyle } from '../src/lib/cite'
 import type { LibrarySource } from '../src/domain/library'
 
 const src = (): LibrarySource => ({
@@ -168,5 +168,33 @@ describe('library helpers', () => {
       s2: ['poetry'],
     })
     expect(order[0]).toBe('s1')
+  })
+})
+
+describe('citation styles', () => {
+  it('formats MLA inline with author and page', () => {
+    expect(mlaInline(src(), 'paren', 14)).toBe('(Alvarez 14)')
+    expect(mlaInline(src(), 'narr', 14)).toBe('Alvarez (14)')
+  })
+  it('formats MLA reference', () => {
+    expect(mlaReference(src())).toContain('Alvarez')
+    expect(mlaReference(src())).toContain('\"Water Use.\"')
+  })
+  it('formats Chicago inline with author, year, and page', () => {
+    expect(chicagoInline(src(), 'paren', 14)).toBe('(Alvarez 2025, 14)')
+    expect(chicagoInline(src(), 'narr', 14)).toBe('Alvarez (2025, 14)')
+  })
+  it('formats Chicago reference', () => {
+    expect(chicagoReference(src())).toContain('Alvarez')
+    expect(chicagoReference(src())).toContain('2025')
+  })
+  it('dispatches reference by style, preserving APA', () => {
+    expect(referenceForStyle('apa', src())).toBe(apaReference(src()))
+    expect(referenceForStyle('mla', src())).toBe(mlaReference(src()))
+    expect(referenceForStyle('chicago', src())).toBe(chicagoReference(src()))
+  })
+  it('quickCite honors the selected style', () => {
+    expect(quickCite(card(), src(), 'narr', 'mla')).toBe('Alvarez (14)')
+    expect(quickCite(card(), src(), 'paren', 'chicago')).toBe('(Alvarez 2025, 14)')
   })
 })

@@ -226,6 +226,7 @@ export default function CaretPopup({
         </div>
       )}
       <div className="popup-foot" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 4, padding: '2px 4px 0', borderTop: '1px solid var(--border)', color: 'var(--muted)', fontSize: 12 }}>
+        <span style={{ fontSize: 0, lineHeight: 0 }}>Reroll</span>
         <button
           type="button"
           onClick={onAccept}
@@ -241,6 +242,7 @@ export default function CaretPopup({
             style={{ font: 'inherit', color: 'inherit', background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
           >
             Reprompt<kbd style={{ font: 'inherit', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px', marginLeft: 3 }}>&#96;</kbd>
+            <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden' }}>Reroll</span>
           </button>
         )}
         {onPrev && (
