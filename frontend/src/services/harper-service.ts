@@ -4,11 +4,11 @@ import type { Finding } from '../domain/finding'
 import { citationRanges, insideCitation } from '../lib/citation-spans'
 
 /**
- * Harper scope: capitalization + grammar (+ agreement/punctuation).
- * Spelling is off — it fires on author names inside citations
- * (e.g. "Octaberlina" in "(Octaberlina, 2024, p. 1)").
+ * Harper runs all of its lint kinds (capitalization, grammar, agreement,
+ * punctuation, spelling, typo, style, word choice, ...). Citation immunity
+ * below keeps author names inside (Author, Year) spans from being flagged,
+ * so spelling is safe to enable.
  */
-const HARPER_KIND_ALLOWLIST = new Set(['capitalization', 'grammar', 'agreement', 'punctuation'])
 
 const DIALECT_MAP: Record<string, Dialect> = {
   'en-US': Dialect.American,
@@ -186,9 +186,6 @@ export class HarperService {
       for (const [ruleId, lints] of Object.entries(organized)) {
         for (const lint of lints) {
           counter++
-          // Kind gate: capitalization + grammar (+ agreement/punctuation) only.
-          const kind = (lint.lint_kind?.() || '').toLowerCase()
-          if (!HARPER_KIND_ALLOWLIST.has(kind)) continue
           const span = lint.span()
           // Guard zero-length / out-of-range spans
           if (span.end <= span.start || span.start < 0 || span.end > text.length) continue
@@ -196,17 +193,13 @@ export class HarperService {
           if (insideCitation(span.start, span.end, cites)) continue
           const problemText = lint.get_problem_text() || text.slice(span.start, span.end)
           if (!problemText || !problemText.trim()) continue
-          // Guard single-char slices inside a larger word (Harper mis-slice
-          // that previously turned every letter into an i→I candidate)
+          // Guard single-char slices that are part of a larger word (Harper
+          // mis-slice that previously turned every letter into an i→I candidate).
           if (problemText.length === 1) {
             const prev = span.start > 0 ? text[span.start - 1] : ' '
             const next = span.end < text.length ? text[span.end] : ' '
             const isWordChar = (c: string) => /[A-Za-z0-9_]/.test(c)
-            if (isWordChar(prev) || isWordChar(next)) {
-              // Allow only standalone "i" / "a" capitalization
-              const isStandaloneI = problemText === 'i' && !isWordChar(prev) && !isWordChar(next)
-              if (!isStandaloneI) continue
-            }
+            if (isWordChar(prev) || isWordChar(next)) continue
           }
           const category = lint.lint_kind_pretty() || lint.lint_kind() || 'Spelling'
           const message = lint.message() || `Language issue (${category})`

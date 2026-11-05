@@ -62,7 +62,7 @@ The Reader persona reads the draft and leaves notes anchored to exact spans. Eac
 
 ### Grammar
 
-Harper.js runs in the browser and flags capitalization, grammar, agreement, and punctuation. It is citation-immune: text inside `(Author, Year)` spans is not flagged. Custom words and ignored rules persist locally.
+Harper.js runs in the browser and flags all of its lint kinds (capitalization, grammar, agreement, punctuation, spelling, typo, style, word choice, ...). It is citation-immune: text inside `(Author, Year)` spans is not flagged. Custom words and ignored rules persist locally.
 
 ### Connect
 
